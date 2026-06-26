@@ -1,6 +1,5 @@
 from __future__ import annotations
 import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from enforcer.types import Match, FileContext, LLMConsequence
 
 class LLMExecutor:
@@ -10,28 +9,32 @@ class LLMExecutor:
         self.enabled = enabled
 
     def execute(self, matches: list[Match], consequence: LLMConsequence | None,
-                file_ctx: FileContext) -> list[Match]:
+                file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         if not consequence or not self.enabled or not matches:
             return matches
         if not file_ctx.raw:
             return matches
 
-        prompt = f"{consequence.prompt}\n\n--- FILE CONTENT ---\n{file_ctx.raw}"
+        prompt = self._build_prompt(consequence, file_ctx, shared_ctx)
         provider_config = self._get_provider_config(consequence.provider)
 
-        with ThreadPoolExecutor(max_workers=self.concurrency) as pool:
-            futures = {
-                pool.submit(self._call_llm, consequence, prompt, provider_config): m
-                for m in matches
-            }
-            for future in as_completed(futures):
-                match = futures[future]
-                try:
-                    match.llm_response = future.result()
-                except Exception:
-                    match.llm_response = ""
+        try:
+            response = self._call_llm(consequence, prompt, provider_config)
+        except Exception:
+            response = ""
 
+        for m in matches:
+            m.llm_response = response
         return matches
+
+    def _build_prompt(self, consequence: LLMConsequence, file_ctx: FileContext,
+                      shared_ctx: dict | None = None) -> str:
+        prompt = f"{consequence.prompt}\n\n--- FILE CONTENT ---\n{file_ctx.raw}"
+        if shared_ctx:
+            for key, ctx in shared_ctx.items():
+                if ctx and ctx.raw and ctx.path != file_ctx.path:
+                    prompt += f"\n\n--- {ctx.path} ---\n{ctx.raw}"
+        return prompt
 
     def _call_llm(self, consequence: LLMConsequence, prompt: str, provider_config: dict) -> str:
         import httpx
