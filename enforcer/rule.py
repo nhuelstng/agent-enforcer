@@ -63,9 +63,12 @@ class Rule:
     def _render_message(self, match: Match) -> str:
         if callable(self.message):
             return self.message(match)
-        return self.message.format(
-            matched_value=match.matched_value,
-            file=match.file,
-            line=match.line,
-            column=match.column,
-        )
+        out = self.message
+        for key, val in [
+            ("matched_value", match.matched_value),
+            ("file", match.file),
+            ("line", match.line),
+            ("column", match.column),
+        ]:
+            out = out.replace("{" + key + "}", str(val))
+        return out
