@@ -3,6 +3,8 @@ from enforcer.matchers.line_count import LineCountMatcher
 from enforcer.matchers.char_count import CharCountMatcher
 from enforcer.matchers.path_pattern import PathNotMatchingMatcher
 from enforcer.matchers.allowlist import AllowlistMatcher
+from enforcer.matchers.ast_node import AstNodeMatcher
+from enforcer.matchers.comment_density import CommentPerFunctionMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -10,4 +12,6 @@ __all__ = [
     "CharCountMatcher",
     "PathNotMatchingMatcher",
     "AllowlistMatcher",
+    "AstNodeMatcher",
+    "CommentPerFunctionMatcher",
 ]
