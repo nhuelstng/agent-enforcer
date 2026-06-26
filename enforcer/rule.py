@@ -9,7 +9,7 @@ from enforcer.combinators.core import AllOf
 from enforcer.predicates.combinators import All as AllPred
 
 def _is_combinator(obj) -> bool:
-    return hasattr(obj, "matchers") and hasattr(obj, "find")
+    return (hasattr(obj, "matchers") or hasattr(obj, "matcher")) and hasattr(obj, "find")
 
 def _run_matcher(matcher, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
     if isinstance(matcher, AllowlistMatcher):
