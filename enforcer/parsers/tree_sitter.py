@@ -2,8 +2,6 @@ from __future__ import annotations
 from enforcer.types import Needs
 
 def parse(source: str, needs: Needs):
-    """Parse source code into a tree-sitter tree.
-    Returns None if tree-sitter is not available or language not supported."""
     try:
         import tree_sitter as ts
     except ImportError:
@@ -23,28 +21,34 @@ def parse(source: str, needs: Needs):
     if not language:
         return None
 
-    parser = ts.Parser()
-    parser.language = language
+    try:
+        parser = ts.Parser(language)
+    except TypeError:
+        parser = ts.Parser()
+        parser.language = language
     tree = parser.parse(bytes(source, "utf-8"))
     return tree
 
 def _get_ts_language():
     try:
+        import tree_sitter as ts
         import tree_sitter_typescript as ts_ts
-        return ts_ts.language_typescript()
-    except ImportError:
+        return ts.Language(ts_ts.language_typescript())
+    except Exception:
         return None
 
 def _get_py_language():
     try:
+        import tree_sitter as ts
         import tree_sitter_python as ts_py
-        return ts_py.language()
-    except ImportError:
+        return ts.Language(ts_py.language())
+    except Exception:
         return None
 
 def _get_css_language():
     try:
+        import tree_sitter as ts
         import tree_sitter_css as ts_css
-        return ts_css.language()
-    except ImportError:
+        return ts.Language(ts_css.language())
+    except Exception:
         return None

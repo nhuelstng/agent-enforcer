@@ -17,7 +17,7 @@ def test_ast_finds_literal_expressions():
         pytest.skip("tree-sitter TS grammar not available")
 
     ctx = FileContext(path="x.ts", raw=ts_code, ast=tree)
-    matcher = AstNodeMatcher(node_type="literal_expression")
+    matcher = AstNodeMatcher(node_type="number")
     matches = matcher.find(ctx)
     assert len(matches) == 2
     assert matches[0].matched_value == "42"
@@ -38,6 +38,6 @@ def test_ast_finds_by_line():
         pytest.skip("tree-sitter TS grammar not available")
 
     ctx = FileContext(path="x.ts", raw=ts_code, ast=tree)
-    matcher = AstNodeMatcher(node_type="literal_expression")
+    matcher = AstNodeMatcher(node_type="number")
     matches = matcher.find(ctx)
     assert matches[0].line == 1
