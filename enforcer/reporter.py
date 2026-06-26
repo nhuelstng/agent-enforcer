@@ -24,10 +24,10 @@ class Reporter:
                 "rule_id": m.rule_id,
                 "severity": m.severity.value,
                 "message": m.message,
+                "matched_value": m.matched_value,
                 "fix_instruction": m.fix_instruction,
+                "llm_response": m.llm_response,
             }
-            if m.llm_response:
-                issue["llm_response"] = m.llm_response
             issues.append(issue)
         return json.dumps({"summary": summary, "issues": issues}, indent=2)
 
