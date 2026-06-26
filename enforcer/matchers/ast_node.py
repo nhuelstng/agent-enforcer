@@ -6,7 +6,7 @@ from enforcer.types import Match, FileContext, Needs
 class AstNodeMatcher:
     node_type: str
     scope: str | None = None
-    needs: Needs | None = None
+    needs: Needs = Needs.AST_TS
 
     def find(self, file_ctx: FileContext) -> list[Match]:
         if not file_ctx.ast:
