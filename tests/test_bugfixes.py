@@ -113,3 +113,23 @@ RULES = []
         ])
         assert "node_modules" not in result.output
         assert "__pycache__" not in result.output
+
+
+class TestLLMDedup:
+    def test_llm_called_once_per_file_not_per_match(self):
+        from enforcer.llm import LLMExecutor
+        from enforcer.types import Match, FileContext, LLMConsequence
+        from unittest.mock import patch, MagicMock
+
+        matches = [
+            Match(file="x.ts", line=1, matched_value="#fff"),
+            Match(file="x.ts", line=2, matched_value="#000"),
+        ]
+        ctx = FileContext(path="x.ts", raw="const a = '#fff';\nconst b = '#000';\n")
+        consequence = LLMConsequence(provider="test", model="test", prompt="check")
+
+        executor = LLMExecutor(enabled=True)
+        with patch.object(executor, "_call_llm", return_value="response") as mock_call:
+            result = executor.execute(matches, consequence, ctx)
+        assert mock_call.call_count == 1
+        assert all(m.llm_response == "response" for m in result)
