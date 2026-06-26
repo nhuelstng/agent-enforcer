@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pre-commit-agent-enforcer"
+version = "0.1.0"
+description = "Deterministic convention enforcement for coding agents"
+requires-python = ">=3.11"
+dependencies = [
+    "tree-sitter>=0.21",
+    "tree-sitter-typescript>=0.21",
+    "tree-sitter-python>=0.21",
+    "tree-sitter-css>=0.21",
+    "httpx>=0.27",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "pytest-cov>=4.1",
+]
+mcp = ["mcp>=0.1"]
+
+[project.scripts]
+enforcer = "enforcer.cli:cli"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
