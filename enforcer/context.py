@@ -38,11 +38,11 @@ class FileContextBuilder:
         return ctx
 
     def needs_for_file(self, path: str, rules: list) -> set[Needs]:
-        import fnmatch
+        from enforcer.rule import _glob_match
         needs: set[Needs] = set()
         for rule in rules:
-            if any(fnmatch.fnmatch(path, glob) for glob in rule.file_globs):
-                if not any(fnmatch.fnmatch(path, pat) for pat in rule.exclude_globs):
+            if any(_glob_match(path, glob) for glob in rule.file_globs):
+                if not any(_glob_match(path, pat) for pat in rule.exclude_globs):
                     for matcher in rule.matchers:
                         if hasattr(matcher, "needs") and matcher.needs:
                             needs.add(matcher.needs)

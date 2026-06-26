@@ -1,6 +1,7 @@
 import pytest
 import tempfile
 import os
+from enforcer import Severity
 from enforcer.config import Config, load_config
 
 def test_config_loads_rules():
