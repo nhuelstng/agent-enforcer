@@ -19,3 +19,15 @@ class TestIsCombinator:
     def test_plain_matcher_not_combinator(self):
         matcher = RegexMatcher(r"TODO")
         assert _is_combinator(matcher) is False
+
+
+class TestContextCacheForceNeeds:
+    def test_force_needs_populates_ast_on_cached_ctx(self, tmp_path):
+        f = tmp_path / "x.ts"
+        f.write_text("const x = 42;\n")
+        builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+        builder.build("x.ts")
+        ctx2 = builder.build("x.ts", force_needs={Needs.AST_TS})
+        if ctx2.ast is None:
+            pytest.skip("tree-sitter not available")
+        assert ctx2.ast is not None

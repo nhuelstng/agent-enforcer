@@ -11,8 +11,20 @@ class FileContextBuilder:
         self._cache: dict[str, FileContext] = {}
 
     def build(self, path: str, force_needs: set[Needs] | None = None) -> FileContext:
-        if path in self._cache:
-            return self._cache[path]
+        cached = self._cache.get(path)
+        needs = force_needs or self.needs_for_file(path, self.rules)
+
+        ast_need = None
+        for n in needs:
+            if n in (Needs.AST_TS, Needs.AST_PY, Needs.AST_CSS):
+                ast_need = n
+                break
+
+        if cached:
+            if ast_need and cached.ast is None:
+                if cached.raw:
+                    cached.ast = ts_parse(cached.raw, ast_need)
+            return cached
 
         full_path = os.path.join(self.workspace, path) if self.workspace else path
         try:
@@ -22,14 +34,6 @@ class FileContextBuilder:
             return FileContext(path=path, raw=None)
 
         ctx = FileContext(path=path, raw=raw)
-
-        needs = force_needs or self.needs_for_file(path, self.rules)
-
-        ast_need = None
-        for n in needs:
-            if n in (Needs.AST_TS, Needs.AST_PY, Needs.AST_CSS):
-                ast_need = n
-                break
 
         if ast_need:
             ctx.ast = ts_parse(raw, ast_need)
