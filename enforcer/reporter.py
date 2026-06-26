@@ -11,7 +11,47 @@ class Reporter:
     def render(self, matches: list[Match]) -> str:
         if self.format == "json":
             return self._render_json(matches)
+        if self.format == "sarif":
+            return self._render_sarif(matches)
         return self._render_text(matches)
+
+    def _render_sarif(self, matches: list[Match]) -> str:
+        _SEV_TO_SARIF = {Severity.ERROR: "error", Severity.WARN: "warning", Severity.INFO: "note"}
+        results = []
+        rules_seen = {}
+        for m in matches:
+            if m.rule_id not in rules_seen:
+                rules_seen[m.rule_id] = {
+                    "id": m.rule_id,
+                    "name": m.rule_id,
+                    "shortDescription": {"text": m.message or m.rule_id},
+                    "defaultConfiguration": {"level": _SEV_TO_SARIF.get(m.severity, "note")},
+                }
+            results.append({
+                "ruleId": m.rule_id,
+                "level": _SEV_TO_SARIF.get(m.severity, "note"),
+                "message": {"text": m.message},
+                "locations": [{
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": m.file},
+                        "region": {"startLine": m.line, "startColumn": max(m.column, 1)},
+                    }
+                }],
+            })
+        sarif = {
+            "version": "2.1.0",
+            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/Schemata/sarif-schema-2.1.0.json",
+            "runs": [{
+                "tool": {
+                    "driver": {
+                        "name": "pre-commit-agent-enforcer",
+                        "rules": list(rules_seen.values()),
+                    }
+                },
+                "results": results,
+            }],
+        }
+        return json.dumps(sarif, indent=2)
 
     def _render_json(self, matches: list[Match]) -> str:
         summary = self._summary(matches)

@@ -21,7 +21,7 @@ def _glob_any_match(name: str, patterns) -> bool:
 @click.option("--staged", is_flag=True, help="Check staged files only")
 @click.option("--all", "all_files", is_flag=True, help="Check entire repo")
 @click.option("--paths", multiple=True, help="Check specific files")
-@click.option("--format", "fmt", default="text", type=click.Choice(["json", "text"]))
+@click.option("--format", "fmt", default="text", type=click.Choice(["json", "text", "sarif"]))
 @click.option("--config", "config_path", default="enforcer_config.py")
 @click.option("--workspace", default=None, help="Global workspace root")
 @click.option("--severity", default="info", type=click.Choice(["error", "warn", "info"]))
@@ -86,6 +86,22 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     output = reporter.render(all_matches)
     click.echo(output)
     sys.exit(reporter.exit_code(all_matches))
+
+@cli.command()
+@click.option("--config", "config_path", default="enforcer_config.py")
+@click.option("--output", "-o", default=None, help="Output file (default: stdout)")
+def docs(config_path, output):
+    """Generate markdown documentation of all configured rules."""
+    from enforcer.docs import render_rules_markdown
+
+    config = load_config(config_path)
+    md = render_rules_markdown(config.rules)
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(md)
+        click.echo(f"Documentation written to {output}")
+    else:
+        click.echo(md)
 
 if __name__ == "__main__":
     cli()
