@@ -44,9 +44,16 @@ def check_conventions(paths: list[str] | None = None, format: str = "json") -> s
     reporter = Reporter(format=format)
     return reporter.render(all_matches)
 
+def list_conventions() -> str:
+    """Return all configured rules as markdown documentation."""
+    from enforcer.docs import render_rules_markdown
+    config = load_config("enforcer_config.py")
+    return render_rules_markdown(config.rules)
+
 def run_mcp_server():
     """Minimal stdio JSON-RPC server for MCP protocol."""
     for line in sys.stdin:
+        msg = None
         try:
             msg = json.loads(line)
             if msg.get("method") == "tools/list":
@@ -54,28 +61,44 @@ def run_mcp_server():
                     "jsonrpc": "2.0",
                     "id": msg.get("id"),
                     "result": {
-                        "tools": [{
-                            "name": "check_conventions",
-                            "description": "Check files for convention violations",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "paths": {"type": "array", "items": {"type": "string"}},
-                                    "format": {"type": "string", "enum": ["json", "text"]},
+                        "tools": [
+                            {
+                                "name": "check_conventions",
+                                "description": "Check files for convention violations",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "paths": {"type": "array", "items": {"type": "string"}},
+                                        "format": {"type": "string", "enum": ["json", "text"]},
+                                    },
                                 },
                             },
-                        }]
+                            {
+                                "name": "list_conventions",
+                                "description": "List all configured convention rules as documentation",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {},
+                                },
+                            },
+                        ]
                     }
                 }
                 sys.stdout.write(json.dumps(response) + "\n")
                 sys.stdout.flush()
             elif msg.get("method") == "tools/call":
                 params = msg.get("params", {})
+                tool_name = params.get("name")
                 args = params.get("arguments", {})
-                result = check_conventions(
-                    paths=args.get("paths"),
-                    format=args.get("format", "json"),
-                )
+                if tool_name == "check_conventions":
+                    result = check_conventions(
+                        paths=args.get("paths"),
+                        format=args.get("format", "json"),
+                    )
+                elif tool_name == "list_conventions":
+                    result = list_conventions()
+                else:
+                    result = json.dumps({"error": f"Unknown tool: {tool_name}"})
                 response = {
                     "jsonrpc": "2.0",
                     "id": msg.get("id"),
@@ -86,7 +109,7 @@ def run_mcp_server():
         except Exception as e:
             response = {
                 "jsonrpc": "2.0",
-                "id": msg.get("id") if "msg" in dir() else None,
+                "id": msg.get("id") if msg else None,
                 "error": {"code": -32603, "message": str(e)}
             }
             sys.stdout.write(json.dumps(response) + "\n")
