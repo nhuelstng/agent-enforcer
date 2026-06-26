@@ -13,6 +13,10 @@ def cli():
     """Convention enforcement tool for coding agents."""
     pass
 
+def _glob_any_match(name: str, patterns) -> bool:
+    import fnmatch
+    return any(fnmatch.fnmatch(name, p) for p in patterns)
+
 @cli.command()
 @click.option("--staged", is_flag=True, help="Check staged files only")
 @click.option("--all", "all_files", is_flag=True, help="Check entire repo")
@@ -36,10 +40,12 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
         )
         file_list = result.decode().strip().split("\n") if result.strip() else []
     elif all_files:
+        _JUNK_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
+                       ".pytest_cache", ".mypy_cache", ".tox", "dist", "build",
+                       "*.egg-info"}
         file_list = []
         for root, dirs, files in os.walk(ws):
-            if ".git" in dirs:
-                dirs.remove(".git")
+            dirs[:] = [d for d in dirs if not _glob_any_match(d, _JUNK_DIRS)]
             for f in files:
                 rel = os.path.relpath(os.path.join(root, f), ws)
                 file_list.append(rel)

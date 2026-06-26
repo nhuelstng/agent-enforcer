@@ -83,3 +83,33 @@ class TestAllowlistKeying:
         matches = matcher.find(file_ctx, shared)
         assert len(matches) == 1
         assert matches[0].matched_value == "green"
+
+
+class TestAllSkipsJunkDirs:
+    def test_all_skips_junk_dirs(self, tmp_path):
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.ts").write_text("const x = 1;\n")
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "lib.js").write_text("module.exports = 1;\n")
+        (tmp_path / "__pycache__").mkdir()
+        (tmp_path / "__pycache__" / "x.pyc").write_text("garbage")
+
+        import importlib
+        import enforcer.cli as cli_mod
+        from click.testing import CliRunner
+
+        config_content = '''
+from enforcer import Rule, Severity
+from enforcer.matchers import RegexMatcher
+WORKSPACE = "."
+RULES = []
+'''
+        (tmp_path / "enforcer_config.py").write_text(config_content)
+
+        runner = CliRunner()
+        result = runner.invoke(cli_mod.cli, [
+            "check", "--all", "--workspace", str(tmp_path),
+            "--config", str(tmp_path / "enforcer_config.py"),
+        ])
+        assert "node_modules" not in result.output
+        assert "__pycache__" not in result.output
