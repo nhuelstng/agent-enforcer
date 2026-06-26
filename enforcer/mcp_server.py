@@ -31,7 +31,7 @@ def check_conventions(paths: list[str] | None = None, format: str = "json") -> s
             target_path = os.path.join(ws, target.replace("**/", ""))
             if os.path.exists(target_path):
                 ctx = builder.build(target.replace("**/", ""))
-                shared_ctx[os.path.basename(target_path)] = ctx
+                shared_ctx[target] = ctx
 
     all_matches = []
     for f in file_list:

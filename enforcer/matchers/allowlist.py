@@ -12,11 +12,15 @@ class AllowlistMatcher:
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
-        basename = os.path.basename(self.read_target.replace("**/", "").replace("*", ""))
-        target_ctx = shared_ctx.get(basename) or shared_ctx.get(os.path.basename(self.read_target))
+        target_ctx = shared_ctx.get(self.read_target)
+        if not target_ctx:
+            for key, ctx in shared_ctx.items():
+                if key.endswith(self.read_target.replace("**/", "").replace("*", "")):
+                    target_ctx = ctx
+                    break
         if not target_ctx:
             return []
-        if not file_ctx.raw or not target_ctx.raw:
+        if file_ctx.raw is None or target_ctx.raw is None:
             return []
         allowed = self.extractor(target_ctx.raw)
         used = self.consumer(file_ctx.raw)

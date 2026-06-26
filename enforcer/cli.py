@@ -66,7 +66,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
             target_path = os.path.join(ws, target.replace("**/", ""))
             if os.path.exists(target_path):
                 target_ctx = builder.build(target.replace("**/", ""))
-                shared_ctx[os.path.basename(target_path)] = target_ctx
+                shared_ctx[target] = target_ctx
 
     all_matches = []
     for f in file_list:
