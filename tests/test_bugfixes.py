@@ -59,3 +59,27 @@ class TestRenderMessageBraces:
         match = Match(file="x.ts", line=5, matched_value="var")
         result = rule._render_message(match)
         assert result == "Found 'var' at line 5"
+
+
+class TestAllowlistKeying:
+    def test_allowlist_uses_full_read_target_key(self):
+        from enforcer.matchers import AllowlistMatcher
+        from enforcer.types import FileContext
+
+        def extractor(raw):
+            return {"red", "blue"}
+
+        def consumer(raw):
+            return {"red", "green"}
+
+        matcher = AllowlistMatcher(
+            extractor=extractor,
+            consumer=consumer,
+            read_target="frontend/**/colors.scss",
+        )
+        target_ctx = FileContext(path="frontend/colors.scss", raw="--color-red: #f00;\n")
+        file_ctx = FileContext(path="src/app.ts", raw="var(--color-green)")
+        shared = {"frontend/**/colors.scss": target_ctx}
+        matches = matcher.find(file_ctx, shared)
+        assert len(matches) == 1
+        assert matches[0].matched_value == "green"
