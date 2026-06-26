@@ -31,3 +31,31 @@ class TestContextCacheForceNeeds:
         if ctx2.ast is None:
             pytest.skip("tree-sitter not available")
         assert ctx2.ast is not None
+
+
+class TestRenderMessageBraces:
+    def test_message_with_literal_braces(self):
+        from enforcer.types import Match, Severity
+        rule = Rule(
+            id="test",
+            severity=Severity.WARN,
+            matchers=[],
+            file_globs=["**/*.ts"],
+            message="Use {const} keyword instead of var",
+        )
+        match = Match(file="x.ts", line=1, matched_value="var")
+        result = rule._render_message(match)
+        assert result == "Use {const} keyword instead of var"
+
+    def test_message_with_placeholder(self):
+        from enforcer.types import Match, Severity
+        rule = Rule(
+            id="test",
+            severity=Severity.WARN,
+            matchers=[],
+            file_globs=["**/*.ts"],
+            message="Found '{matched_value}' at line {line}",
+        )
+        match = Match(file="x.ts", line=5, matched_value="var")
+        result = rule._render_message(match)
+        assert result == "Found 'var' at line 5"
