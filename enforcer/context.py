@@ -1,0 +1,52 @@
+from __future__ import annotations
+import os
+from enforcer.types import FileContext, Needs
+from enforcer.parsers.language import language_for_path
+from enforcer.parsers.tree_sitter import parse as ts_parse
+
+class FileContextBuilder:
+    def __init__(self, rules: list, workspace: str = "."):
+        self.rules = rules
+        self.workspace = workspace
+        self._cache: dict[str, FileContext] = {}
+
+    def build(self, path: str, force_needs: set[Needs] | None = None) -> FileContext:
+        if path in self._cache:
+            return self._cache[path]
+
+        full_path = os.path.join(self.workspace, path) if self.workspace else path
+        try:
+            with open(full_path, "r", encoding="utf-8") as f:
+                raw = f.read()
+        except (IOError, OSError):
+            return FileContext(path=path, raw=None)
+
+        ctx = FileContext(path=path, raw=raw)
+
+        needs = force_needs or self.needs_for_file(path, self.rules)
+
+        ast_need = None
+        for n in needs:
+            if n in (Needs.AST_TS, Needs.AST_PY, Needs.AST_CSS):
+                ast_need = n
+                break
+
+        if ast_need:
+            ctx.ast = ts_parse(raw, ast_need)
+
+        self._cache[path] = ctx
+        return ctx
+
+    def needs_for_file(self, path: str, rules: list) -> set[Needs]:
+        import fnmatch
+        needs: set[Needs] = set()
+        for rule in rules:
+            if any(fnmatch.fnmatch(path, glob) for glob in rule.file_globs):
+                if not any(fnmatch.fnmatch(path, pat) for pat in rule.exclude_globs):
+                    for matcher in rule.matchers:
+                        if hasattr(matcher, "needs") and matcher.needs:
+                            needs.add(matcher.needs)
+        return needs
+
+    def clear_cache(self):
+        self._cache.clear()
