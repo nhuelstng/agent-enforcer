@@ -5,7 +5,7 @@ from enforcer.types import Match, FileContext, Needs
 @dataclass
 class CommentPerFunctionMatcher:
     max_comments: int
-    needs: Needs | None = None
+    needs: Needs = Needs.AST_TS
 
     def find(self, file_ctx: FileContext) -> list[Match]:
         if not file_ctx.ast:
