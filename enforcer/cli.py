@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 import click
 from enforcer.config import load_config
 from enforcer.context import FileContextBuilder
@@ -74,9 +75,15 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     shared_ctx: dict = {}
     for rule in config.rules:
         for target in getattr(rule, "read_targets", []):
-            target_path = os.path.join(ws, target.replace("**/", ""))
-            if os.path.exists(target_path):
-                target_ctx = builder.build(target.replace("**/", ""))
+            if target in shared_ctx:
+                continue
+            # ponytail: glob the filesystem, don't collapse ** into literal paths
+            root = Path(ws)
+            first = next(iter(root.glob(target)), None)
+            if first:
+                # Load first match into shared_ctx (AllowlistMatcher reads raw text)
+                rel = str(first.relative_to(ws)) if str(first).startswith(ws) else str(first)
+                target_ctx = builder.build(rel)
                 shared_ctx[target] = target_ctx
 
     all_matches = []
