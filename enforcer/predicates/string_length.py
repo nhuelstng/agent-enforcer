@@ -1,3 +1,4 @@
+"""StringLengthPredicate: checks string length against a predicate."""
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match
@@ -12,6 +13,7 @@ _OPS = {
 
 @dataclass
 class StringLengthPredicate:
+    """Tests whether the length of a string value meets a threshold condition."""
     op: str
     value: int
 

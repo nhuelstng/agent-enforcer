@@ -1,8 +1,10 @@
+"""LLMExecutor: calls LLM provider on rule failure. One call per file+consequence (deduplicated). Injects shared context into prompt."""
 from __future__ import annotations
 import json
 from enforcer.types import Match, FileContext, LLMConsequence
 
 class LLMExecutor:
+    """Executes LLM consequences. Deduplicates: one call per (file, consequence) pair. Response attached to all matches from that file."""
     def __init__(self, concurrency: int = 5, timeout: int = 30, enabled: bool = True):
         self.concurrency = concurrency
         self.timeout = timeout
@@ -10,6 +12,7 @@ class LLMExecutor:
 
     def execute(self, matches: list[Match], consequence: LLMConsequence | None,
                 file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Run LLM consequences for matches. Returns dict of (file, consequence) -> response."""
         if not consequence or not self.enabled or not matches:
             return matches
         if not file_ctx.raw:
@@ -29,6 +32,7 @@ class LLMExecutor:
 
     def _build_prompt(self, consequence: LLMConsequence, file_ctx: FileContext,
                       shared_ctx: dict | None = None) -> str:
+        """Build LLM prompt from consequence template, injecting shared context file contents."""
         prompt = f"{consequence.prompt}\n\n--- FILE CONTENT ---\n{file_ctx.raw}"
         if shared_ctx:
             for key, ctx in shared_ctx.items():

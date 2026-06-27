@@ -1,3 +1,4 @@
+"""Combinator implementations: compose matchers with AND/OR/NOT logic."""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enforcer.types import Match, FileContext
@@ -10,6 +11,7 @@ def _run(matcher, file_ctx: FileContext, shared_ctx: dict | None = None) -> list
 
 @dataclass
 class AllOf:
+    """All matchers must find at least one match. Returns combined matches if all succeed."""
     matchers: list
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
@@ -20,6 +22,7 @@ class AllOf:
 
 @dataclass
 class AnyOf:
+    """At least one matcher must find a match. Returns combined matches from all that matched."""
     matchers: list
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
@@ -30,6 +33,7 @@ class AnyOf:
 
 @dataclass
 class OneOf:
+    """Exactly one matcher must find a match. Fails if zero or more than one match."""
     matchers: list
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
@@ -41,6 +45,7 @@ class OneOf:
 
 @dataclass
 class Not:
+    """Negation: emits a synthetic match if the inner matcher finds NOTHING. Used to enforce 'file must exist', 'pattern must be absent'."""
     matcher: object
     message_on_absence: str = "Expected pattern not found."
 
@@ -57,6 +62,7 @@ class Not:
 
 @dataclass
 class NoneOf:
+    """No matcher may find a match. Emits a synthetic match if any matcher finds something."""
     matchers: list
     message_on_absence: str = "All forbidden patterns absent."
 

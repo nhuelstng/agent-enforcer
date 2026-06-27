@@ -1,3 +1,4 @@
+"""PathNotMatchingMatcher: ensures file path does NOT match a glob pattern."""
 from __future__ import annotations
 import fnmatch
 from dataclasses import dataclass
@@ -5,6 +6,7 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class PathNotMatchingMatcher:
+    """Emits a match if the file path matches the given glob. Used to enforce path conventions via Not combinator."""
     pattern: str
     needs: Needs | None = None
 

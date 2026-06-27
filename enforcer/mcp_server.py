@@ -1,14 +1,20 @@
+"""MCP server: JSON-RPC over stdio. Tools: check_conventions, list_conventions, verify_fix."""
 from __future__ import annotations
 import json
+import os
 import sys
 from enforcer.config import load_config
 from enforcer.context import FileContextBuilder
 from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
 
+
+def _config_path() -> str:
+    return os.environ.get("ENFORCER_CONFIG", "enforcer_config.py")
+
 def check_conventions(paths: list[str] | None = None, format: str = "json") -> str:
     """Run convention checks. Returns formatted output."""
-    config = load_config("enforcer_config.py")
+    config = load_config(_config_path())
     ws = config.workspace
 
     if not paths:
@@ -27,7 +33,6 @@ def check_conventions(paths: list[str] | None = None, format: str = "json") -> s
     shared_ctx: dict = {}
     for rule in config.rules:
         for target in getattr(rule, "read_targets", []):
-            import os
             target_path = os.path.join(ws, target.replace("**/", ""))
             if os.path.exists(target_path):
                 ctx = builder.build(target.replace("**/", ""))
@@ -47,12 +52,12 @@ def check_conventions(paths: list[str] | None = None, format: str = "json") -> s
 def list_conventions() -> str:
     """Return all configured rules as markdown documentation."""
     from enforcer.docs import render_rules_markdown
-    config = load_config("enforcer_config.py")
+    config = load_config(_config_path())
     return render_rules_markdown(config.rules)
 
 def verify_fix(path: str, rule_id: str, format: str = "json") -> str:
     """Re-check a single rule on a single file. Returns formatted output."""
-    config = load_config("enforcer_config.py")
+    config = load_config(_config_path())
     ws = config.workspace
 
     rule = next((r for r in config.rules if r.id == rule_id), None)
@@ -64,7 +69,6 @@ def verify_fix(path: str, rule_id: str, format: str = "json") -> str:
 
     shared_ctx: dict = {}
     for target in getattr(rule, "read_targets", []):
-        import os
         target_path = os.path.join(ws, target.replace("**/", ""))
         if os.path.exists(target_path):
             ctx = builder.build(target.replace("**/", ""))

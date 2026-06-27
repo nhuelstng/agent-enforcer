@@ -1,3 +1,4 @@
+"""IntPredicate: compares an integer value against a threshold using an operator (lt, le, eq, ne, ge, gt)."""
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match
@@ -13,6 +14,7 @@ _OPS = {
 
 @dataclass
 class IntPredicate:
+    """Predicate for integer comparisons. Tests a value against a threshold with the given operator."""
     op: str
     value: int
 

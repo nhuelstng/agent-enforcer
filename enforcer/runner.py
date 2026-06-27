@@ -1,3 +1,4 @@
+"""RuleRunner: applies rules to files, handles severity filtering and LLM consequence execution."""
 from __future__ import annotations
 from enforcer.types import Severity, Match, FileContext
 from enforcer.rule import Rule, _glob_match
@@ -6,6 +7,7 @@ from enforcer.llm import LLMExecutor
 _SEVERITY_ORDER = {Severity.INFO: 0, Severity.WARN: 1, Severity.ERROR: 2}
 
 class RuleRunner:
+    """Runs rules against files. Filters by severity, executes LLM consequences with shared context."""
     def __init__(self, rules: list[Rule], workspace: str = ".",
                  no_llm: bool = False, min_severity: Severity = Severity.INFO,
                  llm_config: dict | None = None):
@@ -20,6 +22,7 @@ class RuleRunner:
         )
 
     def run_rules_for_file(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
+        """Run all applicable rules against one file. Returns list of Match objects."""
         all_matches: list[Match] = []
         for rule in self.rules:
             if not self._file_matches(file_ctx.path, rule):
@@ -40,6 +43,7 @@ class RuleRunner:
         return True
 
     def run(self, file_contexts: list[FileContext], shared_ctx: dict) -> list[Match]:
+        """Run rules against multiple files. Returns aggregated list of Match objects."""
         all_matches: list[Match] = []
         for ctx in file_contexts:
             matches = self.run_rules_for_file(ctx, shared_ctx)
