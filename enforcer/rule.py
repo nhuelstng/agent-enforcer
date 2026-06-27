@@ -1,3 +1,4 @@
+"""Rule dataclass: composes matchers, predicates, combinators into a checkable rule with message templating and severity."""
 from __future__ import annotations
 import fnmatch
 import re
@@ -17,6 +18,7 @@ def _run_matcher(matcher, file_ctx: FileContext, shared_ctx: dict) -> list[Match
     return matcher.find(file_ctx)
 
 def _glob_match(path: str, pattern: str) -> bool:
+    """Match path against glob pattern, supporting ** recursive globs (fnmatch does not handle **)."""
     normalized = re.sub(r'^\*+/', '', pattern)
     if fnmatch.fnmatch(path, normalized):
         return True
@@ -24,6 +26,7 @@ def _glob_match(path: str, pattern: str) -> bool:
 
 @dataclass
 class Rule:
+    """A convention rule. Match results from one or more matchers are filtered by predicates and rendered into a message."""
     id: str
     severity: Severity
     matchers: list
@@ -37,6 +40,7 @@ class Rule:
     llm_consequence: LLMConsequence | None = None
 
     def check(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
+        """Run all matchers, filter by predicates, stamp metadata, render message. Returns list of Match objects."""
         if self._excluded(file_ctx.path):
             return []
 
@@ -61,6 +65,7 @@ class Rule:
         return any(_glob_match(path, pat) for pat in self.exclude_globs)
 
     def _render_message(self, match: Match) -> str:
+        """Substitute {file}, {line}, {column}, {matched_value} placeholders. Uses str.replace to avoid format-string crashes on literal braces."""
         if callable(self.message):
             return self.message(match)
         out = self.message

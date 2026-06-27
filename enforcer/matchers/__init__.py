@@ -1,3 +1,4 @@
+"""Matcher implementations: find rule violations in file content. Each matcher declares Needs and implements find()."""
 from enforcer.matchers.regex import RegexMatcher
 from enforcer.matchers.line_count import LineCountMatcher
 from enforcer.matchers.char_count import CharCountMatcher

@@ -6,7 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "pre-commit-agent-enforcer"
 version = "0.1.0"
 description = "Deterministic convention enforcement for coding agents"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Niclas Hulsmann"}]
 requires-python = ">=3.11"
+keywords = ["pre-commit", "convention", "linter", "agent", "code-quality"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Development Status :: 3 - Alpha",
+]
 dependencies = [
     "tree-sitter>=0.21",
     "tree-sitter-typescript>=0.21",
@@ -15,6 +24,11 @@ dependencies = [
     "httpx>=0.27",
     "click>=8.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/niclashulsmann/pre-commit-agent-enforcer"
+Repository = "https://github.com/niclashulsmann/pre-commit-agent-enforcer"
+Issues = "https://github.com/niclashulsmann/pre-commit-agent-enforcer/issues"
 
 [project.optional-dependencies]
 dev = [

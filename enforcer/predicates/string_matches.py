@@ -1,3 +1,4 @@
+"""StringMatchesPredicate and StringNotMatchesPredicate: regex match testing on string values."""
 from __future__ import annotations
 import re
 from dataclasses import dataclass
@@ -6,6 +7,7 @@ from enforcer.types import Match
 
 @dataclass
 class StringMatchesPredicate:
+    """Tests whether a string value matches a regex pattern."""
     pattern: str | Pattern
 
     def test(self, match: Match) -> bool:
@@ -13,6 +15,7 @@ class StringMatchesPredicate:
 
 @dataclass
 class StringNotMatchesPredicate:
+    """Tests whether a string value does NOT match a regex pattern."""
     pattern: str | Pattern
 
     def test(self, match: Match) -> bool:

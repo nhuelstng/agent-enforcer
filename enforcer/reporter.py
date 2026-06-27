@@ -1,3 +1,4 @@
+"""Output formatter: text, JSON, and SARIF. Computes exit code from matches and severity actions."""
 from __future__ import annotations
 import json
 from enforcer.types import Match, Severity
@@ -5,10 +6,12 @@ from enforcer.types import Match, Severity
 _SEVERITY_ORDER = {Severity.ERROR: 0, Severity.WARN: 1, Severity.INFO: 2}
 
 class Reporter:
+    """Renders match results in text, JSON, or SARIF format. Computes exit code based on severity actions."""
     def __init__(self, format: str = "text"):
         self.format = format
 
     def render(self, matches: list[Match], severity_actions: dict | None = None) -> str:
+        """Format matches according to self.format (text/json/sarif)."""
         if self.format == "json":
             return self._render_json(matches)
         if self.format == "sarif":
@@ -110,6 +113,7 @@ class Reporter:
         }
 
     def exit_code(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> int:
+        """Return 1 if any match triggers a blocking action (block or block_warn). If confirm_warnings=True, only ERROR blocks."""
         if confirm_warnings:
             return 1 if any(m.severity == Severity.ERROR for m in matches) else 0
         actions = severity_actions or {Severity.ERROR: "block", Severity.WARN: "print", Severity.INFO: "hint"}

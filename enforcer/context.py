@@ -1,3 +1,4 @@
+"""FileContextBuilder: parse-once cache. Builds FileContext per file, reuses across rules."""
 from __future__ import annotations
 import os
 from enforcer.types import FileContext, Needs
@@ -5,12 +6,14 @@ from enforcer.parsers.language import language_for_path
 from enforcer.parsers.tree_sitter import parse as ts_parse
 
 class FileContextBuilder:
+    """Builds and caches FileContext objects. Each file is read once; AST is populated lazily when needed."""
     def __init__(self, rules: list, workspace: str = "."):
         self.rules = rules
         self.workspace = workspace
         self._cache: dict[str, FileContext] = {}
 
     def build(self, path: str, force_needs: set[Needs] | None = None) -> FileContext:
+        """Return FileContext for path. Uses cache. If force_needs is set, ensures AST is populated."""
         cached = self._cache.get(path)
         needs = force_needs or self.needs_for_file(path, self.rules)
 
@@ -42,6 +45,7 @@ class FileContextBuilder:
         return ctx
 
     def needs_for_file(self, path: str, rules: list) -> set[Needs]:
+        """Aggregate all Needs from rules whose file_globs match this path."""
         from enforcer.rule import _glob_match
         needs: set[Needs] = set()
         for rule in rules:

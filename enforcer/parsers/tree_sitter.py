@@ -1,3 +1,4 @@
+"""Tree-sitter AST parser: loads grammars for TypeScript, Python, CSS. Handles version compatibility."""
 from __future__ import annotations
 from enforcer.types import Needs
 

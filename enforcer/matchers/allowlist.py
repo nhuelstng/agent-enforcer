@@ -1,3 +1,4 @@
+"""AllowlistMatcher: checks file content against an allowlist from another file (read_target)."""
 from __future__ import annotations
 import os
 from dataclasses import dataclass
@@ -6,6 +7,7 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class AllowlistMatcher:
+    """Reads an allowlist file (read_target), extracts entries via an extractor function, checks if file content violates the allowlist."""
     extractor: Callable[[str], set[str]]
     consumer: Callable[[str], set[str]]
     read_target: str

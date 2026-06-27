@@ -1,3 +1,4 @@
+"""RegexMatcher: finds regex pattern matches in file text."""
 from __future__ import annotations
 import re
 from dataclasses import dataclass
@@ -6,6 +7,7 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class RegexMatcher:
+    """Matches lines against a regex pattern. Returns one Match per line that matches."""
     pattern: str | Pattern
     needs: Needs = Needs.RAW
 

@@ -1,8 +1,10 @@
+"""Predicate combinators: All (AND), Any (OR), NotP (NOT)."""
 from __future__ import annotations
 from dataclasses import dataclass
 
 @dataclass
 class All:
+    """All predicates must pass. Short-circuits on first failure."""
     predicates: list
 
     def test(self, match) -> bool:
@@ -10,6 +12,7 @@ class All:
 
 @dataclass
 class Any:
+    """At least one predicate must pass."""
     predicates: list
 
     def test(self, match) -> bool:
@@ -17,6 +20,7 @@ class Any:
 
 @dataclass
 class NotP:
+    """Negates a predicate."""
     predicate: object
 
     def test(self, match) -> bool:

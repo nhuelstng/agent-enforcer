@@ -1,3 +1,4 @@
+"""Command-line interface: check, docs, install commands."""
 from __future__ import annotations
 import os
 import subprocess
@@ -21,10 +22,10 @@ def _glob_any_match(name: str, patterns) -> bool:
 @click.option("--staged", is_flag=True, help="Check staged files only")
 @click.option("--all", "all_files", is_flag=True, help="Check entire repo")
 @click.option("--paths", multiple=True, help="Check specific files")
-@click.option("--format", "fmt", default="text", type=click.Choice(["json", "text", "sarif"]))
-@click.option("--config", "config_path", default="enforcer_config.py")
+@click.option("--format", "fmt", default="text", type=click.Choice(["json", "text", "sarif"]), help="Output format: text, json, or sarif")
+@click.option("--config", "config_path", default="enforcer_config.py", help="Path to enforcer_config.py (default: enforcer_config.py)")
 @click.option("--workspace", default=None, help="Global workspace root")
-@click.option("--severity", default="info", type=click.Choice(["error", "warn", "info"]))
+@click.option("--severity", default="info", type=click.Choice(["error", "warn", "info"]), help="Minimum severity to report (error, warn, info)")
 @click.option("--no-llm", is_flag=True, help="Skip LLM consequences")
 @click.option("--rule-id", default=None, help="Run only this rule ID")
 @click.option("--confirm-read-warnings", is_flag=True, help="Acknowledge warnings, allow commit to proceed")

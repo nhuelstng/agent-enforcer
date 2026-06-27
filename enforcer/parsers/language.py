@@ -1,3 +1,4 @@
+"""Language detection: maps file extensions to Needs (AST_TS, AST_PY, AST_CSS)."""
 from __future__ import annotations
 import os
 from enforcer.types import Needs

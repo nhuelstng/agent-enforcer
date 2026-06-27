@@ -1,9 +1,11 @@
+"""CommentPerFunctionMatcher: checks comment-to-code ratio in functions."""
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class CommentPerFunctionMatcher:
+    """For each function in the AST, counts comments and code lines. Emits a match if ratio is below threshold."""
     max_comments: int
     needs: Needs = Needs.AST_TS
 

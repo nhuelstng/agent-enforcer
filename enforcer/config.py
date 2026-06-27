@@ -1,3 +1,4 @@
+"""Config loading: executes enforcer_config.py as a module, extracts RULES, WORKSPACE, SEVERITY_ACTIONS, LLM_CONFIG."""
 from __future__ import annotations
 import importlib.util
 import os
@@ -7,12 +8,14 @@ from enforcer.types import Severity
 
 @dataclass
 class Config:
+    """Loaded configuration: rules, workspace, severity_actions, llm_config."""
     rules: list = field(default_factory=list)
     workspace: str = "."
     severity_actions: dict = field(default_factory=dict)
     llm_config: dict = field(default_factory=dict)
 
 def load_config(config_path: str) -> Config:
+    """Load enforcer_config.py by executing it as a module. Extracts RULES, WORKSPACE, SEVERITY_ACTIONS, LLM_CONFIG attributes."""
     spec = importlib.util.spec_from_file_location("enforcer_config", config_path)
     if not spec or not spec.loader:
         raise ImportError(f"Cannot load config from {config_path}")

@@ -1,9 +1,11 @@
+"""AstNodeMatcher: finds AST nodes matching a type and optional scope."""
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class AstNodeMatcher:
+    """Walks the tree-sitter AST, finds nodes of a given type within an optional scope (e.g., function, class)."""
     node_type: str
     scope: str | None = None
     needs: Needs = Needs.AST_TS

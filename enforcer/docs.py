@@ -1,3 +1,4 @@
+"""Rule documentation generator: renders configured rules as markdown."""
 from __future__ import annotations
 from enforcer.rule import Rule
 from enforcer.types import Severity
