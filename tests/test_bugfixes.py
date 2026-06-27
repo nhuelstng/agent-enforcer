@@ -133,3 +133,19 @@ class TestLLMDedup:
             result = executor.execute(matches, consequence, ctx)
         assert mock_call.call_count == 1
         assert all(m.llm_response == "response" for m in result)
+
+
+class TestLLMReadTargetInjection:
+    def test_llm_prompt_includes_read_target_content(self):
+        from enforcer.llm import LLMExecutor
+        from enforcer.types import Match, FileContext, LLMConsequence
+
+        ctx = FileContext(path="app.ts", raw="const x = 1;")
+        target_ctx = FileContext(path="colors.scss", raw="--color-red: #f00;")
+        shared = {"**/colors.scss": target_ctx}
+        consequence = LLMConsequence(provider="test", model="test", prompt="check")
+
+        executor = LLMExecutor(enabled=True)
+        prompt = executor._build_prompt(consequence, ctx, shared)
+        assert "colors.scss" in prompt
+        assert "--color-red: #f00;" in prompt

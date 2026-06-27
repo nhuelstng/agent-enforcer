@@ -28,7 +28,7 @@ class RuleRunner:
                 continue
             matches = rule.check(file_ctx, shared_ctx)
             if matches and rule.llm_consequence:
-                matches = self.llm_executor.execute(matches, rule.llm_consequence, file_ctx)
+                matches = self.llm_executor.execute(matches, rule.llm_consequence, file_ctx, shared_ctx)
             all_matches.extend(matches)
         return all_matches
 
