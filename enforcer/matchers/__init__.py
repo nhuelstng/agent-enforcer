@@ -13,6 +13,7 @@ from enforcer.matchers.function_complexity import FunctionComplexityMatcher
 from enforcer.matchers.paired_file import PairedFileMatcher
 from enforcer.matchers.branch_name import BranchNameMatcher
 from enforcer.matchers.commit_message import CommitMessageMatcher
+from enforcer.matchers.naming_convention import NamingConventionMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -29,4 +30,5 @@ __all__ = [
     "PairedFileMatcher",
     "BranchNameMatcher",
     "CommitMessageMatcher",
+    "NamingConventionMatcher",
 ]
