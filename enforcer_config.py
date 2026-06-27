@@ -53,11 +53,19 @@ RULES = [
         message="No test file found for '{file}'. Agents must write tests.",
         fix_instruction="Create a .spec.ts file alongside the source file.",
     ),
+    Rule(
+        id="css-duplicate-check",
+        severity=Severity.WARN,
+        matchers=[AlwaysMatcher(matched_value="css-duplicate-check")],
+        file_globs=["**/*.css"],
+        message="Make sure you did not create a duplicate.",
+        fix_instruction="Review the file for duplicate selectors or properties.",
+    ),
 ]
 
 SEVERITY_ACTIONS = {
     Severity.ERROR: "block",
-    Severity.WARN: "print",
+    Severity.WARN: "block_warn",
     Severity.INFO: "hint",
 }
 

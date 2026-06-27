@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# pre-commit-agent-enforcer hook
+# Blocks on errors. Blocks on warnings unless ENFORCER_CONFIRM_WARNINGS=1 is set.
+set -euo pipefail
+
+CONFIG_PATH="${ENFORCER_CONFIG:-enforcer_config.py}"
+
+if [ "${ENFORCER_CONFIRM_WARNINGS:-0}" = "1" ]; then
+    CONFIRM_FLAG="--confirm-read-warnings"
+else
+    CONFIRM_FLAG=""
+fi
+
+python -m enforcer.cli check --staged --config "$CONFIG_PATH" $CONFIRM_FLAG

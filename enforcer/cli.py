@@ -27,7 +27,8 @@ def _glob_any_match(name: str, patterns) -> bool:
 @click.option("--severity", default="info", type=click.Choice(["error", "warn", "info"]))
 @click.option("--no-llm", is_flag=True, help="Skip LLM consequences")
 @click.option("--rule-id", default=None, help="Run only this rule ID")
-def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id):
+@click.option("--confirm-read-warnings", is_flag=True, help="Acknowledge warnings, allow commit to proceed")
+def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings):
     """Check files for convention violations."""
     from enforcer.types import Severity
 
@@ -86,9 +87,9 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
         all_matches.extend(matches)
 
     reporter = Reporter(format=fmt)
-    output = reporter.render(all_matches)
+    output = reporter.render(all_matches, severity_actions=config.severity_actions)
     click.echo(output)
-    sys.exit(reporter.exit_code(all_matches))
+    sys.exit(reporter.exit_code(all_matches, severity_actions=config.severity_actions, confirm_warnings=confirm_read_warnings))
 
 @cli.command()
 @click.option("--config", "config_path", default="enforcer_config.py")
@@ -105,6 +106,23 @@ def docs(config_path, output):
         click.echo(f"Documentation written to {output}")
     else:
         click.echo(md)
+
+@cli.command()
+@click.option("--force", is_flag=True, help="Overwrite existing hook")
+def install(force):
+    """Install pre-commit hook into .git/hooks/pre-commit."""
+    import shutil
+
+    hook_path = os.path.join(".git", "hooks", "pre-commit")
+    if os.path.exists(hook_path) and not force:
+        click.echo(f"Hook already exists at {hook_path}. Use --force to overwrite.")
+        sys.exit(1)
+
+    hook_source = os.path.join(os.path.dirname(__file__), "..", "scripts", "pre-commit-hook")
+    hook_source = os.path.normpath(hook_source)
+    shutil.copy(hook_source, hook_path)
+    os.chmod(hook_path, 0o755)
+    click.echo(f"Installed pre-commit hook to {hook_path}")
 
 if __name__ == "__main__":
     cli()

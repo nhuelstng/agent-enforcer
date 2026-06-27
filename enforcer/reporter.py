@@ -8,12 +8,12 @@ class Reporter:
     def __init__(self, format: str = "text"):
         self.format = format
 
-    def render(self, matches: list[Match]) -> str:
+    def render(self, matches: list[Match], severity_actions: dict | None = None) -> str:
         if self.format == "json":
             return self._render_json(matches)
         if self.format == "sarif":
             return self._render_sarif(matches)
-        return self._render_text(matches)
+        return self._render_text(matches, severity_actions)
 
     def _render_sarif(self, matches: list[Match]) -> str:
         _SEV_TO_SARIF = {Severity.ERROR: "error", Severity.WARN: "warning", Severity.INFO: "note"}
@@ -71,7 +71,7 @@ class Reporter:
             issues.append(issue)
         return json.dumps({"summary": summary, "issues": issues}, indent=2)
 
-    def _render_text(self, matches: list[Match]) -> str:
+    def _render_text(self, matches: list[Match], severity_actions: dict | None = None) -> str:
         if not matches:
             return "No issues found.\n"
         lines = []
@@ -89,8 +89,16 @@ class Reporter:
                 lines.append(f"  LLM: {m.llm_response}")
             lines.append("")
         summary = self._summary(matches)
-        blocked = " Commit blocked." if summary["errors"] > 0 else ""
-        lines.append(f"Summary: {summary['total']} issues ({summary['errors']} errors, {summary['warnings']} warnings, {summary['info']} info).{blocked}")
+        actions = severity_actions or {}
+        warnings_block = any(actions.get(m.severity) == "block_warn" and m.severity == Severity.WARN for m in matches)
+        errors_block = summary["errors"] > 0
+        if errors_block:
+            lines.append(f"Summary: {summary['total']} issues ({summary['errors']} errors, {summary['warnings']} warnings, {summary['info']} info). Commit blocked.")
+        elif warnings_block:
+            lines.append(f"Summary: {summary['total']} issues ({summary['errors']} errors, {summary['warnings']} warnings, {summary['info']} info). Commit blocked (warnings require confirmation).")
+            lines.append("Acknowledge warnings and retry: ENFORCER_CONFIRM_WARNINGS=1 git commit ...")
+        else:
+            lines.append(f"Summary: {summary['total']} issues ({summary['errors']} errors, {summary['warnings']} warnings, {summary['info']} info).")
         return "\n".join(lines) + "\n"
 
     def _summary(self, matches: list[Match]) -> dict:
@@ -101,5 +109,12 @@ class Reporter:
             "info": sum(1 for m in matches if m.severity == Severity.INFO),
         }
 
-    def exit_code(self, matches: list[Match]) -> int:
-        return 1 if any(m.severity == Severity.ERROR for m in matches) else 0
+    def exit_code(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> int:
+        if confirm_warnings:
+            return 1 if any(m.severity == Severity.ERROR for m in matches) else 0
+        actions = severity_actions or {Severity.ERROR: "block", Severity.WARN: "print", Severity.INFO: "hint"}
+        for m in matches:
+            action = actions.get(m.severity, "print")
+            if action in ("block", "block_warn"):
+                return 1
+        return 0
