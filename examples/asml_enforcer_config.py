@@ -28,12 +28,10 @@ from enforcer.matchers import (
     LineCountMatcher,
     PathNotMatchingMatcher,
     AlwaysMatcher,
-    FileExistsMatcher,
     ImportMatcher,
     FunctionComplexityMatcher,
     PairedFileMatcher,
 )
-from enforcer.combinators import Not
 
 WORKSPACE = "."
 
@@ -68,7 +66,7 @@ RULES = [
     Rule(
         id="backend-todo-needs-owner",
         severity=Severity.WARN,
-        matchers=[RegexMatcher(r"#\s*TODO|#\s*FIXME|#\s*HACK|#\s*XXX")],
+        matchers=[RegexMatcher(r"#\s*(TODO|FIXME|HACK|XXX)\b(?!\s*\(@)")],
         file_globs=["backend/app/**/*.py"],
         exclude_globs=["backend/app/seeds/**"],
         message="TODO/FIXME without owner at {file}:{line}. Use '# TODO(@name, #issue): …' or remove.",
@@ -94,7 +92,7 @@ RULES = [
         severity=Severity.WARN,
         matchers=[PairedFileMatcher(
             source_glob="backend/app/api/*.py",
-            derived_glob="backend/tests/integration/test_{stem}.py",
+            derived_glob="backend/tests/integration/test_{stem}*.py",
             exclude_stems=["__init__", "router"],
         )],
         file_globs=["backend/app/api/*.py"],
@@ -231,7 +229,7 @@ RULES = [
         ),
     ),
 
-    # ─── Frontend: every component/service needs a paired .spec.ts ────────
+    # ─── Frontend: every component needs a paired .spec.ts ───────────────
     # CLAUDE.md: "Every new component or service ships at least one unit test."
     Rule(
         id="frontend-test-paired",
@@ -240,17 +238,38 @@ RULES = [
             source_glob="frontend/src/app/components/**/*.ts",
             derived_glob="frontend/src/app/components/{dir}/{stem}.spec.ts",
         )],
-        file_globs=[
-            "frontend/src/app/components/**/*.ts",
-            "frontend/src/app/services/**/*.ts",
-            "frontend/src/pages/**/*.ts",
-        ],
-        exclude_globs=[
-            "frontend/src/**/*.spec.ts",
-            "frontend/src/**/*.d.ts",
-            "frontend/src/app/app.config.ts",
-            "frontend/src/app/app.routes.ts",
-        ],
+        file_globs=["frontend/src/app/components/**/*.ts"],
+        exclude_globs=["frontend/src/**/*.spec.ts", "frontend/src/**/*.d.ts"],
+        message="No .spec.ts paired with {file}. CLAUDE.md requires Vitest unit tests.",
+        fix_instruction="Create {stem}.spec.ts alongside the file covering visible behaviour.",
+        diff_only=True,
+    ),
+
+    # ─── Frontend: every service needs a paired .spec.ts ────────────────
+    Rule(
+        id="frontend-service-test-paired",
+        severity=Severity.WARN,
+        matchers=[PairedFileMatcher(
+            source_glob="frontend/src/app/services/**/*.ts",
+            derived_glob="frontend/src/app/services/{stem}.spec.ts",
+        )],
+        file_globs=["frontend/src/app/services/**/*.ts"],
+        exclude_globs=["frontend/src/**/*.spec.ts", "frontend/src/**/*.d.ts"],
+        message="No .spec.ts paired with {file}. CLAUDE.md requires Vitest unit tests.",
+        fix_instruction="Create {stem}.spec.ts alongside the file covering public methods.",
+        diff_only=True,
+    ),
+
+    # ─── Frontend: every page needs a paired .spec.ts ────────────────────
+    Rule(
+        id="frontend-page-test-paired",
+        severity=Severity.WARN,
+        matchers=[PairedFileMatcher(
+            source_glob="frontend/src/pages/**/*.ts",
+            derived_glob="frontend/src/pages/{dir}/{stem}.spec.ts",
+        )],
+        file_globs=["frontend/src/pages/**/*.ts"],
+        exclude_globs=["frontend/src/**/*.spec.ts", "frontend/src/**/*.d.ts"],
         message="No .spec.ts paired with {file}. CLAUDE.md requires Vitest unit tests.",
         fix_instruction="Create {stem}.spec.ts alongside the file covering visible behaviour.",
         diff_only=True,

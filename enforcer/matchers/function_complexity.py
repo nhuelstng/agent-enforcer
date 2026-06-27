@@ -87,20 +87,21 @@ class FunctionComplexityMatcher:
                 return sum(1 for c in child.children if c.type in _PARAM_NODE_TYPES)
         return 0
 
-    def _max_depth(self, node, current: int) -> int:
-        max_d = current
-        for child in node.children:
-            if child.type in _NESTING_NODE_TYPES:
-                child_d = self._max_depth(child, current + 1)
-                if child_d > max_d:
-                    max_d = child_d
-            elif child.type in _FUNC_NODE_TYPES:
-                # ponytail: don't descend into nested functions — they get their own analysis
-                continue
-            else:
-                child_d = self._max_depth(child, current)
-                if child_d > max_d:
-                    max_d = child_d
+    def _max_depth(self, root, start: int) -> int:
+        # ponytail: iterative DFS — avoids RecursionError, skips nested functions
+        max_d = start
+        stack = [(root, start)]
+        while stack:
+            node, depth = stack.pop()
+            if depth > max_d:
+                max_d = depth
+            for child in reversed(node.children):
+                if child.type in _FUNC_NODE_TYPES:
+                    continue  # skip nested functions
+                if child.type in _NESTING_NODE_TYPES:
+                    stack.append((child, depth + 1))
+                else:
+                    stack.append((child, depth))
         return max_d
 
     def _cyclomatic(self, func_node) -> int:

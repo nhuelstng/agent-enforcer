@@ -4,7 +4,6 @@ from pathlib import Path
 from click.testing import CliRunner
 from enforcer.cli import cli
 from enforcer.types import FileContext
-from enforcer.context import FileContextBuilder
 
 def test_file_context_has_changed_lines_field():
     """FileContext should have a changed_lines field defaulting to None."""

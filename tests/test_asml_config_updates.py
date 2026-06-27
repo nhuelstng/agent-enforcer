@@ -8,6 +8,7 @@ def test_asml_config_loads():
     assert "backend-function-max-lines" in rule_ids
     assert "backend-test-paired" in rule_ids
     assert "frontend-test-paired" in rule_ids
+    assert "frontend-service-test-paired" in rule_ids
 
 def test_paired_matcher_replaces_file_exists():
     """backend-test-paired should use PairedFileMatcher, not FileExistsMatcher+Not."""
