@@ -112,3 +112,38 @@ def test_predicate_without_ctx_returns_false():
     match = Match(file="test.py", line=1, matched_value="foo")
     assert HasDecoratorPredicate().test(match) is False
     assert NodeNamePredicate(pattern=r"foo").test(match) is False
+
+
+def test_predicate_works_through_rule_check():
+    """HasDecoratorPredicate should work when invoked through Rule.check()."""
+    from enforcer.rule import Rule
+    from enforcer.types import Severity
+    from enforcer.matchers.naming_convention import NamingConventionMatcher
+
+    source = (
+        "@app.route('/api')\n"
+        "def Bad_Name():\n"
+        "    pass\n"
+        "def good_name():\n"
+        "    pass\n"
+    )
+    from enforcer.parsers.tree_sitter import parse
+    ctx = FileContext(path="test.py", raw=source)
+    ctx.ast = parse(source, Needs.AST_PY)
+
+    rule = Rule(
+        id="naming",
+        severity=Severity.WARN,
+        matchers=[NamingConventionMatcher(
+            declaration_types=["function_definition"],
+            pattern=r"^[a-z_][a-z0-9_]*$",
+        )],
+        file_globs=["*.py"],
+        predicates=[HasDecoratorPredicate(pattern=r"app\.route")],
+        message="Decorated function {matched_value} must be snake_case",
+    )
+    matches = rule.check(ctx, {})
+    # Only Bad_Name has @app.route decorator — should be the only match
+    assert len(matches) == 1
+    assert "Bad_Name" in matches[0].matched_value
+    assert "good_name" not in [m.matched_value for m in matches]

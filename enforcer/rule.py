@@ -63,6 +63,10 @@ class Rule:
         if self.diff_only and file_ctx.changed_lines is not None:
             all_matches = [m for m in all_matches if m.line in file_ctx.changed_lines or m.line == 0]
 
+        # ponytail: attach file_ctx to each match so AST predicates can access the AST
+        for m in all_matches:
+            m._file_ctx = file_ctx
+
         for pred in self.predicates:
             all_matches = [m for m in all_matches if pred.test(m)]
 
