@@ -19,6 +19,32 @@ def _glob_any_match(name: str, patterns) -> bool:
     import fnmatch
     return any(fnmatch.fnmatch(name, p) for p in patterns)
 
+def _parse_diff_changed_lines(repo_root: str, file_path: str) -> set[int] | None:
+    """Parse git diff --cached -U0 for a file, return set of changed (added) line numbers.
+    Returns None if diff can't be parsed (no diff info). Returns empty set if diff parsed but no added lines."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--cached", "-U0", "--", file_path],
+            capture_output=True, text=True, cwd=repo_root,
+        )
+        if result.returncode != 0 or not result.stdout:
+            return None
+    except Exception:
+        return None
+
+    import re
+    changed: set[int] = set()
+    for line in result.stdout.splitlines():
+        if line.startswith("@@"):
+            m = re.search(r'\+(\d+)(?:,(\d+))?', line)
+            if m:
+                start = int(m.group(1))
+                count = int(m.group(2)) if m.group(2) else 1
+                for i in range(start, start + count):
+                    changed.add(i)
+    # ponytail: return empty set (not None) when diff parsed but no added lines — distinguishes "no diff info" from "diff parsed, nothing added"
+    return changed
+
 @cli.command()
 @click.option("--staged", is_flag=True, help="Check staged files only")
 @click.option("--all", "all_files", is_flag=True, help="Check entire repo")
@@ -42,7 +68,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     if staged:
         result = subprocess.check_output(
             ["git", "diff", "--cached", "--name-only"],
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, cwd=ws,
         )
         file_list = result.decode().strip().split("\n") if result.strip() else []
     elif all_files:
@@ -91,6 +117,8 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
         if not f:
             continue
         ctx = builder.build(f)
+        if staged:
+            ctx.changed_lines = _parse_diff_changed_lines(ws, f)
         matches = runner.run_rules_for_file(ctx, shared_ctx)
         all_matches.extend(matches)
 
