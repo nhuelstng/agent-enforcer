@@ -88,8 +88,8 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     else:
         file_list = []
 
-    # Apply .enforcerignore
-    ignore_patterns = load_enforcerignore(ws)
+    # Apply .enforcerignore (skip for --staged: user explicitly staged these files)
+    ignore_patterns = load_enforcerignore(ws) if not staged else []
     if ignore_patterns:
         file_list = [f for f in file_list if not is_ignored(f, ignore_patterns)]
 

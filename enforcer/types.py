@@ -2,7 +2,7 @@
 from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Any
 
 class Severity(Enum):
     """Convention violation severity level. ERROR blocks commit, WARN blocks unless confirmed, INFO is advisory."""
@@ -35,6 +35,8 @@ class Match:
     llm_response: str = ""
     matched_value: str = ""
     fix_applied: str = ""
+    # ponytail: attached by Rule.check() so AST predicates can access the file's AST. Not set for matches created outside Rule.check().
+    _file_ctx: Any = None
 
 @dataclass
 class FileContext:
