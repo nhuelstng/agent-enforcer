@@ -110,14 +110,11 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
         for target in getattr(rule, "read_targets", []):
             if target in shared_ctx:
                 continue
-            # ponytail: glob the filesystem, don't collapse ** into literal paths
             root = Path(ws)
-            first = next(iter(root.glob(target)), None)
-            if first:
-                # Load first match into shared_ctx (AllowlistMatcher reads raw text)
-                rel = str(first.relative_to(ws)) if str(first).startswith(ws) else str(first)
+            for match in root.glob(target):
+                rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
                 target_ctx = builder.build(rel)
-                shared_ctx[target] = target_ctx
+                shared_ctx.setdefault(target, target_ctx)
 
     all_matches = []
     for f in file_list:

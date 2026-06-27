@@ -17,5 +17,12 @@ class StringLengthPredicate:
     op: str
     value: int
 
+    def __post_init__(self):
+        if self.op not in _OPS:
+            raise ValueError(f"Invalid op: {self.op!r}. Valid: {sorted(_OPS)}")
+
     def test(self, match: Match) -> bool:
-        return _OPS[self.op](len(match.matched_value), self.value)
+        try:
+            return _OPS[self.op](len(match.matched_value), self.value)
+        except (TypeError, AttributeError):
+            return False

@@ -52,3 +52,21 @@ def test_sarif_includes_rules_metadata():
     rules = data["runs"][0]["tool"]["driver"]["rules"]
     assert len(rules) == 1
     assert rules[0]["id"] == "test-rule"
+
+
+def test_sarif_warn_level():
+    matches = [
+        Match(file="x.ts", line=1, rule_id="w", severity=Severity.WARN, message="w"),
+    ]
+    reporter = Reporter(format="sarif")
+    data = json.loads(reporter.render(matches))
+    assert data["runs"][0]["results"][0]["level"] == "warning"
+
+
+def test_sarif_info_level():
+    matches = [
+        Match(file="x.ts", line=1, rule_id="i", severity=Severity.INFO, message="i"),
+    ]
+    reporter = Reporter(format="sarif")
+    data = json.loads(reporter.render(matches))
+    assert data["runs"][0]["results"][0]["level"] == "note"

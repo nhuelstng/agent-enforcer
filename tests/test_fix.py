@@ -98,3 +98,18 @@ def test_fix_result_has_summary():
         assert r.path == "test.py"
         assert r.fixes_applied == 1
         assert "logger.debug" in r.new_content
+
+def test_apply_fixes_noop_not_counted():
+    """Fix function returning unchanged content should not increment fixes_applied."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        fpath = Path(tmpdir, "test.py")
+        original = "print('x')\n"
+        fpath.write_text(original)
+        matches = [
+            Match(file="test.py", line=1, rule_id="no-print", matched_value="print('x')"),
+        ]
+        def noop_fix(ctx, m):
+            return ctx.raw  # returns same content
+        results = apply_fixes(matches, tmpdir, {"no-print": noop_fix})
+        assert len(results) == 0
+        assert fpath.read_text() == original

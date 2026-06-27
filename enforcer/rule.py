@@ -12,11 +12,7 @@ def _is_combinator(obj) -> bool:
     return (hasattr(obj, "matchers") or hasattr(obj, "matcher")) and hasattr(obj, "find")
 
 def _run_matcher(matcher, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
-    # ponytail: always pass shared_ctx — matchers that don't need it have shared_ctx=None default
-    try:
-        return matcher.find(file_ctx, shared_ctx)
-    except TypeError:
-        return matcher.find(file_ctx)
+    return matcher.find(file_ctx, shared_ctx)
 
 def _glob_match(path: str, pattern: str) -> bool:
     """Match path against glob pattern, supporting ** recursive globs (fnmatch does not handle **).

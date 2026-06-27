@@ -9,8 +9,8 @@ class CharCountMatcher:
     max_chars: int
     needs: Needs = Needs.RAW
 
-    def find(self, file_ctx: FileContext) -> list[Match]:
-        if not file_ctx.raw:
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        if file_ctx.raw is None:
             return []
         count = len(file_ctx.raw)
         if count > self.max_chars:

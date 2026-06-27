@@ -25,7 +25,7 @@ class FileContextBuilder:
 
         if cached:
             if ast_need and cached.ast is None:
-                if cached.raw:
+                if cached.raw is not None:
                     cached.ast = ts_parse(cached.raw, ast_need)
             return cached
 

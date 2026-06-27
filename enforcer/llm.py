@@ -42,6 +42,7 @@ class LLMExecutor:
 
     def _call_llm(self, consequence: LLMConsequence, prompt: str, provider_config: dict) -> str:
         import httpx
+        import sys
         try:
             resp = httpx.post(
                 f"{provider_config['baseURL']}/chat/completions",
@@ -55,7 +56,8 @@ class LLMExecutor:
             resp.raise_for_status()
             data = resp.json()
             return data["choices"][0]["message"]["content"]
-        except Exception:
+        except Exception as e:
+            print(f"[enforcer] LLM call failed: {e}", file=sys.stderr)
             return ""
 
     def _get_provider_config(self, provider: str) -> dict:

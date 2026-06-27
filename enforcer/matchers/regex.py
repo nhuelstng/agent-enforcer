@@ -11,7 +11,7 @@ class RegexMatcher:
     pattern: str | Pattern
     needs: Needs = Needs.RAW
 
-    def find(self, file_ctx: FileContext) -> list[Match]:
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         matches: list[Match] = []
         if not file_ctx.raw:
             return matches

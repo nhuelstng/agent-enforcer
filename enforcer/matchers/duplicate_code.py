@@ -6,9 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from enforcer.types import Match, FileContext, Needs
 
-# ponytail: token regex — identifiers, numbers, strings, operators. Strips whitespace.
 _TOKEN_RE = re.compile(r"[A-Za-z_]\w*|\d+|'[^\']*'|\"[^\"]*\"|==|!=|<=|>=|[-+*/%=<>!&|^~?:;.(){}\[\],]")
-# ponytail: Python comments only — TS/JS/Go comments not stripped. Acceptable: config author gates via file_globs.
 _COMMENT_RE = re.compile(r"#.*$", re.MULTILINE)
 
 
@@ -26,36 +24,30 @@ def _ngrams(tokens: list[str], n: int) -> set[tuple[str, ...]]:
 @dataclass
 class DuplicateCodeMatcher:
     """Detects duplicate code blocks across files via token n-gram overlap.
-    Uses shared_ctx to accumulate tokens per file. Two-phase: find() collects
-    n-grams per file, finalize_duplicates() emits matches for file pairs sharing
-    above-threshold overlap.
+    Two-phase: find() collects n-grams per file into shared_ctx, finalize_duplicates()
+    emits cross-file matches for pairs sharing above-threshold overlap.
 
-    Uses overlap coefficient (overlap / min(len_a, len_b)) — correct for
-    subset/containment detection. Jaccard would penalize small files fully
-    contained in large ones.
-
-    Memory: n-grams hashed to ints to reduce footprint. Inverted index used
-    for O(K) candidate pair generation instead of O(n²) pairwise scan."""
+    Uses overlap coefficient (overlap / min(len_a, len_b)). Inverted index for
+    O(K) candidate pair generation."""
     min_tokens: int = 10
     min_overlap: float = 0.8
     workspace: str = "."
     needs: Needs = Needs.RAW
 
     def __post_init__(self):
-        # ponytail: key by instance config — prevents collision between multiple DuplicateCodeMatcher instances
         self._ctx_key = f"_dup_index_{self.min_tokens}_{self.min_overlap}"
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         shared_ctx = shared_ctx if shared_ctx is not None else {}
-        if not file_ctx.raw:
+        if file_ctx.raw is None:
             return []
 
         key = self._ctx_key
         if key not in shared_ctx:
             shared_ctx[key] = {
-                "files": {},            # path -> set of n-gram hashes
-                "ngram_files": defaultdict(set),  # n-gram hash -> set of paths (inverted index)
-                "file_lines": {},       # path -> {n-gram hash -> first line number}
+                "files": {},
+                "ngram_files": defaultdict(set),
+                "file_lines": {},
                 "finalized": False,
             }
 
@@ -66,33 +58,27 @@ class DuplicateCodeMatcher:
         tokens = _tokenize(file_ctx.raw)
         ngrams = _ngrams(tokens, self.min_tokens)
 
-        # ponytail: hash n-grams to ints — ~28x smaller than storing tuples of strings
-        gram_hashes = set()
+        gram_set = set()
         gram_lines = {}
         lines = file_ctx.raw.splitlines()
         for gram in ngrams:
-            gh = hash(gram)
-            gram_hashes.add(gh)
-            idx["ngram_files"][gh].add(file_ctx.path)
-            if gh not in gram_lines:
-                # find first line where this n-gram starts
-                gram_lines[gh] = self._find_line(lines, gram)
+            gram_set.add(gram)
+            idx["ngram_files"][gram].add(file_ctx.path)
+            if gram not in gram_lines:
+                gram_lines[gram] = self._find_line(lines, gram)
 
-        idx["files"][file_ctx.path] = gram_hashes
+        idx["files"][file_ctx.path] = gram_set
         idx["file_lines"][file_ctx.path] = gram_lines
 
         return []
 
     def _find_line(self, lines: list[str], gram: tuple[str, ...]) -> int:
-        """Find the first line number where an n-gram appears."""
         for i, line in enumerate(lines):
             if gram[0] in line:
                 return i + 1
         return 1
 
     def finalize_duplicates(self, shared_ctx: dict) -> list[Match]:
-        """Call after all files processed. Returns matches for duplicate blocks.
-        Uses inverted index for O(K) candidate pair generation where K = actual shared pairs."""
         idx = shared_ctx.get(self._ctx_key)
         if not idx or idx.get("finalized"):
             return []
@@ -100,9 +86,8 @@ class DuplicateCodeMatcher:
         idx["finalized"] = True
         matches: list[Match] = []
 
-        # ponytail: use inverted index to find candidate pairs — O(total_grams) not O(n²)
         pair_overlaps: Counter = Counter()
-        for gram_hash, paths in idx["ngram_files"].items():
+        for gram, paths in idx["ngram_files"].items():
             if len(paths) < 2:
                 continue
             path_list = sorted(paths)
@@ -134,7 +119,6 @@ class DuplicateCodeMatcher:
         return matches
 
     def _first_overlap_line(self, gram_lines: dict, other_grams: set) -> int:
-        """Find the first line of the first n-gram shared with the other file."""
         for gh, line in gram_lines.items():
             if gh in other_grams:
                 return line

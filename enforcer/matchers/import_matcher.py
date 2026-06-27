@@ -22,7 +22,7 @@ class ImportMatcher:
         # ponytail: pre-compile regexes to avoid recompilation in hot loop
         self._compiled = [re.compile(p) for p in self.forbidden_patterns]
 
-    def find(self, file_ctx: FileContext) -> list[Match]:
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         if not file_ctx.ast:
             return []
         matches: list[Match] = []
