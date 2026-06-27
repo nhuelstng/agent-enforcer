@@ -28,3 +28,21 @@ def test_complexity_rule_uses_function_complexity_matcher():
     config = load_config("examples/asml_enforcer_config.py")
     complexity_rule = next(r for r in config.rules if r.id == "backend-function-max-lines")
     assert any(isinstance(m, FunctionComplexityMatcher) for m in complexity_rule.matchers)
+
+
+def test_asml_config_has_branch_rule():
+    config = load_config("examples/asml_enforcer_config.py")
+    rule_ids = [r.id for r in config.rules]
+    assert "branch-naming" in rule_ids
+
+
+def test_asml_config_has_commit_message_rule():
+    config = load_config("examples/asml_enforcer_config.py")
+    rule_ids = [r.id for r in config.rules]
+    assert "commit-message-format" in rule_ids
+
+
+def test_asml_config_has_naming_rule():
+    config = load_config("examples/asml_enforcer_config.py")
+    rule_ids = [r.id for r in config.rules]
+    assert "backend-function-naming" in rule_ids

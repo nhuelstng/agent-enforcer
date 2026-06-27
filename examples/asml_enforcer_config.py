@@ -22,6 +22,7 @@ from enforcer import (
     Rule,
     Severity,
     LLMConsequence,
+    RuleType,
 )
 from enforcer.matchers import (
     RegexMatcher,
@@ -31,6 +32,9 @@ from enforcer.matchers import (
     ImportMatcher,
     FunctionComplexityMatcher,
     PairedFileMatcher,
+    BranchNameMatcher,
+    CommitMessageMatcher,
+    NamingConventionMatcher,
 )
 
 WORKSPACE = "."
@@ -347,6 +351,43 @@ RULES = [
         file_globs=["backend/alembic/versions/*.py"],
         message="Migration at {file}:{line} creates an index. If large table, use CONCURRENTLY + set LONG_RUNNING = True. See backend/CLAUDE.md.",
         fix_instruction="Set LONG_RUNNING: bool = True on the migration class, or use op.execute('CREATE INDEX CONCURRENTLY …').",
+    ),
+
+    # ─── Git metadata: branch naming ─────────────────────────────────────
+    Rule(
+        id="branch-naming",
+        severity=Severity.ERROR,
+        matchers=[BranchNameMatcher(pattern=r"^(feature|fix|hotfix|chore|docs|refactor)/")],
+        file_globs=["*"],
+        rule_type=RuleType.METADATA,
+        message="Branch '{matched_value}' doesn't match required pattern: type/description",
+        fix_instruction="Rename: git branch -m <type>/<description>",
+    ),
+
+    # ─── Git metadata: commit message format ─────────────────────────────
+    Rule(
+        id="commit-message-format",
+        severity=Severity.WARN,
+        matchers=[CommitMessageMatcher(pattern=r"^(feat|fix|docs|refactor|test|chore|perf|ci|build|style|revert)(\(.+\))?:\s+.+")],
+        file_globs=["*"],
+        rule_type=RuleType.METADATA,
+        message="Commit message '{matched_value}' doesn't follow Conventional Commits",
+        fix_instruction="Use: type(scope): description (e.g. feat(api): add endpoint)",
+    ),
+
+    # ─── Backend: function naming ────────────────────────────────────────
+    Rule(
+        id="backend-function-naming",
+        severity=Severity.WARN,
+        matchers=[NamingConventionMatcher(
+            declaration_types=["function_definition"],
+            pattern=r"^[a-z_][a-z0-9_]*$",
+        )],
+        file_globs=["backend/app/**/*.py"],
+        exclude_globs=["backend/alembic/**"],
+        message="Function '{matched_value}' at {file}:{line} must be snake_case",
+        fix_instruction="Rename to snake_case.",
+        diff_only=True,
     ),
 ]
 
