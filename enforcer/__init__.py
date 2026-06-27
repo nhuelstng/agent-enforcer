@@ -6,9 +6,10 @@ from enforcer.reporter import Reporter
 from enforcer.context import FileContextBuilder
 from enforcer.config import Config, load_config
 from enforcer.llm import LLMExecutor
+from enforcer.fix import apply_fixes, FixResult
 
 __all__ = [
     "Severity", "Needs", "RuleType", "Match", "FileContext", "LLMConsequence", "Rule",
     "RuleRunner", "Reporter", "FileContextBuilder", "Config", "load_config",
-    "LLMExecutor",
+    "LLMExecutor", "apply_fixes", "FixResult",
 ]
