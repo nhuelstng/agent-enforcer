@@ -1,6 +1,6 @@
 """FileExistsMatcher: checks if a file matching a glob exists. Used with Not to enforce 'test file must exist'."""
 from __future__ import annotations
-import os
+from pathlib import Path
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
 
@@ -19,8 +19,9 @@ class FileExistsMatcher:
                 line=0,
                 matched_value=f"{self.read_target} exists",
             )]
-        full_path = os.path.join(self.workspace, self.read_target.replace("**/", ""))
-        if os.path.exists(full_path):
+        # ponytail: pathlib.Path.glob handles ** and * patterns correctly
+        root = Path(self.workspace)
+        if any(root.glob(self.read_target)):
             return [Match(
                 file=file_ctx.path,
                 line=0,
