@@ -4,7 +4,7 @@ from enforcer import (
 )
 from enforcer.matchers import (
     RegexMatcher, LineCountMatcher, PathNotMatchingMatcher,
-    AllowlistMatcher,
+    AllowlistMatcher, AlwaysMatcher, FileExistsMatcher,
 )
 from enforcer.combinators import AnyOf, AllOf, Not
 from enforcer.predicates import IntPredicate
@@ -29,6 +29,29 @@ RULES = [
         matchers=[LineCountMatcher(max_lines=200)],
         file_globs=["README.md"],
         message="README.md has {matched_value} lines (max 200).",
+    ),
+    Rule(
+        id="function-focus",
+        severity=Severity.WARN,
+        matchers=[AlwaysMatcher(matched_value="function-focus-check")],
+        file_globs=["**/*.ts"],
+        exclude_globs=["**/*.spec.ts", "**/*.d.ts"],
+        message="Functions should be short, focused, and single-purpose.",
+        fix_instruction="Consider splitting large functions into smaller, focused units.",
+        llm_consequence=LLMConsequence(
+            provider="default",
+            model="gpt-4",
+            prompt="Review this file's functions. Are they short, focused, and single-purpose? Flag any that are too long or do multiple things. Be concise.",
+        ),
+    ),
+    Rule(
+        id="test-file-exists",
+        severity=Severity.WARN,
+        matchers=[Not(FileExistsMatcher(read_target="**/*.spec.ts"))],
+        file_globs=["**/*.ts"],
+        exclude_globs=["**/*.spec.ts", "**/*.d.ts", "**/index.ts"],
+        message="No test file found for '{file}'. Agents must write tests.",
+        fix_instruction="Create a .spec.ts file alongside the source file.",
     ),
 ]
 
