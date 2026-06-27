@@ -29,6 +29,9 @@ from enforcer.matchers import (
     PathNotMatchingMatcher,
     AlwaysMatcher,
     FileExistsMatcher,
+    ImportMatcher,
+    FunctionComplexityMatcher,
+    PairedFileMatcher,
 )
 from enforcer.combinators import Not
 
@@ -84,16 +87,21 @@ RULES = [
         fix_instruction="Extract sub-resources into separate router modules.",
     ),
 
-    # ─── Backend: every endpoint file needs an integration test ──────────
+    # ─── Backend: every endpoint file needs a paired integration test ────
     # CLAUDE.md: "Every new endpoint ships at least one integration test."
     Rule(
-        id="backend-test-file-exists",
+        id="backend-test-paired",
         severity=Severity.WARN,
-        matchers=[Not(FileExistsMatcher(read_target="backend/tests/integration/test_*.py"))],
+        matchers=[PairedFileMatcher(
+            source_glob="backend/app/api/*.py",
+            derived_glob="backend/tests/integration/test_{stem}.py",
+            exclude_stems=["__init__", "router"],
+        )],
         file_globs=["backend/app/api/*.py"],
         exclude_globs=["backend/app/api/__init__.py", "backend/app/api/router.py"],
-        message="No integration test found for {file}. CLAUDE.md requires tests for endpoints.",
-        fix_instruction="Create backend/tests/integration/test_<name>.py covering happy path + one failure mode.",
+        message="No integration test paired with {file}. CLAUDE.md requires tests for endpoints.",
+        fix_instruction="Create backend/tests/integration/test_{stem}.py covering happy path + one failure mode.",
+        diff_only=True,
     ),
 
     # ─── Backend: config drift guard ─────────────────────────────────────
@@ -108,6 +116,68 @@ RULES = [
         read_targets=[".env.config.example", ".env.secrets.example"],
         message="Config field in {file}:{line}. Verify it appears in .env.config.example and .env.secrets.example (see app/config/__init__.py checklist).",
         fix_instruction="Add the field to .env.config.example (non-secret) or .env.secrets.example (secret).",
+        diff_only=True,
+    ),
+
+    # ─── Backend: API layer must not import from jobs layer ──────────────
+    # ASML drift: artifacts.py imports app.jobs.broker, app.jobs.auto_approve
+    Rule(
+        id="backend-no-import-jobs",
+        severity=Severity.ERROR,
+        matchers=[ImportMatcher(forbidden_patterns=[r"app\.jobs\."])],
+        file_globs=["backend/app/api/**/*.py"],
+        message="API layer imports from app.jobs at {file}:{line}. API should delegate to services, not jobs.",
+        fix_instruction="Move the import to a service module, or inject the job via a service interface.",
+        diff_only=True,
+    ),
+
+    # ─── Backend: services must not import from jobs layer ───────────────
+    # ASML drift: artifact_publication.py imports app.jobs.quality
+    Rule(
+        id="backend-service-no-import-jobs",
+        severity=Severity.ERROR,
+        matchers=[ImportMatcher(forbidden_patterns=[r"app\.jobs\."])],
+        file_globs=["backend/app/services/**/*.py"],
+        message="Service layer imports from app.jobs at {file}:{line}. Services are lower than jobs — inverted dependency.",
+        fix_instruction="Move the job logic into the service, or define an interface in services that jobs implement.",
+        diff_only=True,
+    ),
+
+    # ─── Backend: no private symbol imports across modules ───────────────
+    Rule(
+        id="backend-no-private-imports",
+        severity=Severity.WARN,
+        matchers=[ImportMatcher(forbidden_patterns=[r"import\s+_\w+", r"from\s+\S+\s+import\s+_\w+"])],
+        file_globs=["backend/app/**/*.py"],
+        message="Private symbol (_-prefixed) imported across modules at {file}:{line}.",
+        fix_instruction="Make the symbol public or move the logic to the importing module.",
+        diff_only=True,
+    ),
+
+    # ─── Backend: functions must not exceed 75 lines ─────────────────────
+    # ASML drift: _seed_default_bundles_for_kind (137 lines), _phrase (103 lines)
+    Rule(
+        id="backend-function-max-lines",
+        severity=Severity.WARN,
+        matchers=[FunctionComplexityMatcher(metric="lines", max_value=75)],
+        file_globs=["backend/app/**/*.py"],
+        exclude_globs=["backend/app/seeds/**", "backend/alembic/versions/**"],
+        message="Function at {file}:{line} has {matched_value} lines (max 75). Split or extract.",
+        fix_instruction="Extract sub-functions or move logic to a helper module.",
+        diff_only=True,
+    ),
+
+    # ─── Backend: functions must not exceed 5 parameters ──────────────────
+    # ASML drift: hybrid_search (16 params), register_repo_source (12 params)
+    Rule(
+        id="backend-function-max-params",
+        severity=Severity.WARN,
+        matchers=[FunctionComplexityMatcher(metric="params", max_value=5)],
+        file_globs=["backend/app/**/*.py"],
+        exclude_globs=["backend/app/seeds/**", "backend/tests/**"],
+        message="Function at {file}:{line} has {matched_value} parameters (max 5). Group into a dataclass.",
+        fix_instruction="Group related parameters into a dataclass/Pydantic model and pass as single arg.",
+        diff_only=True,
     ),
 
     # ─── Frontend: no console.log in app code ────────────────────────────
@@ -161,12 +231,15 @@ RULES = [
         ),
     ),
 
-    # ─── Frontend: every component/service needs a .spec.ts ──────────────
+    # ─── Frontend: every component/service needs a paired .spec.ts ────────
     # CLAUDE.md: "Every new component or service ships at least one unit test."
     Rule(
-        id="frontend-test-file-exists",
+        id="frontend-test-paired",
         severity=Severity.WARN,
-        matchers=[Not(FileExistsMatcher(read_target="frontend/src/**/*.spec.ts"))],
+        matchers=[PairedFileMatcher(
+            source_glob="frontend/src/app/components/**/*.ts",
+            derived_glob="frontend/src/app/components/{dir}/{stem}.spec.ts",
+        )],
         file_globs=[
             "frontend/src/app/components/**/*.ts",
             "frontend/src/app/services/**/*.ts",
@@ -178,8 +251,9 @@ RULES = [
             "frontend/src/app/app.config.ts",
             "frontend/src/app/app.routes.ts",
         ],
-        message="No .spec.ts found for {file}. CLAUDE.md requires Vitest unit tests.",
-        fix_instruction="Create a .spec.ts alongside the file covering visible behaviour / public method.",
+        message="No .spec.ts paired with {file}. CLAUDE.md requires Vitest unit tests.",
+        fix_instruction="Create {stem}.spec.ts alongside the file covering visible behaviour.",
+        diff_only=True,
     ),
 
     # ─── Frontend: use 'artifact' not 'skill' in new code ────────────────
