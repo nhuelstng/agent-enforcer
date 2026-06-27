@@ -1,5 +1,6 @@
 """PairedFileMatcher: cross-file paired file existence. Source file staged -> derived file must exist."""
 from __future__ import annotations
+import glob
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -10,6 +11,7 @@ from enforcer.types import Match, FileContext, Needs
 class PairedFileMatcher:
     """Given a source file, checks if a derived (paired) file exists.
     Uses {stem} (filename without extension) and {dir} (parent directory name) in derived_glob.
+    Supports glob wildcards (*, ?) in derived_glob — matches if at least one file matches.
     Emits a match if the paired file does NOT exist."""
     source_glob: str
     derived_glob: str
@@ -38,7 +40,8 @@ class PairedFileMatcher:
         derived_path = self.derived_glob.replace("{stem}", stem).replace("{dir}", parent_dir)
 
         full_path = os.path.join(self.workspace, derived_path)
-        if os.path.exists(full_path):
+        # ponytail: glob.glob handles both exact paths (no wildcard) and patterns (* / ?)
+        if glob.glob(full_path):
             return []
 
         return [Match(

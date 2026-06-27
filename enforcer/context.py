@@ -33,7 +33,7 @@ class FileContextBuilder:
         try:
             with open(full_path, "r", encoding="utf-8") as f:
                 raw = f.read()
-        except (IOError, OSError):
+        except (IOError, OSError, UnicodeDecodeError):
             return FileContext(path=path, raw=None)
 
         ctx = FileContext(path=path, raw=raw)
