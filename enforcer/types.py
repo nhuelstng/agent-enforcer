@@ -36,6 +36,7 @@ class FileContext:
     path: str
     raw: str | None = None
     ast: object | None = None
+    changed_lines: set[int] | None = None
 
 @dataclass
 class LLMConsequence:

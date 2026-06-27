@@ -38,6 +38,7 @@ class Rule:
     message: str | Callable = ""
     fix_instruction: str = ""
     llm_consequence: LLMConsequence | None = None
+    diff_only: bool = False
 
     def check(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
         """Run all matchers, filter by predicates, stamp metadata, render message. Returns list of Match objects."""
@@ -49,6 +50,10 @@ class Rule:
         else:
             combined = AllOf(self.matchers)
             all_matches = combined.find(file_ctx, shared_ctx)
+
+        # ponytail: diff_only — suppress matches on unchanged lines. line==0 = file-level matchers (LineCountMatcher, FileExistsMatcher, etc.) always pass through.
+        if self.diff_only and file_ctx.changed_lines is not None:
+            all_matches = [m for m in all_matches if m.line in file_ctx.changed_lines or m.line == 0]
 
         for pred in self.predicates:
             all_matches = [m for m in all_matches if pred.test(m)]
