@@ -9,6 +9,7 @@ from enforcer.matchers.comment_density import CommentPerFunctionMatcher
 from enforcer.matchers.always import AlwaysMatcher
 from enforcer.matchers.file_exists import FileExistsMatcher
 from enforcer.matchers.import_matcher import ImportMatcher
+from enforcer.matchers.function_complexity import FunctionComplexityMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -21,4 +22,5 @@ __all__ = [
     "AlwaysMatcher",
     "FileExistsMatcher",
     "ImportMatcher",
+    "FunctionComplexityMatcher",
 ]
