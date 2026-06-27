@@ -10,6 +10,7 @@ from enforcer.matchers.always import AlwaysMatcher
 from enforcer.matchers.file_exists import FileExistsMatcher
 from enforcer.matchers.import_matcher import ImportMatcher
 from enforcer.matchers.function_complexity import FunctionComplexityMatcher
+from enforcer.matchers.paired_file import PairedFileMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -23,4 +24,5 @@ __all__ = [
     "FileExistsMatcher",
     "ImportMatcher",
     "FunctionComplexityMatcher",
+    "PairedFileMatcher",
 ]
