@@ -17,6 +17,11 @@ class Needs(Enum):
     AST_PY = "ast_py"
     AST_CSS = "ast_css"
 
+class RuleType(Enum):
+    """Whether a rule operates on file contents (per-file) or git metadata (once per run)."""
+    CONTENT = "content"
+    METADATA = "metadata"
+
 @dataclass
 class Match:
     """A single rule violation found in a file. Carries location, message, and optional LLM response."""

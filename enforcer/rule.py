@@ -4,7 +4,7 @@ import fnmatch
 import re
 from dataclasses import dataclass, field
 from typing import Callable
-from enforcer.types import Severity, Match, FileContext, LLMConsequence
+from enforcer.types import Severity, Match, FileContext, LLMConsequence, RuleType
 from enforcer.matchers.allowlist import AllowlistMatcher
 from enforcer.matchers.file_exists import FileExistsMatcher
 from enforcer.matchers.paired_file import PairedFileMatcher
@@ -46,6 +46,7 @@ class Rule:
     fix_instruction: str = ""
     llm_consequence: LLMConsequence | None = None
     diff_only: bool = False
+    rule_type: RuleType = RuleType.CONTENT
 
     def check(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
         """Run all matchers, filter by predicates, stamp metadata, render message. Returns list of Match objects."""
