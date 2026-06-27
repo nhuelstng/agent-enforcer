@@ -11,6 +11,8 @@ from enforcer.matchers.file_exists import FileExistsMatcher
 from enforcer.matchers.import_matcher import ImportMatcher
 from enforcer.matchers.function_complexity import FunctionComplexityMatcher
 from enforcer.matchers.paired_file import PairedFileMatcher
+from enforcer.matchers.branch_name import BranchNameMatcher
+from enforcer.matchers.commit_message import CommitMessageMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -25,4 +27,6 @@ __all__ = [
     "ImportMatcher",
     "FunctionComplexityMatcher",
     "PairedFileMatcher",
+    "BranchNameMatcher",
+    "CommitMessageMatcher",
 ]
