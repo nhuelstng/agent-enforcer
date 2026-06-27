@@ -47,6 +47,7 @@ class Rule:
     llm_consequence: LLMConsequence | None = None
     diff_only: bool = False
     rule_type: RuleType = RuleType.CONTENT
+    fix: Callable | None = None
 
     def check(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
         """Run all matchers, filter by predicates, stamp metadata, render message. Returns list of Match objects."""
