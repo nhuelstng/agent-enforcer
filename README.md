@@ -117,6 +117,8 @@ A list of `Rule` dataclass instances.
 | `workspace` | `str \| None` | Per-rule workspace root override (default `None`). |
 | `predicates` | `list` | Predicate filters applied to matches (default `[]`). |
 | `diff_only` | `bool` | If `True`, only flag matches on lines changed in the current staged diff (default `False`). Requires `--staged`. |
+| `rule_type` | `RuleType` | `CONTENT` (per-file) or `METADATA` (once per check). Default `CONTENT`. |
+| `fix` | `Callable \| None` | Function `(FileContext, Match) -> str` returning patched content. Default `None`. |
 
 ### `SEVERITY_ACTIONS`
 
@@ -162,6 +164,42 @@ Rule(
 When `diff_only=True`, the rule only fires on lines added/modified in the current staged diff. Pre-existing violations on unchanged lines are suppressed. File-level matchers (line 0) always pass through.
 
 Only works with `--staged` (pre-commit hook). When run with `--all` or `--paths`, all lines are checked regardless of `diff_only`.
+
+## Auto-fix
+
+Rules can provide a `fix` function that patches the file content. Enable with `--fix`:
+
+```bash
+enforcer check --staged --fix
+```
+
+```python
+Rule(
+    id="no-print",
+    severity=Severity.ERROR,
+    matchers=[RegexMatcher(r"print\s*\(")],
+    file_globs=["**/*.py"],
+    message="print() at {file}:{line}",
+    fix=lambda ctx, m: (ctx.raw or "").replace("print(", "logger.debug("),
+)
+```
+
+The fix function receives `(FileContext, Match) -> str` (new file content). Fixes are applied per-file, in match order. Files are written in-place.
+
+## Metadata rules (branch/commit)
+
+Rules with `rule_type=RuleType.METADATA` run once per check, not per-file. Used for branch name and commit message enforcement:
+
+```python
+Rule(
+    id="branch-naming",
+    severity=Severity.ERROR,
+    matchers=[BranchNameMatcher(pattern=r"^(feature|fix|hotfix)/")],
+    file_globs=["*"],
+    rule_type=RuleType.METADATA,
+    message="Branch '{matched_value}' doesn't match required pattern",
+)
+```
 
 ## Two-phase commit warning flow
 
@@ -212,6 +250,9 @@ From `enforcer.matchers`:
 | `ImportMatcher(forbidden_patterns=)` | Walks AST for import statements, matches against forbidden module regex patterns. Set `needs=AST_PY` or `AST_TS`. |
 | `FunctionComplexityMatcher(metric=, max_value=)` | Walks AST functions, computes `lines`/`params`/`nesting`/`cyclomatic` complexity. Emits if over threshold. |
 | `PairedFileMatcher(source_glob=, derived_glob=)` | Cross-file: source file staged → derived file (test) must exist. Uses `{stem}` and `{dir}` substitution. |
+| `BranchNameMatcher(pattern=)` | Checks current git branch against regex. METADATA rule. |
+| `CommitMessageMatcher(pattern=)` | Checks commit message first line against regex. METADATA rule. |
+| `NamingConventionMatcher(declaration_types=, pattern=)` | Walks AST for declarations, flags names not matching regex. |
 
 ## Available combinators
 
@@ -238,6 +279,8 @@ From `enforcer.predicates`:
 | `All(preds)` | All predicates must pass. |
 | `Any(preds)` | At least one predicate must pass. |
 | `NotP(pred)` | Negate a predicate. |
+| `HasDecoratorPredicate(pattern=)` | Passes if matched node has a decorator (optionally matching pattern). |
+| `NodeNamePredicate(pattern=)` | Passes if matched node's name matches regex. |
 
 ## Recipes
 
