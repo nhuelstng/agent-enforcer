@@ -9,6 +9,7 @@ from enforcer.config import load_config
 from enforcer.context import FileContextBuilder
 from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
+from enforcer.ignore import load_enforcerignore, is_ignored
 
 @click.group()
 def cli():
@@ -87,6 +88,11 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     else:
         file_list = []
 
+    # Apply .enforcerignore
+    ignore_patterns = load_enforcerignore(ws)
+    if ignore_patterns:
+        file_list = [f for f in file_list if not is_ignored(f, ignore_patterns)]
+
     sev_map = {"error": Severity.ERROR, "warn": Severity.WARN, "info": Severity.INFO}
 
     runner = RuleRunner(
@@ -126,6 +132,10 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     # Run metadata rules (branch name, commit message)
     meta_matches = runner.run_metadata_rules(shared_ctx)
     all_matches.extend(meta_matches)
+
+    # Run cross-file finalizers (duplicate detection)
+    cross_matches = runner.run_cross_file_finalizers(shared_ctx)
+    all_matches.extend(cross_matches)
 
     if fix:
         from enforcer.fix import apply_fixes

@@ -14,6 +14,7 @@ from enforcer.matchers.paired_file import PairedFileMatcher
 from enforcer.matchers.branch_name import BranchNameMatcher
 from enforcer.matchers.commit_message import CommitMessageMatcher
 from enforcer.matchers.naming_convention import NamingConventionMatcher
+from enforcer.matchers.duplicate_code import DuplicateCodeMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -31,4 +32,5 @@ __all__ = [
     "BranchNameMatcher",
     "CommitMessageMatcher",
     "NamingConventionMatcher",
+    "DuplicateCodeMatcher",
 ]
