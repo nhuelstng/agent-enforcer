@@ -56,7 +56,8 @@ def _parse_diff_changed_lines(repo_root: str, file_path: str) -> set[int] | None
 @click.option("--no-llm", is_flag=True, help="Skip LLM consequences")
 @click.option("--rule-id", default=None, help="Run only this rule ID")
 @click.option("--confirm-read-warnings", is_flag=True, help="Acknowledge warnings, allow commit to proceed")
-def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings):
+@click.option("--fix", is_flag=True, help="Apply auto-fixes where available")
+def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings, fix):
     """Check files for convention violations."""
     from enforcer.types import Severity
 
@@ -121,6 +122,18 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
             ctx.changed_lines = _parse_diff_changed_lines(ws, f)
         matches = runner.run_rules_for_file(ctx, shared_ctx)
         all_matches.extend(matches)
+
+    # Run metadata rules (branch name, commit message)
+    meta_matches = runner.run_metadata_rules(shared_ctx)
+    all_matches.extend(meta_matches)
+
+    if fix:
+        from enforcer.fix import apply_fixes
+        fix_providers = {r.id: r.fix for r in config.rules if r.fix is not None}
+        results = apply_fixes(all_matches, ws, fix_providers)
+        total_fixes = sum(r.fixes_applied for r in results)
+        if total_fixes > 0:
+            click.echo(f"Applied {total_fixes} fix(es) across {len(results)} file(s).", err=True)
 
     reporter = Reporter(format=fmt)
     output = reporter.render(all_matches, severity_actions=config.severity_actions)
