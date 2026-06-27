@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Callable
 from enforcer.types import Severity, Match, FileContext, LLMConsequence
 from enforcer.matchers.allowlist import AllowlistMatcher
+from enforcer.matchers.file_exists import FileExistsMatcher
+from enforcer.matchers.paired_file import PairedFileMatcher
 from enforcer.combinators.core import AllOf
 from enforcer.predicates.combinators import All as AllPred
 
@@ -13,7 +15,7 @@ def _is_combinator(obj) -> bool:
     return (hasattr(obj, "matchers") or hasattr(obj, "matcher")) and hasattr(obj, "find")
 
 def _run_matcher(matcher, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
-    if isinstance(matcher, AllowlistMatcher):
+    if isinstance(matcher, (AllowlistMatcher, FileExistsMatcher, PairedFileMatcher)):
         return matcher.find(file_ctx, shared_ctx)
     return matcher.find(file_ctx)
 
