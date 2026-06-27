@@ -34,6 +34,7 @@ class Match:
     fix_instruction: str = ""
     llm_response: str = ""
     matched_value: str = ""
+    fix_applied: str = ""
 
 @dataclass
 class FileContext:
