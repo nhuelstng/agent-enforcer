@@ -43,7 +43,7 @@ class FunctionComplexityMatcher:
     max_value: int
     needs: Needs = Needs.AST_PY
 
-    def find(self, file_ctx: FileContext) -> list[Match]:
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         if not file_ctx.ast:
             return []
         matches: list[Match] = []
@@ -82,8 +82,7 @@ class FunctionComplexityMatcher:
 
     def _count_params(self, func_node) -> int:
         for child in func_node.children:
-            if "param" in child.type.lower():
-                # ponytail: count named children that are actual params, skip punctuation
+            if child.type in ("parameters", "parameter_list", "formal_parameters"):
                 return sum(1 for c in child.children if c.type in _PARAM_NODE_TYPES)
         return 0
 

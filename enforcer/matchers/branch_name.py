@@ -18,7 +18,7 @@ class BranchNameMatcher:
         self._compiled = re.compile(self.pattern)
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
-        cwd = file_ctx.path or self.workspace
+        cwd = self.workspace
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],

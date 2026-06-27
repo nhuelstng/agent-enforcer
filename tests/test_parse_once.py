@@ -21,4 +21,4 @@ def test_file_read_once():
         builder.build("x.ts")
         builder.build("x.ts")  # second call should use cache
         # First call reads; second uses cache
-        assert mock_file.call_count <= 1 or mock_file.call_count == 1
+        assert mock_file.call_count == 1

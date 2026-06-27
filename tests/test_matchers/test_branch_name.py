@@ -20,7 +20,7 @@ def test_branch_name_matches_pattern():
     """Should not flag when branch matches required pattern."""
     with tempfile.TemporaryDirectory() as tmpdir:
         _init_git_repo(tmpdir, "feature/ABC-123-add-login")
-        matcher = BranchNameMatcher(pattern=r"^feature/\w+-\d+-")
+        matcher = BranchNameMatcher(pattern=r"^feature/\w+-\d+-", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
 
@@ -28,7 +28,7 @@ def test_branch_name_does_not_match():
     """Should flag when branch doesn't match required pattern."""
     with tempfile.TemporaryDirectory() as tmpdir:
         _init_git_repo(tmpdir, "bad-branch-name")
-        matcher = BranchNameMatcher(pattern=r"^feature/\w+-\d+-")
+        matcher = BranchNameMatcher(pattern=r"^feature/\w+-\d+-", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         matches = matcher.find(ctx, {})
         assert len(matches) == 1
@@ -38,7 +38,7 @@ def test_branch_name_allows_main():
     """Should allow main/master branches when listed in allow_branches."""
     with tempfile.TemporaryDirectory() as tmpdir:
         _init_git_repo(tmpdir, "main")
-        matcher = BranchNameMatcher(pattern=r"^feature/", allow_branches=["main", "master"])
+        matcher = BranchNameMatcher(pattern=r"^feature/", allow_branches=["main", "master"], workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
 
@@ -47,15 +47,14 @@ def test_branch_name_detached_head():
     with tempfile.TemporaryDirectory() as tmpdir:
         _init_git_repo(tmpdir, "main")
         subprocess.run(["git", "checkout", "--detach", "HEAD"], cwd=tmpdir, capture_output=True)
-        matcher = BranchNameMatcher(pattern=r"^feature/")
+        matcher = BranchNameMatcher(pattern=r"^feature/", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
-        # Should return empty (can't check branch in detached state) or a match
         result = matcher.find(ctx, {})
         assert isinstance(result, list)
 
 def test_branch_name_not_a_git_repo():
     """Should not crash when workspace is not a git repo."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        matcher = BranchNameMatcher(pattern=r"^feature/")
+        matcher = BranchNameMatcher(pattern=r"^feature/", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []

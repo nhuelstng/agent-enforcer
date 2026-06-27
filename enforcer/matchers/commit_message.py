@@ -17,7 +17,7 @@ class CommitMessageMatcher:
         self._compiled = re.compile(self.pattern)
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
-        ws = file_ctx.path or self.workspace
+        ws = self.workspace
         msg_path = Path(ws, ".git", "COMMIT_EDITMSG")
         if not msg_path.exists():
             return []
@@ -26,7 +26,8 @@ class CommitMessageMatcher:
         except OSError:
             return []
 
-        first_line = content.splitlines()[0] if content.splitlines() else ""
+        lines = content.splitlines()
+        first_line = lines[0] if lines else ""
 
         if first_line.startswith("Merge"):
             return []

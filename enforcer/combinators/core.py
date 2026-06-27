@@ -4,13 +4,9 @@ from dataclasses import dataclass, field
 from enforcer.types import Match, FileContext
 
 def _run(matcher, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
-    # ponytail: always pass shared_ctx — matchers that don't need it have shared_ctx=None default
     if shared_ctx is None:
         shared_ctx = {}
-    try:
-        return matcher.find(file_ctx, shared_ctx)
-    except TypeError:
-        return matcher.find(file_ctx)
+    return matcher.find(file_ctx, shared_ctx)
 
 @dataclass
 class AllOf:

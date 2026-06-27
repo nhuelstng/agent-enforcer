@@ -27,7 +27,7 @@ class NamingConventionMatcher:
     def __post_init__(self):
         self._compiled = re.compile(self.pattern)
 
-    def find(self, file_ctx: FileContext) -> list[Match]:
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         if not file_ctx.ast:
             return []
         matches: list[Match] = []

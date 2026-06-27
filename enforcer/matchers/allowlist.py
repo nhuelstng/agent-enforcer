@@ -1,6 +1,6 @@
 """AllowlistMatcher: checks file content against an allowlist from another file (read_target)."""
 from __future__ import annotations
-import os
+import fnmatch
 from dataclasses import dataclass
 from typing import Callable
 from enforcer.types import Match, FileContext, Needs
@@ -13,11 +13,13 @@ class AllowlistMatcher:
     read_target: str
     needs: Needs = Needs.RAW
 
-    def find(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        from enforcer.rule import _glob_match
+        shared_ctx = shared_ctx or {}
         target_ctx = shared_ctx.get(self.read_target)
         if not target_ctx:
             for key, ctx in shared_ctx.items():
-                if key.endswith(self.read_target.replace("**/", "").replace("*", "")):
+                if _glob_match(key, self.read_target):
                     target_ctx = ctx
                     break
         if not target_ctx:
