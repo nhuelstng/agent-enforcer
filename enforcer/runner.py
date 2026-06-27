@@ -56,6 +56,24 @@ class RuleRunner:
             all_matches.extend(matches)
         return all_matches
 
+    def run_cross_file_finalizers(self, shared_ctx: dict) -> list[Match]:
+        """Call finalize_duplicates on any DuplicateCodeMatcher after all files processed."""
+        from enforcer.matchers.duplicate_code import DuplicateCodeMatcher
+        all_matches: list[Match] = []
+        for rule in self.content_rules:
+            if _SEVERITY_ORDER.get(rule.severity, 0) < _SEVERITY_ORDER.get(self.min_severity, 0):
+                continue
+            for matcher in rule.matchers:
+                if isinstance(matcher, DuplicateCodeMatcher) and hasattr(matcher, "finalize_duplicates"):
+                    matches = matcher.finalize_duplicates(shared_ctx)
+                    for m in matches:
+                        m.rule_id = rule.id
+                        m.severity = rule.severity
+                        m.fix_instruction = rule.fix_instruction
+                        m.message = rule._render_message(m)
+                    all_matches.extend(matches)
+        return all_matches
+
     def _file_matches(self, path: str, rule: Rule) -> bool:
         if not any(_glob_match(path, glob) for glob in rule.file_globs):
             return False
@@ -69,4 +87,5 @@ class RuleRunner:
         for ctx in file_contexts:
             matches = self.run_rules_for_file(ctx, shared_ctx)
             all_matches.extend(matches)
+        all_matches.extend(self.run_cross_file_finalizers(shared_ctx))
         return all_matches
