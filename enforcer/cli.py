@@ -26,11 +26,14 @@ def _glob_any_match(name: str, patterns) -> bool:
 @click.option("--workspace", default=None, help="Global workspace root")
 @click.option("--severity", default="info", type=click.Choice(["error", "warn", "info"]))
 @click.option("--no-llm", is_flag=True, help="Skip LLM consequences")
-def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm):
+@click.option("--rule-id", default=None, help="Run only this rule ID")
+def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id):
     """Check files for convention violations."""
     from enforcer.types import Severity
 
     config = load_config(config_path)
+    if rule_id:
+        config.rules = [r for r in config.rules if r.id == rule_id]
     ws = workspace or config.workspace
 
     if staged:

@@ -50,6 +50,34 @@ def list_conventions() -> str:
     config = load_config("enforcer_config.py")
     return render_rules_markdown(config.rules)
 
+def verify_fix(path: str, rule_id: str, format: str = "json") -> str:
+    """Re-check a single rule on a single file. Returns formatted output."""
+    config = load_config("enforcer_config.py")
+    ws = config.workspace
+
+    rule = next((r for r in config.rules if r.id == rule_id), None)
+    if not rule:
+        return json.dumps({"summary": {"total": 0, "errors": 0, "warnings": 0, "info": 0}, "issues": []})
+
+    runner = RuleRunner(config.rules, workspace=ws, llm_config=config.llm_config)
+    builder = FileContextBuilder(config.rules, workspace=ws)
+
+    shared_ctx: dict = {}
+    for target in getattr(rule, "read_targets", []):
+        import os
+        target_path = os.path.join(ws, target.replace("**/", ""))
+        if os.path.exists(target_path):
+            ctx = builder.build(target.replace("**/", ""))
+            shared_ctx[target] = ctx
+
+    ctx = builder.build(path)
+    matches = rule.check(ctx, shared_ctx)
+    if matches and rule.llm_consequence:
+        matches = runner.llm_executor.execute(matches, rule.llm_consequence, ctx, shared_ctx)
+
+    reporter = Reporter(format=format)
+    return reporter.render(matches)
+
 def run_mcp_server():
     """Minimal stdio JSON-RPC server for MCP protocol."""
     for line in sys.stdin:
@@ -81,6 +109,19 @@ def run_mcp_server():
                                     "properties": {},
                                 },
                             },
+                            {
+                                "name": "verify_fix",
+                                "description": "Re-check a single rule on a single file after a fix",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "path": {"type": "string"},
+                                        "rule_id": {"type": "string"},
+                                        "format": {"type": "string", "enum": ["json", "text"]},
+                                    },
+                                    "required": ["path", "rule_id"],
+                                },
+                            },
                         ]
                     }
                 }
@@ -97,6 +138,12 @@ def run_mcp_server():
                     )
                 elif tool_name == "list_conventions":
                     result = list_conventions()
+                elif tool_name == "verify_fix":
+                    result = verify_fix(
+                        path=args.get("path"),
+                        rule_id=args.get("rule_id"),
+                        format=args.get("format", "json"),
+                    )
                 else:
                     result = json.dumps({"error": f"Unknown tool: {tool_name}"})
                 response = {
