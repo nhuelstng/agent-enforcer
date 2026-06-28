@@ -1,128 +1,245 @@
-"""Convention-as-code entry point.
+"""Self-enforcement config for pre-commit-agent-enforcer.
 
-Loaded by ``enforcer.config.load_config()`` (and the pre-commit hook / MCP
-server via ``ENFORCER_CONFIG``). This module defines conventions declaratively
-through four magic module attributes that ``load_config`` introspects:
+This config enforces the conventions documented in AGENTS.md on this very
+repo. It is the dogfood config — the tool checks itself.
 
-Magic module attributes
------------------------
-``RULES`` : list[Rule]
-    Ordered list of convention rules to enforce.
-``WORKSPACE`` : str
-    Root directory the rules resolve paths against (default ``"."``).
-``SEVERITY_ACTIONS`` : dict[Severity, str]
-    Maps each ``Severity`` to the action the runner takes on a match:
-    - ``"block"``      -> exit 1 immediately (ERROR).
-    - ``"block_warn"``  -> exit 1 unless ``--confirm-read-warnings`` is passed
-                          (WARN); lets a human/agent acknowledge the warning.
-    - ``"print"``      -> non-blocking, emitted to stdout (INFO-ish).
-    - ``"hint"``       -> advisory only, never blocks.
-``LLM_CONFIG`` : dict
-    LLM execution tuning: ``concurrency`` (parallel LLM calls) and
-    ``timeout`` (per-call seconds).
+Setup (one-time):
+  enforcer install --force
+  export ENFORCER_CONFIG=enforcer_config.py
 
-Available matchers (enforcer.matchers)
---------------------------------------
-RegexMatcher, LineCountMatcher, CharCountMatcher, PathNotMatchingMatcher,
-AllowlistMatcher, AstNodeMatcher, CommentPerFunctionMatcher, AlwaysMatcher,
-FileExistsMatcher.
-
-Available combinators (enforcer.combinators)
----------------------------------------------
-AllOf, AnyOf, OneOf, Not, NoneOf.
-
-Available predicates (enforcer.predicates)
------------------------------------------
-IntPredicate, StringLengthPredicate, StringMatchesPredicate,
-StringNotMatchesPredicate, All, Any, NotP.
-
-Rule fields
------------
-``id``               : stable rule identifier.
-``severity``         : Severity.ERROR | WARN | INFO.
-``matchers``         : list of matcher instances (combined with AllOf).
-``file_globs``       : globs a file must match to be checked.
-``exclude_globs``    : globs that skip a file even if ``file_globs`` match.
-``read_targets``     : extra files read into the shared context (e.g. an
-                        allowlist) so matchers can cross-reference them.
-``message``          : str with ``{file}``/``{line}``/``{column}``/
-                        ``{matched_value}`` placeholders, or a Callable.
-``fix_instruction``  : short human/agent-readable fix hint.
-``llm_consequence``  : optional LLMConsequence for natural-language review.
-``workspace``        : per-rule workspace override (defaults to module WORKSPACE).
-
-LLMConsequence fields
----------------------
-``provider``  : LLM provider key.
-``prompt``    : prompt template sent to the provider.
-``timeout``   : per-call override (seconds).
-``model``     : model identifier.
+Then every `git commit` runs the rules below against staged files.
 """
 from enforcer import (
-    Rule, Severity, LLMConsequence,
+    Rule,
+    Severity,
+    RuleType,
 )
 from enforcer.matchers import (
-    RegexMatcher, LineCountMatcher, PathNotMatchingMatcher,
-    AlwaysMatcher, FileExistsMatcher,
+    RegexMatcher,
+    ImportMatcher,
+    FunctionComplexityMatcher,
+    PairedFileMatcher,
+    BranchNameMatcher,
+    CommitMessageMatcher,
+    NamingConventionMatcher,
+    DocstringMatcher,
 )
-from enforcer.combinators import Not
 
 WORKSPACE = "."
 
 RULES = [
-    # RegexMatcher + exclude_globs + read_targets (cross-file allowlist) + {matched_value} templating
+    # ─── Git metadata: branch naming ─────────────────────────────────────
     Rule(
-        id="no-raw-hex",
+        id="branch-naming",
         severity=Severity.ERROR,
-        matchers=[RegexMatcher(r"#[0-9a-fA-F]{3,6}\b")],
-        file_globs=["**/*.ts", "**/*.tsx", "**/*.scss"],
-        exclude_globs=["**/*.spec.ts", "**/material-theme.scss", "**/generated/**"],
-        workspace="frontend/",
-        read_targets=["**/colors.scss"],
-        message="Raw hex color '{matched_value}' found. Use var(--color-*) from colors.scss.",
-        fix_instruction="Replace with the appropriate var(--color-*) from colors.scss.",
+        matchers=[BranchNameMatcher(pattern=r"^(feature|fix|hotfix|chore|docs|refactor)/")],
+        file_globs=["*"],
+        rule_type=RuleType.METADATA,
+        message="Branch '{matched_value}' doesn't match required pattern: type/description",
+        fix_instruction="Rename: git branch -m <type>/<description>",
     ),
-    # LineCountMatcher + IntPredicate to cap file length
+
+    # ─── Git metadata: commit message format ─────────────────────────────
     Rule(
-        id="max-lines-readme",
+        id="commit-message",
         severity=Severity.WARN,
-        matchers=[LineCountMatcher(max_lines=200)],
-        file_globs=["README.md"],
-        message="README.md has {matched_value} lines (max 200).",
+        matchers=[CommitMessageMatcher(pattern=r"^(feat|fix|docs|refactor|test|chore|perf|ci|build|style|revert)(\(.+\))?:\s+.+")],
+        file_globs=["*"],
+        rule_type=RuleType.METADATA,
+        message="Commit message '{matched_value}' doesn't follow Conventional Commits",
+        fix_instruction="Use: type(scope): description (e.g. feat(matchers): add X)",
     ),
-    # AlwaysMatcher + LLMConsequence for natural-language convention review
+
+    # ─── Test pairing: every matcher has a test ──────────────────────────
     Rule(
-        id="function-focus",
+        id="matcher-test-paired",
         severity=Severity.WARN,
-        matchers=[AlwaysMatcher(matched_value="function-focus-check")],
-        file_globs=["**/*.ts"],
-        exclude_globs=["**/*.spec.ts", "**/*.d.ts"],
-        message="Functions should be short, focused, and single-purpose.",
-        fix_instruction="Consider splitting large functions into smaller, focused units.",
-        llm_consequence=LLMConsequence(
-            provider="default",
-            model="gpt-4",
-            prompt="Review this file's functions. Are they short, focused, and single-purpose? Flag any that are too long or do multiple things. Be concise.",
-        ),
+        matchers=[PairedFileMatcher(
+            source_glob="enforcer/matchers/*.py",
+            derived_glob="tests/test_matchers/test_{stem}.py",
+            exclude_stems=["__init__"],
+        )],
+        file_globs=["enforcer/matchers/*.py"],
+        exclude_globs=["enforcer/matchers/__init__.py"],
+        message="No test file for matcher {file}. Every matcher needs paired tests.",
+        fix_instruction="Create tests/test_matchers/test_{stem}.py",
+        diff_only=True,
     ),
-    # Not(FileExistsMatcher) to enforce 'test file must exist' for each source file
+
+    # ─── Test pairing: every predicate has a test ─────────────────────────
     Rule(
-        id="test-file-exists",
+        id="predicate-test-paired",
         severity=Severity.WARN,
-        matchers=[Not(FileExistsMatcher(read_target="**/*.spec.ts"))],
-        file_globs=["**/*.ts"],
-        exclude_globs=["**/*.spec.ts", "**/*.d.ts", "**/index.ts"],
-        message="No test file found for '{file}'. Agents must write tests.",
-        fix_instruction="Create a .spec.ts file alongside the source file.",
+        matchers=[PairedFileMatcher(
+            source_glob="enforcer/predicates/*.py",
+            derived_glob="tests/test_predicates/test_{stem}.py",
+            exclude_stems=["__init__"],
+        )],
+        file_globs=["enforcer/predicates/*.py"],
+        exclude_globs=["enforcer/predicates/__init__.py"],
+        message="No test file for predicate {file}. Every predicate needs paired tests.",
+        fix_instruction="Create tests/test_predicates/test_{stem}.py",
+        diff_only=True,
     ),
-    # AlwaysMatcher as warning trigger for manual review (WARN severity, blocks until confirmed)
+
+    # ─── Test pairing: every combinator has a test ───────────────────────
     Rule(
-        id="css-duplicate-check",
+        id="combinator-test-paired",
         severity=Severity.WARN,
-        matchers=[AlwaysMatcher(matched_value="css-duplicate-check")],
-        file_globs=["**/*.css"],
-        message="Make sure you did not create a duplicate.",
-        fix_instruction="Review the file for duplicate selectors or properties.",
+        matchers=[PairedFileMatcher(
+            source_glob="enforcer/combinators/*.py",
+            derived_glob="tests/test_combinators/test_{stem}.py",
+            exclude_stems=["__init__"],
+        )],
+        file_globs=["enforcer/combinators/*.py"],
+        exclude_globs=["enforcer/combinators/__init__.py"],
+        message="No test file for combinator {file}. Every combinator needs paired tests.",
+        fix_instruction="Create tests/test_combinators/test_{stem}.py",
+        diff_only=True,
+    ),
+
+    # ─── Test pairing: core modules have tests ───────────────────────────
+    Rule(
+        id="core-test-paired",
+        severity=Severity.WARN,
+        matchers=[PairedFileMatcher(
+            source_glob="enforcer/*.py",
+            derived_glob="tests/test_{stem}.py",
+            exclude_stems=["__init__"],
+        )],
+        file_globs=["enforcer/*.py"],
+        exclude_globs=["enforcer/__init__.py"],
+        message="No test file for core module {file}.",
+        fix_instruction="Create tests/test_{stem}.py",
+        diff_only=True,
+    ),
+
+    # ─── Naming: functions must be snake_case ───────────────────────────
+    Rule(
+        id="function-snake-case",
+        severity=Severity.WARN,
+        matchers=[NamingConventionMatcher(
+            declaration_types=["function_definition"],
+            pattern=r"^[a-z_][a-z0-9_]*$",
+        )],
+        file_globs=["enforcer/**/*.py"],
+        message="Function '{matched_value}' at {file}:{line} must be snake_case",
+        fix_instruction="Rename to snake_case.",
+        diff_only=True,
+    ),
+
+    # ─── Naming: classes must be CapWords ───────────────────────────────
+    Rule(
+        id="class-capwords",
+        severity=Severity.WARN,
+        matchers=[NamingConventionMatcher(
+            declaration_types=["class_definition"],
+            pattern=r"^[A-Z][a-zA-Z0-9]*$",
+        )],
+        file_globs=["enforcer/**/*.py"],
+        message="Class '{matched_value}' at {file}:{line} must be CapWords (PascalCase)",
+        fix_instruction="Rename to CapWords.",
+        diff_only=True,
+    ),
+
+    # ─── No print() in library code ──────────────────────────────────────
+    Rule(
+        id="no-print",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(r"^\s*print\s*\(")],
+        file_globs=["enforcer/**/*.py"],
+        message="print() found in library code at {file}:{line}. Use sys.stderr.write or structlog.",
+        fix_instruction="Replace print() with sys.stderr.write(...).",
+    ),
+
+    # ─── No bare except ─────────────────────────────────────────────────
+    Rule(
+        id="no-bare-except",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(r"^\s*except\s*:")],
+        file_globs=["enforcer/**/*.py"],
+        message="Bare except: at {file}:{line}. Use except Exception or more specific.",
+        fix_instruction="Change to `except Exception:` or a more specific exception.",
+    ),
+
+    # ─── No secrets ─────────────────────────────────────────────────────
+    Rule(
+        id="no-secrets",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(r"(?i)(password|secret|api_key|token)\s*=\s*['\"][^'\"]{8,}['\"]")],
+        file_globs=["**/*.py"],
+        exclude_globs=["**/test*", "**/*test*"],
+        message="Possible hardcoded secret at {file}:{line}. Use env var.",
+        fix_instruction="Move to env var or secrets manager.",
+    ),
+
+    # ─── Function complexity: max lines ──────────────────────────────────
+    Rule(
+        id="function-max-lines",
+        severity=Severity.WARN,
+        matchers=[FunctionComplexityMatcher(metric="lines", max_value=75)],
+        file_globs=["enforcer/**/*.py"],
+        exclude_globs=["enforcer/cli.py"],
+        message="Function at {file}:{line} has {matched_value} lines (max 75). Split or extract.",
+        fix_instruction="Extract sub-functions or move logic to a helper module.",
+        diff_only=True,
+    ),
+
+    # ─── Function complexity: max params ─────────────────────────────────
+    Rule(
+        id="function-max-params",
+        severity=Severity.WARN,
+        matchers=[FunctionComplexityMatcher(metric="params", max_value=5)],
+        file_globs=["enforcer/**/*.py"],
+        exclude_globs=["enforcer/cli.py"],
+        message="Function at {file}:{line} has {matched_value} parameters (max 5). Group into a dataclass.",
+        fix_instruction="Group related parameters into a dataclass and pass as single arg.",
+        diff_only=True,
+    ),
+
+    # ─── Function complexity: cyclomatic ─────────────────────────────────
+    Rule(
+        id="cyclomatic-complexity",
+        severity=Severity.WARN,
+        matchers=[FunctionComplexityMatcher(metric="cyclomatic", max_value=10)],
+        file_globs=["enforcer/**/*.py"],
+        exclude_globs=["enforcer/cli.py"],
+        message="Function at {file}:{line} has cyclomatic complexity {matched_value} (max 10). Reduce branching.",
+        fix_instruction="Extract branches into helper functions or use early returns.",
+        diff_only=True,
+    ),
+
+    # ─── No wildcard imports ─────────────────────────────────────────────
+    Rule(
+        id="no-wildcard-imports",
+        severity=Severity.WARN,
+        matchers=[ImportMatcher(forbidden_patterns=[r"import\s+\*", r"from\s+\S+\s+import\s+\*"])],
+        file_globs=["enforcer/**/*.py"],
+        message="Wildcard import at {file}:{line}. Use explicit imports.",
+        fix_instruction="Replace `from X import *` with explicit symbol imports.",
+        diff_only=True,
+    ),
+
+    # ─── TODO needs owner ────────────────────────────────────────────────
+    Rule(
+        id="todo-needs-owner",
+        severity=Severity.WARN,
+        matchers=[RegexMatcher(r"#\s*(TODO|FIXME|HACK|XXX)\b(?!\s*\(@)")],
+        file_globs=["enforcer/**/*.py"],
+        message="TODO/FIXME without owner at {file}:{line}. Use '# TODO(@name): …' or remove.",
+        fix_instruction="Add owner reference or delete the TODO and address now.",
+        diff_only=True,
+    ),
+
+    # ─── Docstrings on public functions ─────────────────────────────────
+    Rule(
+        id="docstring-public",
+        severity=Severity.WARN,
+        matchers=[DocstringMatcher()],
+        file_globs=["enforcer/**/*.py"],
+        message="Function '{matched_value}' at {file}:{line} missing docstring. Public functions must be documented.",
+        fix_instruction='Add a docstring: """<one-line description>."""',
+        diff_only=True,
     ),
 ]
 
@@ -133,6 +250,6 @@ SEVERITY_ACTIONS = {
 }
 
 LLM_CONFIG = {
-    "concurrency": 5,
-    "timeout": 30,
+    "concurrency": 3,
+    "timeout": 45,
 }
