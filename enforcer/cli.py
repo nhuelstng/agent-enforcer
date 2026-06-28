@@ -11,6 +11,10 @@ from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
 from enforcer.ignore import load_enforcerignore, is_ignored
 
+_JUNK_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
+               ".pytest_cache", ".mypy_cache", ".tox", "dist", "build",
+               "*.egg-info"}
+
 @click.group()
 def cli():
     """Convention enforcement tool for coding agents."""
@@ -46,6 +50,52 @@ def _parse_diff_changed_lines(repo_root: str, file_path: str) -> set[int] | None
     # ponytail: return empty set (not None) when diff parsed but no added lines — distinguishes "no diff info" from "diff parsed, nothing added"
     return changed
 
+def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str) -> list[str]:
+    """Collect the list of files to check based on CLI mode."""
+    if staged:
+        result = subprocess.check_output(
+            ["git", "diff", "--cached", "--name-only"],
+            stderr=subprocess.DEVNULL, cwd=ws,
+        )
+        return result.decode().strip().split("\n") if result.strip() else []
+    if all_files:
+        file_list = []
+        for root, dirs, files in os.walk(ws):
+            dirs[:] = [d for d in dirs if not _glob_any_match(d, _JUNK_DIRS)]
+            for f in files:
+                rel = os.path.relpath(os.path.join(root, f), ws)
+                file_list.append(rel)
+        return file_list
+    return list(paths)
+
+def _build_shared_ctx(config, builder, ws: str) -> dict:
+    """Build shared context dict from rule read_targets."""
+    shared_ctx: dict = {}
+    for rule in config.rules:
+        for target in getattr(rule, "read_targets", []):
+            if target in shared_ctx:
+                continue
+            root = Path(ws)
+            for match in root.glob(target):
+                rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
+                target_ctx = builder.build(rel)
+                shared_ctx.setdefault(target, target_ctx)
+    return shared_ctx
+
+def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool) -> list:
+    """Run rules against each file, return aggregated matches."""
+    from enforcer.types import Match
+    all_matches: list[Match] = []
+    for f in file_list:
+        if not f:
+            continue
+        ctx = builder.build(f)
+        if staged:
+            ctx.changed_lines = _parse_diff_changed_lines(ws, f)
+        matches = runner.run_rules_for_file(ctx, shared_ctx)
+        all_matches.extend(matches)
+    return all_matches
+
 @cli.command()
 @click.option("--staged", is_flag=True, help="Check staged files only")
 @click.option("--all", "all_files", is_flag=True, help="Check entire repo")
@@ -67,28 +117,8 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
         config.rules = [r for r in config.rules if r.id == rule_id]
     ws = workspace or config.workspace
 
-    if staged:
-        result = subprocess.check_output(
-            ["git", "diff", "--cached", "--name-only"],
-            stderr=subprocess.DEVNULL, cwd=ws,
-        )
-        file_list = result.decode().strip().split("\n") if result.strip() else []
-    elif all_files:
-        _JUNK_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
-                       ".pytest_cache", ".mypy_cache", ".tox", "dist", "build",
-                       "*.egg-info"}
-        file_list = []
-        for root, dirs, files in os.walk(ws):
-            dirs[:] = [d for d in dirs if not _glob_any_match(d, _JUNK_DIRS)]
-            for f in files:
-                rel = os.path.relpath(os.path.join(root, f), ws)
-                file_list.append(rel)
-    elif paths:
-        file_list = list(paths)
-    else:
-        file_list = []
+    file_list = _collect_files(staged, all_files, paths, ws)
 
-    # Apply .enforcerignore (skip for --staged: user explicitly staged these files)
     ignore_patterns = load_enforcerignore(ws) if not staged else []
     if ignore_patterns:
         file_list = [f for f in file_list if not is_ignored(f, ignore_patterns)]
@@ -104,33 +134,13 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     )
 
     builder = FileContextBuilder(config.rules, workspace=ws)
+    shared_ctx = _build_shared_ctx(config, builder, ws)
 
-    shared_ctx: dict = {}
-    for rule in config.rules:
-        for target in getattr(rule, "read_targets", []):
-            if target in shared_ctx:
-                continue
-            root = Path(ws)
-            for match in root.glob(target):
-                rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
-                target_ctx = builder.build(rel)
-                shared_ctx.setdefault(target, target_ctx)
+    all_matches = _run_checks(runner, builder, file_list, shared_ctx, ws, staged)
 
-    all_matches = []
-    for f in file_list:
-        if not f:
-            continue
-        ctx = builder.build(f)
-        if staged:
-            ctx.changed_lines = _parse_diff_changed_lines(ws, f)
-        matches = runner.run_rules_for_file(ctx, shared_ctx)
-        all_matches.extend(matches)
-
-    # Run metadata rules (branch name, commit message)
     meta_matches = runner.run_metadata_rules(shared_ctx)
     all_matches.extend(meta_matches)
 
-    # Run cross-file finalizers (duplicate detection)
     cross_matches = runner.run_cross_file_finalizers(shared_ctx)
     all_matches.extend(cross_matches)
 
