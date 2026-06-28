@@ -17,7 +17,7 @@ An agent must use these terms correctly in code, commits, and discussion:
 - **FileContext** — per-file parsed state: raw text, optional AST, changed_lines. Built once, reused by all matchers.
 - **shared_ctx** — cross-file dict passed to every `matcher.find()`. Used for cross-file reference data (allowlists, paired files, duplicate detection).
 - **Needs** — enum declaring what a matcher requires: `RAW`, `AST_PY`, `AST_TS`, `AST_CSS`. Drives parse-once caching.
-- **Severity** — `ERROR` (block commit), `WARN` (block unless `--confirm-read-warnings`), `INFO` (advisory).
+- **Severity** — `ERROR` (style/correctness, always blocks), `WARN` (critical-component reminder, blocks unless `--confirm-read-warnings`), `INFO` (advisory).
 - **RuleType** — `CONTENT` (checked per-file) vs `METADATA` (checked once per run, e.g. branch name, commit message).
 
 ## Branch Convention
@@ -93,13 +93,13 @@ Rules live in `enforcer_config.py`:
 ```python
 Rule(
     id="my-rule-id",           # stable identifier
-    severity=Severity.WARN,    # ERROR, WARN, or INFO
+    severity=Severity.ERROR,   # ERROR (style, blocks), WARN (reminder, blocks unless confirmed), INFO (advisory)
     matchers=[MyMatcher()],     # one matcher, or use combinators for multiple
     file_globs=["**/*.py"],     # which files to check
     exclude_globs=["**/test*"], # skip these
     message="...",              # {file}, {line}, {matched_value} placeholders
     fix_instruction="...",      # actionable hint for agents
-    diff_only=True,             # only check changed lines (--staged)
+    diff_only=True,             # only check changed lines (--staged); suppressed entirely on --all/--paths
     rule_type=RuleType.CONTENT, # CONTENT (per-file) or METADATA (once)
 )
 ```
@@ -107,9 +107,10 @@ Rule(
 Guidelines:
 - One matcher per rule when possible. Use combinators (`AllOf`, `AnyOf`) for multi-matcher.
 - Always set `fix_instruction` — agents need actionable fix hints.
-- Use `diff_only=True` for rules that only matter on changed lines (reduces noise on large repos).
+- Use `diff_only=True` for rules that only matter on changed lines. Suppressed entirely on `--all`/`--paths` (no diff = not touched).
 - Use `read_targets` for cross-file reference data (allowlists, config files).
 - Message templates support `{file}`, `{line}`, `{column}`, `{matched_value}`.
+- **Severity choice:** `ERROR` for all style/correctness rules (naming, tests, complexity, docstrings, imports, secrets). `WARN` only for critical-component reminders — fires when you touch files with broad blast radius (types.py, rule.py, runner.py, etc.). The message should tell the agent what to verify.
 
 ## Architecture Map
 
@@ -167,7 +168,7 @@ To install (one-time):
 python -m enforcer.cli install --force
 ```
 
-WARN-severity rules block unless `ENFORCER_CONFIRM_WARNINGS=1` is set:
+The config has 21 rules: 15 ERROR (style/correctness — always block) + 6 WARN (critical-component reminders — block unless acknowledged). WARN rules fire when you stage changes to files with broad blast radius (`types.py`, `rule.py`, `runner.py`, `context.py`, `config.py`, `parsers/`). Each WARN tells you what tests to run before acknowledging:
 ```bash
 ENFORCER_CONFIRM_WARNINGS=1 git commit -m "..."
 ```
