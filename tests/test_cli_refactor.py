@@ -51,3 +51,15 @@ def test_run_checks_returns_matches():
     builder = FileContextBuilder([rule], workspace=".")
     matches = _run_checks(runner, builder, ["test.py"], {}, ".", staged=False)
     assert isinstance(matches, list)
+
+
+def test_check_output_writes_file(tmp_path):
+    """--output should write results to file instead of stdout."""
+    from click.testing import CliRunner
+    from enforcer.cli import cli
+    outfile = tmp_path / "results.txt"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["check", "--paths", "nonexistent.py", "--output", str(outfile)])
+    assert result.exit_code == 0
+    assert outfile.exists()
+    assert "No issues found" in outfile.read_text()
