@@ -50,6 +50,8 @@ class FunctionComplexityMatcher:
         matches: list[Match] = []
         root = file_ctx.ast.root_node
         for func_node in self._find_functions(root):
+            if self.metric == "params" and self._is_init(func_node):
+                continue
             value = self._compute(func_node)
             if value > self.max_value:
                 matches.append(Match(
@@ -58,6 +60,15 @@ class FunctionComplexityMatcher:
                     matched_value=str(value),
                 ))
         return matches
+
+    def _is_init(self, func_node) -> bool:
+        """Check if function node is __init__ (constructors exempt from param count)."""
+        for child in func_node.children:
+            if child.type == "identifier":
+                raw = child.text
+                name = raw.decode() if hasattr(raw, "decode") else str(raw)
+                return name == "__init__"
+        return False
 
     def _find_functions(self, root) -> list:
         # ponytail: iterative DFS — avoids RecursionError on deep ASTs

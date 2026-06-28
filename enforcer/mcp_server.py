@@ -82,6 +82,71 @@ def verify_fix(path: str, rule_id: str, format: str = "json") -> str:
     reporter = Reporter(format=format)
     return reporter.render(matches)
 
+def _tool_definitions() -> list[dict]:
+    """Return MCP tool definitions for tools/list response."""
+    return [
+        {
+            "name": "check_conventions",
+            "description": "Check files for convention violations",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "paths": {"type": "array", "items": {"type": "string"}},
+                    "format": {"type": "string", "enum": ["json", "text"]},
+                },
+            },
+        },
+        {
+            "name": "list_conventions",
+            "description": "List all configured convention rules as documentation",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+        {
+            "name": "verify_fix",
+            "description": "Re-check a single rule on a single file after a fix",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "rule_id": {"type": "string"},
+                    "format": {"type": "string", "enum": ["json", "text"]},
+                },
+                "required": ["path", "rule_id"],
+            },
+        },
+    ]
+
+
+def _send_response(msg_id, result) -> None:
+    """Write a JSON-RPC success response to stdout."""
+    response = {"jsonrpc": "2.0", "id": msg_id, "result": result}
+    sys.stdout.write(json.dumps(response) + "\n")
+    sys.stdout.flush()
+
+
+def _send_error(msg_id, code: int, message: str) -> None:
+    """Write a JSON-RPC error response to stdout."""
+    response = {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
+    sys.stdout.write(json.dumps(response) + "\n")
+    sys.stdout.flush()
+
+
+def _handle_tool_call(params: dict) -> str:
+    """Dispatch a tools/call request to the appropriate function. Returns result string."""
+    tool_name = params.get("name")
+    args = params.get("arguments", {})
+    if tool_name == "check_conventions":
+        return check_conventions(paths=args.get("paths"), format=args.get("format", "json"))
+    if tool_name == "list_conventions":
+        return list_conventions()
+    if tool_name == "verify_fix":
+        return verify_fix(path=args.get("path"), rule_id=args.get("rule_id"), format=args.get("format", "json"))
+    return json.dumps({"error": f"Unknown tool: {tool_name}"})
+
+
 def run_mcp_server():
     """Minimal stdio JSON-RPC server for MCP protocol."""
     for line in sys.stdin:
@@ -89,105 +154,24 @@ def run_mcp_server():
         try:
             msg = json.loads(line)
             method = msg.get("method")
+            msg_id = msg.get("id")
             if method == "initialize":
-                response = {
-                    "jsonrpc": "2.0",
-                    "id": msg.get("id"),
-                    "result": {
-                        "protocolVersion": "2024-11-05",
-                        "serverInfo": {"name": "enforcer", "version": "1.0.0"},
-                        "capabilities": {"tools": {}},
-                    }
-                }
-                sys.stdout.write(json.dumps(response) + "\n")
-                sys.stdout.flush()
+                _send_response(msg_id, {
+                    "protocolVersion": "2024-11-05",
+                    "serverInfo": {"name": "enforcer", "version": "1.0.0"},
+                    "capabilities": {"tools": {}},
+                })
             elif method == "tools/list":
-                response = {
-                    "jsonrpc": "2.0",
-                    "id": msg.get("id"),
-                    "result": {
-                        "tools": [
-                            {
-                                "name": "check_conventions",
-                                "description": "Check files for convention violations",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "paths": {"type": "array", "items": {"type": "string"}},
-                                        "format": {"type": "string", "enum": ["json", "text"]},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "list_conventions",
-                                "description": "List all configured convention rules as documentation",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {},
-                                },
-                            },
-                            {
-                                "name": "verify_fix",
-                                "description": "Re-check a single rule on a single file after a fix",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "path": {"type": "string"},
-                                        "rule_id": {"type": "string"},
-                                        "format": {"type": "string", "enum": ["json", "text"]},
-                                    },
-                                    "required": ["path", "rule_id"],
-                                },
-                            },
-                        ]
-                    }
-                }
-                sys.stdout.write(json.dumps(response) + "\n")
-                sys.stdout.flush()
-            elif msg.get("method") == "tools/call":
-                params = msg.get("params", {})
-                tool_name = params.get("name")
-                args = params.get("arguments", {})
-                if tool_name == "check_conventions":
-                    result = check_conventions(
-                        paths=args.get("paths"),
-                        format=args.get("format", "json"),
-                    )
-                elif tool_name == "list_conventions":
-                    result = list_conventions()
-                elif tool_name == "verify_fix":
-                    result = verify_fix(
-                        path=args.get("path"),
-                        rule_id=args.get("rule_id"),
-                        format=args.get("format", "json"),
-                    )
-                else:
-                    result = json.dumps({"error": f"Unknown tool: {tool_name}"})
-                response = {
-                    "jsonrpc": "2.0",
-                    "id": msg.get("id"),
-                    "result": {"content": [{"type": "text", "text": result}]}
-                }
-                sys.stdout.write(json.dumps(response) + "\n")
-                sys.stdout.flush()
+                _send_response(msg_id, {"tools": _tool_definitions()})
+            elif method == "tools/call":
+                result = _handle_tool_call(msg.get("params", {}))
+                _send_response(msg_id, {"content": [{"type": "text", "text": result}]})
             elif method == "notifications/initialized":
                 pass
             else:
-                response = {
-                    "jsonrpc": "2.0",
-                    "id": msg.get("id"),
-                    "error": {"code": -32601, "message": f"Method not found: {method}"}
-                }
-                sys.stdout.write(json.dumps(response) + "\n")
-                sys.stdout.flush()
+                _send_error(msg_id, -32601, f"Method not found: {method}")
         except Exception as e:
-            response = {
-                "jsonrpc": "2.0",
-                "id": msg.get("id") if msg else None,
-                "error": {"code": -32603, "message": str(e)}
-            }
-            sys.stdout.write(json.dumps(response) + "\n")
-            sys.stdout.flush()
+            _send_error(msg.get("id") if msg else None, -32603, str(e))
 
 if __name__ == "__main__":
     run_mcp_server()
