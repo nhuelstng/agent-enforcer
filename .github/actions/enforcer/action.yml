@@ -1,0 +1,59 @@
+name: enforcer
+description: Run pre-commit-agent-enforcer convention checks
+
+inputs:
+  install-method:
+    description: How to install enforcer. skip | pip | wheel
+    default: pip
+  base-ref:
+    description: Git ref to diff against. Empty = full scan (--all)
+    default: ""
+  severity:
+    description: Minimum severity to report
+    default: error
+  token:
+    description: GitHub token for private repo checkout (cross-org)
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: setup-python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: install
+      shell: bash
+      run: |
+        case "${{ inputs.install-method }}" in
+          skip) echo "skip install" ;;
+          wheel)
+            pip install dist/*.whl ;;
+          pip)
+            pip install "git+https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git@${{ github.sha }}" ;;
+        esac
+
+    - name: run-enforcer
+      id: run-enforcer
+      shell: bash
+      run: |
+        ARGS="--severity ${{ inputs.severity }} --no-llm --format sarif --output enforcer-results.sarif"
+        if [ -n "${{ inputs.base-ref }}" ]; then
+          ARGS="$ARGS --base-ref ${{ inputs.base-ref }}"
+        else
+          ARGS="$ARGS --all"
+        fi
+        python -m enforcer.cli check $ARGS
+      continue-on-error: true
+
+    - name: upload-sarif
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: enforcer-results.sarif
+
+    - name: fail-on-violations
+      if: steps.run-enforcer.outcome == 'failure'
+      shell: bash
+      run: exit 1
