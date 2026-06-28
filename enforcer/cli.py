@@ -54,11 +54,17 @@ def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = 
     # ponytail: return empty set (not None) when diff parsed but no added lines — distinguishes "no diff info" from "diff parsed, nothing added"
     return changed
 
-def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str) -> list[str]:
+def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_ref: str | None = None) -> list[str]:
     """Collect the list of files to check based on CLI mode."""
     if staged:
         result = subprocess.check_output(
             ["git", "diff", "--cached", "--name-only"],
+            stderr=subprocess.DEVNULL, cwd=ws,
+        )
+        return result.decode().strip().split("\n") if result.strip() else []
+    if base_ref:
+        result = subprocess.check_output(
+            ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
             stderr=subprocess.DEVNULL, cwd=ws,
         )
         return result.decode().strip().split("\n") if result.strip() else []
@@ -86,7 +92,7 @@ def _build_shared_ctx(config, builder, ws: str) -> dict:
                 shared_ctx.setdefault(target, target_ctx)
     return shared_ctx
 
-def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool) -> list:
+def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool, diff_ref: str | None = None) -> list:
     """Run rules against each file, return aggregated matches."""
     from enforcer.types import Match
     all_matches: list[Match] = []
@@ -94,7 +100,9 @@ def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str
         if not f:
             continue
         ctx = builder.build(f)
-        if staged:
+        if diff_ref is not None:
+            ctx.changed_lines = _parse_diff_changed_lines(ws, f, ref=diff_ref)
+        elif staged:
             ctx.changed_lines = _parse_diff_changed_lines(ws, f)
         matches = runner.run_rules_for_file(ctx, shared_ctx)
         all_matches.extend(matches)
@@ -113,16 +121,22 @@ def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str
 @click.option("--confirm-read-warnings", is_flag=True, help="Acknowledge warnings, allow commit to proceed")
 @click.option("--fix", is_flag=True, help="Apply auto-fixes where available")
 @click.option("--output", "-o", default=None, help="Output file (default: stdout)")
-def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings, fix, output):
+@click.option("--base-ref", default=None, help="Git ref to diff against (e.g. origin/master). Sets changed_lines so diff_only rules fire in CI.")
+def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings, fix, output, base_ref):
     """Check files for convention violations."""
     from enforcer.types import Severity
+
+    exclusive = sum([bool(staged), bool(base_ref), bool(all_files)])
+    if exclusive > 1:
+        click.echo("Error: --staged, --base-ref, and --all are mutually exclusive.", err=True)
+        sys.exit(2)
 
     config = load_config(config_path)
     if rule_id:
         config.rules = [r for r in config.rules if r.id == rule_id]
     ws = workspace or config.workspace
 
-    file_list = _collect_files(staged, all_files, paths, ws)
+    file_list = _collect_files(staged, all_files, paths, ws, base_ref=base_ref)
 
     ignore_patterns = load_enforcerignore(ws) if not staged else []
     if ignore_patterns:
@@ -141,7 +155,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     builder = FileContextBuilder(config.rules, workspace=ws)
     shared_ctx = _build_shared_ctx(config, builder, ws)
 
-    all_matches = _run_checks(runner, builder, file_list, shared_ctx, ws, staged)
+    all_matches = _run_checks(runner, builder, file_list, shared_ctx, ws, staged, diff_ref=base_ref)
 
     meta_matches = runner.run_metadata_rules(shared_ctx)
     all_matches.extend(meta_matches)
