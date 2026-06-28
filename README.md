@@ -25,7 +25,7 @@ pip install -e ".[mcp]"   # mcp sdk
 
 ## Quickstart
 
-1. Create an `enforcer_config.py` at your repo root declaring your rules (see [enforcer_config.py](enforcer_config.py) for a full example).
+1. Create an `enforcer_config.py` at your repo root declaring your rules (see [this repo's own `enforcer_config.py`](enforcer_config.py) for a real working example).
 
 2. Run a check on staged files:
 
@@ -342,7 +342,7 @@ Rule(
 
 ## Example config
 
-See [enforcer_config.py](enforcer_config.py) for a complete working example covering raw-hex detection, README line limits, function-focus advisory rules, test-file existence checks, and CSS duplicate advisory.
+See [enforcer_config.py](enforcer_config.py) for a real working example — this repo enforces its own conventions with 17 rules covering test pairing, naming, complexity, docstrings, and git metadata.
 
 ## Running tests
 
