@@ -57,7 +57,7 @@ class LLMExecutor:
             data = resp.json()
             return data["choices"][0]["message"]["content"]
         except Exception as e:
-            print(f"[enforcer] LLM call failed: {e}", file=sys.stderr)
+            sys.stderr.write(f"[enforcer] LLM call failed: {e}\n")
             return ""
 
     def _get_provider_config(self, provider: str) -> dict:
