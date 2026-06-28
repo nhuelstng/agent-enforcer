@@ -24,12 +24,16 @@ def _glob_any_match(name: str, patterns) -> bool:
     import fnmatch
     return any(fnmatch.fnmatch(name, p) for p in patterns)
 
-def _parse_diff_changed_lines(repo_root: str, file_path: str) -> set[int] | None:
-    """Parse git diff --cached -U0 for a file, return set of changed (added) line numbers.
+def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = None) -> set[int] | None:
+    """Parse git diff -U0 for a file, return set of changed (added) line numbers.
+    ref=None uses --cached (staged). ref set uses <ref>...HEAD.
     Returns None if diff can't be parsed (no diff info). Returns empty set if diff parsed but no added lines."""
     try:
+        diff_cmd = ["git", "diff", "-U0"]
+        diff_cmd += ["--cached"] if ref is None else [f"{ref}...HEAD"]
+        diff_cmd += ["--", file_path]
         result = subprocess.run(
-            ["git", "diff", "--cached", "-U0", "--", file_path],
+            diff_cmd,
             capture_output=True, text=True, cwd=repo_root,
         )
         if result.returncode != 0 or not result.stdout:

@@ -63,3 +63,26 @@ def test_check_output_writes_file(tmp_path):
     assert result.exit_code == 0
     assert outfile.exists()
     assert "No issues found" in outfile.read_text()
+
+
+def test_parse_diff_changed_lines_with_ref():
+    """Should use <ref>...HEAD when ref is provided."""
+    from enforcer.cli import _parse_diff_changed_lines
+    diff_output = b"@@ -1,2 +3,2 @@\n-old\n+new\n+newer\n"
+    with patch("subprocess.run", return_value=type("R", (), {"returncode": 0, "stdout": diff_output.decode()})()) as mock_run:
+        result = _parse_diff_changed_lines(".", "file.py", ref="origin/master")
+        assert result == {3, 4}
+        # Verify git command used ref, not --cached
+        cmd = mock_run.call_args[0][0]
+        assert "origin/master...HEAD" in cmd
+        assert "--cached" not in cmd
+
+
+def test_parse_diff_changed_lines_staged_no_ref():
+    """Should use --cached when ref is None."""
+    from enforcer.cli import _parse_diff_changed_lines
+    diff_output = b"@@ -1,0 +2,0 @@\n"
+    with patch("subprocess.run", return_value=type("R", (), {"returncode": 0, "stdout": diff_output.decode()})()) as mock_run:
+        _parse_diff_changed_lines(".", "file.py", ref=None)
+        cmd = mock_run.call_args[0][0]
+        assert "--cached" in cmd
