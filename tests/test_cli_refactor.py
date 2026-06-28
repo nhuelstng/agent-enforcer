@@ -110,9 +110,10 @@ def test_run_checks_with_diff_ref():
     )
     runner = RuleRunner([rule], workspace=".")
     builder = FileContextBuilder([rule], workspace=".")
-    with patch("enforcer.cli._parse_diff_changed_lines", return_value={5, 6}):
+    with patch("enforcer.cli._parse_diff_changed_lines", return_value={5, 6}) as mock_parse:
         matches = _run_checks(runner, builder, ["test.py"], {}, ".", staged=False, diff_ref="origin/master")
     assert isinstance(matches, list)
+    mock_parse.assert_called_once_with(".", "test.py", ref="origin/master")
 
 
 def test_check_base_ref_mutual_exclusion():
