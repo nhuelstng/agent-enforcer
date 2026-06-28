@@ -101,45 +101,27 @@ symbols that the tool loads at runtime.
 
 ### `RULES`
 
-A list of `Rule` dataclass instances.
+A list of `Rule` dataclass instances. Key fields: `id`, `severity`, `matchers`, `file_globs`, `exclude_globs`, `message` (supports `{file}`, `{line}`, `{matched_value}`), `fix_instruction`, `diff_only`, `llm_consequence`, `fix`. See `enforcer/rule.py` for the full schema.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `str` | Unique rule identifier (used by `--rule-id`, `verify_fix`). |
-| `severity` | `Severity` | One of `Severity.ERROR`, `Severity.WARN`, `Severity.INFO`. |
-| `matchers` | `list` | Matcher instances (or a single combinator wrapping them). ANDed together. |
-| `file_globs` | `list[str]` | Glob patterns selecting which files the rule applies to. |
-| `exclude_globs` | `list[str]` | Glob patterns to exclude (default `[]`). |
-| `read_targets` | `list[str]` | Extra files whose contents are made available to matchers via `shared_ctx` (default `[]`). |
-| `message` | `str \| Callable` | Message template. Supports placeholders `{file}`, `{line}`, `{column}`, `{matched_value}`. Can also be a callable `(Match) -> str`. |
-| `fix_instruction` | `str` | Human/agent-readable fix hint (default `""`). |
-| `llm_consequence` | `LLMConsequence \| None` | Optional LLM review config (default `None`). |
-| `workspace` | `str \| None` | Per-rule workspace root override (default `None`). |
-| `predicates` | `list` | Predicate filters applied to matches (default `[]`). |
-| `diff_only` | `bool` | If `True`, only flag matches on lines changed in the current staged diff (default `False`). Requires `--staged`. |
-| `rule_type` | `RuleType` | `CONTENT` (per-file) or `METADATA` (once per check). Default `CONTENT`. |
-| `fix` | `Callable \| None` | Function `(FileContext, Match) -> str` returning patched content. Default `None`. |
+```python
+Rule(
+    id="no-bare-except",
+    severity=Severity.ERROR,
+    matchers=[RegexMatcher(r"^\s*except\s*:")],
+    file_globs=["**/*.py"],
+    message="Bare except: at {file}:{line}",
+    fix_instruction="Use `except Exception:` or more specific.",
+)
+```
 
 ### `SEVERITY_ACTIONS`
 
-Mapping from `Severity` to the action the reporter/hook takes:
-
-| Action | Behavior |
-|--------|----------|
-| `block` | Non-zero exit code; commit is blocked. |
-| `block_warn` | Blocks unless `--confirm-read-warnings` (or `ENFORCER_CONFIRM_WARNINGS=1`) is set. |
-| `print` | Print finding, do not block. |
-| `hint` | Print as a hint, do not block. |
+Maps `Severity` to action: `block` (always blocks), `block_warn` (blocks unless `--confirm-read-warnings`), `print`, `hint`.
 
 ### `LLM_CONFIG`
 
-Dict tuning LLM consequence execution:
-
 ```python
-LLM_CONFIG = {
-    "concurrency": 5,
-    "timeout": 30,
-}
+LLM_CONFIG = {"concurrency": 5, "timeout": 30}
 ```
 
 ### `WORKSPACE`
@@ -213,22 +195,7 @@ The enforcer uses two severity levels with distinct semantics:
 
 ### WARN as critical-component reminder
 
-WARN rules are **not** "soft style violations." They fire when you stage changes to files that have broad blast radius — core types, rule engine, runner, config loader, parsers. Each WARN rule's message tells you exactly what to verify (which tests to run) before acknowledging.
-
-Example: if you stage a change to `enforcer/types.py`, the `verify-types-changed` rule fires:
-```
-enforcer/types.py:1 [WARN] verify-types-changed
-  Core types changed in enforcer/types.py. Every matcher/predicate/combinator depends on these.
-  Run full test suite: pytest --tb=short -q
-  Fix: Verify: pytest passes, no matcher breaks on new types.py.
-```
-
-Acknowledge and proceed:
-```bash
-ENFORCER_CONFIRM_WARNINGS=1 git commit -m "..."
-```
-
-`enforcer install` drops the hook script (from `scripts/pre-commit-hook`) into `.git/hooks/pre-commit`. The hook honors `ENFORCER_CONFIG` (path to config module) and `ENFORCER_CONFIRM_WARNINGS` env vars.
+WARN rules fire when you stage changes to files with broad blast radius (types.py, rule.py, runner.py, etc.). Each message tells you what tests to run. Acknowledge with `ENFORCER_CONFIRM_WARNINGS=1 git commit -m "..."`. See `enforcer install` for hook setup.
 
 ## MCP server
 
@@ -248,93 +215,15 @@ Three tools are available:
 
 The server reads one JSON-RPC message per line from stdin and writes one response per line to stdout. Supports `tools/list` and `tools/call`.
 
-## Available matchers
+## Available matchers, combinators, predicates
 
-From `enforcer.matchers`:
+See the [API docs](enforcer/matchers/__init__.py) for the full catalog. Quick reference:
 
-| Matcher | Description |
-|---------|-------------|
-| `RegexMatcher(pattern)` | Find regex matches in file contents. |
-| `LineCountMatcher(max_lines=)` | Flag files exceeding a line count. |
-| `CharCountMatcher(...)` | Flag files exceeding a character count. |
-| `PathNotMatchingMatcher(pattern)` | Flag file paths not matching a glob/regex. |
-| `AllowlistMatcher(...)` | Allowlist-based matching with shared context. |
-| `AstNodeMatcher(...)` | Match against AST nodes (TS/Python/CSS via tree-sitter). |
-| `CommentPerFunctionMatcher(...)` | Comment density per function. |
-| `AlwaysMatcher(matched_value=)` | Always matches (useful for advisory rules). |
-| `FileExistsMatcher(read_target=)` | Checks whether a file matching the glob exists. |
-| `ImportMatcher(forbidden_patterns=)` | Walks AST for import statements, matches against forbidden module regex patterns. Set `needs=AST_PY` or `AST_TS`. |
-| `FunctionComplexityMatcher(metric=, max_value=)` | Walks AST functions, computes `lines`/`params`/`nesting`/`cyclomatic` complexity. Emits if over threshold. |
-| `PairedFileMatcher(source_glob=, derived_glob=)` | Cross-file: source file staged → derived file (test) must exist. Uses `{stem}` and `{dir}` substitution. |
-| `BranchNameMatcher(pattern=)` | Checks current git branch against regex. METADATA rule. |
-| `CommitMessageMatcher(pattern=)` | Checks commit message first line against regex. METADATA rule. |
-| `NamingConventionMatcher(declaration_types=, pattern=)` | Walks AST for declarations, flags names not matching regex. |
+- **Matchers:** `RegexMatcher`, `LineCountMatcher`, `FunctionComplexityMatcher`, `PairedFileMatcher`, `ImportMatcher`, `NamingConventionMatcher`, `DocstringMatcher`, `AlwaysMatcher`, and more.
+- **Combinators:** `AllOf`, `AnyOf`, `OneOf`, `Not`, `NoneOf`.
+- **Predicates:** `IntPredicate`, `StringLengthPredicate`, `StringMatchesPredicate`, `HasDecoratorPredicate`, `NodeNamePredicate`, plus `All`/`Any`/`NotP` combinators.
 
-## Available combinators
-
-From `enforcer.combinators`:
-
-| Combinator | Description |
-|------------|-------------|
-| `AllOf(matchers)` | All matchers must match. |
-| `AnyOf(matchers)` | At least one matcher must match. |
-| `OneOf(matchers)` | Exactly one matcher must match. |
-| `Not(matcher)` | Negate a single matcher. |
-| `NoneOf(matchers)` | No matcher may match. |
-
-## Available predicates
-
-From `enforcer.predicates`:
-
-| Predicate | Description |
-|-----------|-------------|
-| `IntPredicate(...)` | Compare integer fields of a match. |
-| `StringLengthPredicate(...)` | Compare string lengths. |
-| `StringMatchesPredicate(pattern)` | Match string fields against a regex. |
-| `StringNotMatchesPredicate(pattern)` | Negated string regex match. |
-| `All(preds)` | All predicates must pass. |
-| `Any(preds)` | At least one predicate must pass. |
-| `NotP(pred)` | Negate a predicate. |
-| `HasDecoratorPredicate(pattern=)` | Passes if matched node has a decorator (optionally matching pattern). |
-| `NodeNamePredicate(pattern=)` | Passes if matched node's name matches regex. |
-
-## Recipes
-
-### Import graph enforcement
-
-Prevent cross-layer imports (e.g., API layer reaching into jobs layer):
-
-```python
-Rule(
-    id="api-no-import-jobs",
-    severity=Severity.ERROR,
-    matchers=[ImportMatcher(forbidden_patterns=[r"app\.jobs\."])],
-    file_globs=["backend/app/api/**/*.py"],
-    diff_only=True,
-    message="API layer imports from app.jobs at {file}:{line}",
-    fix_instruction="Move the import to a service module.",
-)
-```
-
-### Function complexity
-
-Catch god functions before they grow:
-
-```python
-Rule(
-    id="function-max-lines",
-    severity=Severity.ERROR,
-    matchers=[FunctionComplexityMatcher(metric="lines", max_value=75)],
-    file_globs=["backend/app/**/*.py"],
-    diff_only=True,
-    message="Function at {file}:{line} has {matched_value} lines (max 75)",
-    fix_instruction="Extract sub-functions.",
-)
-```
-
-Metrics: `lines`, `params`, `nesting`, `cyclomatic`.
-
-### Paired file (test coverage)
+## Recipe: Paired file (test coverage)
 
 Enforce that source files have paired test files:
 
