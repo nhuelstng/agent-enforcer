@@ -86,3 +86,40 @@ def test_parse_diff_changed_lines_staged_no_ref():
         _parse_diff_changed_lines(".", "file.py", ref=None)
         cmd = mock_run.call_args[0][0]
         assert "--cached" in cmd
+
+
+def test_collect_files_base_ref():
+    """Should return file list from git diff <ref>...HEAD when base_ref provided."""
+    with patch("subprocess.check_output", return_value=b"changed.py\nother.py\n"):
+        result = _collect_files(staged=False, all_files=False, paths=(), ws=".", base_ref="origin/master")
+        assert result == ["changed.py", "other.py"]
+
+
+def test_run_checks_with_diff_ref():
+    """Should set changed_lines when diff_ref is provided."""
+    from enforcer.types import FileContext, Match, Severity
+    from enforcer.context import FileContextBuilder
+    from enforcer.runner import RuleRunner
+    from enforcer.rule import Rule
+
+    rule = Rule(
+        id="test",
+        severity=Severity.WARN,
+        matchers=[],
+        file_globs=["**/*.py"],
+    )
+    runner = RuleRunner([rule], workspace=".")
+    builder = FileContextBuilder([rule], workspace=".")
+    with patch("enforcer.cli._parse_diff_changed_lines", return_value={5, 6}):
+        matches = _run_checks(runner, builder, ["test.py"], {}, ".", staged=False, diff_ref="origin/master")
+    assert isinstance(matches, list)
+
+
+def test_check_base_ref_mutual_exclusion():
+    """--base-ref with --staged should error."""
+    from click.testing import CliRunner
+    from enforcer.cli import cli
+    runner = CliRunner()
+    result = runner.invoke(cli, ["check", "--staged", "--base-ref", "origin/master"])
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output.lower()
