@@ -124,3 +124,13 @@ def test_check_base_ref_mutual_exclusion():
     result = runner.invoke(cli, ["check", "--staged", "--base-ref", "origin/master"])
     assert result.exit_code == 2
     assert "mutually exclusive" in result.output.lower()
+
+
+def test_check_paths_with_base_ref_excluded():
+    """--paths with --base-ref should error."""
+    from click.testing import CliRunner
+    from enforcer.cli import cli
+    runner = CliRunner()
+    result = runner.invoke(cli, ["check", "--paths", "foo.py", "--base-ref", "origin/master"])
+    assert result.exit_code == 2
+    assert "--paths cannot be combined" in result.output

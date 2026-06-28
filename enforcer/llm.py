@@ -61,8 +61,16 @@ class LLMExecutor:
             return ""
 
     def _get_provider_config(self, provider: str) -> dict:
-        # In production, read from opencode.json. For now, return a default.
-        # This will be wired up in the config loader task.
+        import os
+        if provider == "skainet":
+            token = os.environ.get("SKAINET_TOKEN", "")
+            headers = {"X-User-Agent": "OpenCode"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            return {
+                "baseURL": os.environ.get("SKAINET_BASE_URL", "https://chat.model.tngtech.com/v1"),
+                "headers": headers,
+            }
         return {
             "baseURL": "https://chat.model.tngtech.com/v1",
             "headers": {"X-User-Agent": "OpenCode"},

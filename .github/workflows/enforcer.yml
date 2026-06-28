@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [master]
 
+concurrency:
+  group: enforcer-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   changed:
     name: changed-files
