@@ -18,29 +18,32 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: setup-python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-
     - name: install
       shell: bash
+      env:
+        INSTALL_METHOD: ${{ inputs.install-method }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        SHA: ${{ github.sha }}
       run: |
-        case "${{ inputs.install-method }}" in
+        case "$INSTALL_METHOD" in
           skip) echo "skip install" ;;
           wheel)
             pip install dist/*.whl ;;
           pip)
-            pip install "git+https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git@${{ github.sha }}" ;;
+            pip install "git+https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git@${SHA}" ;;
         esac
 
     - name: run-enforcer
       id: run-enforcer
       shell: bash
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
+        SEVERITY: ${{ inputs.severity }}
       run: |
-        ARGS="--severity ${{ inputs.severity }} --no-llm --format sarif --output enforcer-results.sarif"
-        if [ -n "${{ inputs.base-ref }}" ]; then
-          ARGS="$ARGS --base-ref ${{ inputs.base-ref }}"
+        ARGS="--severity $SEVERITY --no-llm --format sarif --output enforcer-results.sarif"
+        if [ -n "$BASE_REF" ]; then
+          ARGS="$ARGS --base-ref $BASE_REF"
         else
           ARGS="$ARGS --all"
         fi
@@ -48,7 +51,7 @@ runs:
       continue-on-error: true
 
     - name: upload-sarif
-      if: always()
+      if: always() && steps.run-enforcer.outcome != 'skipped'
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: enforcer-results.sarif
