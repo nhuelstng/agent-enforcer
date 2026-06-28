@@ -10,6 +10,7 @@ class AlwaysMatcher:
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Always emit one match for the file. Returns list of Match."""
         if file_ctx.raw is None:
             return []
         return [Match(file=file_ctx.path, line=1, matched_value=self.matched_value)]

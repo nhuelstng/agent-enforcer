@@ -4,6 +4,7 @@ from enforcer.rule import Rule
 from enforcer.types import Severity
 
 def render_rules_markdown(rules: list[Rule]) -> str:
+    """Render configured rules as a markdown document."""
     if not rules:
         return "# Conventions\n\nNo rules configured.\n"
 

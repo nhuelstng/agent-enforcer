@@ -14,6 +14,7 @@ class AllowlistMatcher:
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag file content entries not present in the allowlist. Returns list of Match."""
         from enforcer.rule import _glob_match
         shared_ctx = shared_ctx or {}
         target_ctx = shared_ctx.get(self.read_target)
