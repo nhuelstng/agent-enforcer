@@ -19,6 +19,7 @@ from enforcer import (
     Rule,
     Severity,
     RuleType,
+    LLMConsequence,
 )
 from enforcer.matchers import (
     RegexMatcher,
@@ -30,6 +31,7 @@ from enforcer.matchers import (
     NamingConventionMatcher,
     DocstringMatcher,
     AlwaysMatcher,
+    LineCountMatcher,
 )
 
 WORKSPACE = "."
@@ -251,6 +253,22 @@ RULES = [
         message="Function '{matched_value}' at {file}:{line} missing docstring. Public functions must be documented.",
         fix_instruction='Add a docstring: """<one-line description>."""',
         diff_only=True,
+    ),
+
+    # ─── README length with LLM analysis ─────────────────────────────────
+    Rule(
+        id="readme-max-lines",
+        severity=Severity.WARN,
+        matchers=[LineCountMatcher(max_lines=300)],
+        file_globs=["README.md"],
+        message="README.md has {matched_value} lines (max 300). LLM analyzed what doesn't belong.",
+        fix_instruction="Remove or trim the sections flagged by the LLM response below.",
+        llm_consequence=LLMConsequence(
+            provider="custom",
+            model="zai-org/GLM-5.1-FP8",
+            prompt="You are reviewing a README.md that exceeds 300 lines. Identify the specific sections that don't belong in a README and make it too long. For each section, explain why it should be removed or trimmed. Be concrete — reference section headings and line ranges. Common bloat: full install logs, API reference dumps, changelogs, verbose examples, duplicated content.",
+            timeout=120,
+        ),
     ),
 
     # ════════════════════════════════════════════════════════════════════

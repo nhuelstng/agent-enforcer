@@ -130,6 +130,9 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     if exclusive > 1:
         click.echo("Error: --staged, --base-ref, and --all are mutually exclusive.", err=True)
         sys.exit(2)
+    if paths and (staged or base_ref or all_files):
+        click.echo("Error: --paths cannot be combined with --staged, --base-ref, or --all.", err=True)
+        sys.exit(2)
 
     config = load_config(config_path)
     if rule_id:

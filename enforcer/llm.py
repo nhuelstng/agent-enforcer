@@ -61,8 +61,16 @@ class LLMExecutor:
             return ""
 
     def _get_provider_config(self, provider: str) -> dict:
-        # In production, read from opencode.json. For now, return a default.
-        # This will be wired up in the config loader task.
+        import os
+        if provider == "custom":
+            token = os.environ.get("LLM_API_TOKEN", "")
+            headers = {"X-User-Agent": "enforcer"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            return {
+                "baseURL": os.environ.get("LLM_BASE_URL", "https://example.invalid/v1"),
+                "headers": headers,
+            }
         return {
             "baseURL": "https://example.invalid/v1",
             "headers": {"X-User-Agent": "enforcer"},
