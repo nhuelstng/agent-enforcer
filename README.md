@@ -163,7 +163,7 @@ Rule(
 
 When `diff_only=True`, the rule only fires on lines added/modified in the current staged diff. Pre-existing violations on unchanged lines are suppressed. File-level matchers (line 0) always pass through.
 
-Only works with `--staged` (pre-commit hook). When run with `--all` or `--paths`, all lines are checked regardless of `diff_only`.
+Only works with `--staged` (pre-commit hook). When run with `--all` or `--paths`, `diff_only` rules are suppressed entirely — if there's no diff, "you touched this file" cannot be true.
 
 ## Auto-fix
 
@@ -201,16 +201,32 @@ Rule(
 )
 ```
 
-## Two-phase commit warning flow
+## Severity model
 
-WARN-severity rules use a two-phase commit flow so coding agents can self-correct:
+The enforcer uses two severity levels with distinct semantics:
 
-1. **First `git commit`** — the hook runs `enforcer check --staged`. WARN findings cause a non-zero exit, blocking the commit and printing the violations + fix instructions.
-2. **Agent retries with confirmation** — after addressing or acknowledging the warnings, the agent re-runs:
-   ```bash
-   ENFORCER_CONFIRM_WARNINGS=1 git commit
-   ```
-   The hook passes `--confirm-read-warnings`, which acknowledges the WARN findings and allows the commit to proceed.
+| Severity | Action | Purpose |
+|----------|--------|---------|
+| `ERROR` | Always blocks commit | Style/correctness rules: naming, tests, complexity, docstrings, imports, secrets, print, bare except. Must fix before commit. |
+| `WARN` | Blocks unless `--confirm-read-warnings` | Critical-component reminders: fires when you touch files with broad blast radius (types.py, rule.py, runner.py, etc.). Tells you what to verify before acknowledging. |
+| `INFO` | Advisory, never blocks | Informational output. |
+
+### WARN as critical-component reminder
+
+WARN rules are **not** "soft style violations." They fire when you stage changes to files that have broad blast radius — core types, rule engine, runner, config loader, parsers. Each WARN rule's message tells you exactly what to verify (which tests to run) before acknowledging.
+
+Example: if you stage a change to `enforcer/types.py`, the `verify-types-changed` rule fires:
+```
+enforcer/types.py:1 [WARN] verify-types-changed
+  Core types changed in enforcer/types.py. Every matcher/predicate/combinator depends on these.
+  Run full test suite: pytest --tb=short -q
+  Fix: Verify: pytest passes, no matcher breaks on new types.py.
+```
+
+Acknowledge and proceed:
+```bash
+ENFORCER_CONFIRM_WARNINGS=1 git commit -m "..."
+```
 
 `enforcer install` drops the hook script (from `scripts/pre-commit-hook`) into `.git/hooks/pre-commit`. The hook honors `ENFORCER_CONFIG` (path to config module) and `ENFORCER_CONFIRM_WARNINGS` env vars.
 
@@ -307,7 +323,7 @@ Catch god functions before they grow:
 ```python
 Rule(
     id="function-max-lines",
-    severity=Severity.WARN,
+    severity=Severity.ERROR,
     matchers=[FunctionComplexityMatcher(metric="lines", max_value=75)],
     file_globs=["backend/app/**/*.py"],
     diff_only=True,
@@ -325,7 +341,7 @@ Enforce that source files have paired test files:
 ```python
 Rule(
     id="test-paired",
-    severity=Severity.WARN,
+    severity=Severity.ERROR,
     matchers=[PairedFileMatcher(
         source_glob="backend/app/api/*.py",
         derived_glob="backend/tests/integration/test_{stem}.py",
@@ -342,7 +358,7 @@ Rule(
 
 ## Example config
 
-See [enforcer_config.py](enforcer_config.py) for a real working example — this repo enforces its own conventions with 17 rules covering test pairing, naming, complexity, docstrings, and git metadata.
+See [enforcer_config.py](enforcer_config.py) for a real working example — this repo enforces its own conventions with 21 rules (15 ERROR for style/correctness + 6 WARN for critical-component reminders).
 
 ## Running tests
 
