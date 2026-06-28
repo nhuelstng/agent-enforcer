@@ -116,6 +116,9 @@ A list of `Rule` dataclass instances.
 | `llm_consequence` | `LLMConsequence \| None` | Optional LLM review config (default `None`). |
 | `workspace` | `str \| None` | Per-rule workspace root override (default `None`). |
 | `predicates` | `list` | Predicate filters applied to matches (default `[]`). |
+| `diff_only` | `bool` | If `True`, only flag matches on lines changed in the current staged diff (default `False`). Requires `--staged`. |
+| `rule_type` | `RuleType` | `CONTENT` (per-file) or `METADATA` (once per check). Default `CONTENT`. |
+| `fix` | `Callable \| None` | Function `(FileContext, Match) -> str` returning patched content. Default `None`. |
 
 ### `SEVERITY_ACTIONS`
 
@@ -142,6 +145,61 @@ LLM_CONFIG = {
 ### `WORKSPACE`
 
 String. Global workspace root (default `"."`).
+
+## Diff-awareness
+
+Rules can be scoped to changed lines only, preventing re-flagging of pre-existing technical debt:
+
+```python
+Rule(
+    id="no-print",
+    severity=Severity.ERROR,
+    matchers=[RegexMatcher(r"print\s*\(")],
+    file_globs=["**/*.py"],
+    diff_only=True,
+    message="print() at {file}:{line}",
+)
+```
+
+When `diff_only=True`, the rule only fires on lines added/modified in the current staged diff. Pre-existing violations on unchanged lines are suppressed. File-level matchers (line 0) always pass through.
+
+Only works with `--staged` (pre-commit hook). When run with `--all` or `--paths`, all lines are checked regardless of `diff_only`.
+
+## Auto-fix
+
+Rules can provide a `fix` function that patches the file content. Enable with `--fix`:
+
+```bash
+enforcer check --staged --fix
+```
+
+```python
+Rule(
+    id="no-print",
+    severity=Severity.ERROR,
+    matchers=[RegexMatcher(r"print\s*\(")],
+    file_globs=["**/*.py"],
+    message="print() at {file}:{line}",
+    fix=lambda ctx, m: (ctx.raw or "").replace("print(", "logger.debug("),
+)
+```
+
+The fix function receives `(FileContext, Match) -> str` (new file content). Fixes are applied per-file, in match order. Files are written in-place.
+
+## Metadata rules (branch/commit)
+
+Rules with `rule_type=RuleType.METADATA` run once per check, not per-file. Used for branch name and commit message enforcement:
+
+```python
+Rule(
+    id="branch-naming",
+    severity=Severity.ERROR,
+    matchers=[BranchNameMatcher(pattern=r"^(feature|fix|hotfix)/")],
+    file_globs=["*"],
+    rule_type=RuleType.METADATA,
+    message="Branch '{matched_value}' doesn't match required pattern",
+)
+```
 
 ## Two-phase commit warning flow
 
@@ -189,6 +247,12 @@ From `enforcer.matchers`:
 | `CommentPerFunctionMatcher(...)` | Comment density per function. |
 | `AlwaysMatcher(matched_value=)` | Always matches (useful for advisory rules). |
 | `FileExistsMatcher(read_target=)` | Checks whether a file matching the glob exists. |
+| `ImportMatcher(forbidden_patterns=)` | Walks AST for import statements, matches against forbidden module regex patterns. Set `needs=AST_PY` or `AST_TS`. |
+| `FunctionComplexityMatcher(metric=, max_value=)` | Walks AST functions, computes `lines`/`params`/`nesting`/`cyclomatic` complexity. Emits if over threshold. |
+| `PairedFileMatcher(source_glob=, derived_glob=)` | Cross-file: source file staged → derived file (test) must exist. Uses `{stem}` and `{dir}` substitution. |
+| `BranchNameMatcher(pattern=)` | Checks current git branch against regex. METADATA rule. |
+| `CommitMessageMatcher(pattern=)` | Checks commit message first line against regex. METADATA rule. |
+| `NamingConventionMatcher(declaration_types=, pattern=)` | Walks AST for declarations, flags names not matching regex. |
 
 ## Available combinators
 
@@ -215,6 +279,66 @@ From `enforcer.predicates`:
 | `All(preds)` | All predicates must pass. |
 | `Any(preds)` | At least one predicate must pass. |
 | `NotP(pred)` | Negate a predicate. |
+| `HasDecoratorPredicate(pattern=)` | Passes if matched node has a decorator (optionally matching pattern). |
+| `NodeNamePredicate(pattern=)` | Passes if matched node's name matches regex. |
+
+## Recipes
+
+### Import graph enforcement
+
+Prevent cross-layer imports (e.g., API layer reaching into jobs layer):
+
+```python
+Rule(
+    id="api-no-import-jobs",
+    severity=Severity.ERROR,
+    matchers=[ImportMatcher(forbidden_patterns=[r"app\.jobs\."])],
+    file_globs=["backend/app/api/**/*.py"],
+    diff_only=True,
+    message="API layer imports from app.jobs at {file}:{line}",
+    fix_instruction="Move the import to a service module.",
+)
+```
+
+### Function complexity
+
+Catch god functions before they grow:
+
+```python
+Rule(
+    id="function-max-lines",
+    severity=Severity.WARN,
+    matchers=[FunctionComplexityMatcher(metric="lines", max_value=75)],
+    file_globs=["backend/app/**/*.py"],
+    diff_only=True,
+    message="Function at {file}:{line} has {matched_value} lines (max 75)",
+    fix_instruction="Extract sub-functions.",
+)
+```
+
+Metrics: `lines`, `params`, `nesting`, `cyclomatic`.
+
+### Paired file (test coverage)
+
+Enforce that source files have paired test files:
+
+```python
+Rule(
+    id="test-paired",
+    severity=Severity.WARN,
+    matchers=[PairedFileMatcher(
+        source_glob="backend/app/api/*.py",
+        derived_glob="backend/tests/integration/test_{stem}.py",
+        exclude_stems=["__init__", "router"],
+    )],
+    file_globs=["backend/app/api/*.py"],
+    diff_only=True,
+    message="No test paired with {file}",
+    fix_instruction="Create test_{stem}.py",
+)
+```
+
+`{stem}` = filename without extension. `{dir}` = parent directory name.
 
 ## Example config
 

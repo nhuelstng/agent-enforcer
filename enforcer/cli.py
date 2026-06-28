@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 import click
 from enforcer.config import load_config
 from enforcer.context import FileContextBuilder
 from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
+from enforcer.ignore import load_enforcerignore, is_ignored
 
 @click.group()
 def cli():
@@ -17,6 +19,32 @@ def cli():
 def _glob_any_match(name: str, patterns) -> bool:
     import fnmatch
     return any(fnmatch.fnmatch(name, p) for p in patterns)
+
+def _parse_diff_changed_lines(repo_root: str, file_path: str) -> set[int] | None:
+    """Parse git diff --cached -U0 for a file, return set of changed (added) line numbers.
+    Returns None if diff can't be parsed (no diff info). Returns empty set if diff parsed but no added lines."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--cached", "-U0", "--", file_path],
+            capture_output=True, text=True, cwd=repo_root,
+        )
+        if result.returncode != 0 or not result.stdout:
+            return None
+    except Exception:
+        return None
+
+    import re
+    changed: set[int] = set()
+    for line in result.stdout.splitlines():
+        if line.startswith("@@"):
+            m = re.search(r'\+(\d+)(?:,(\d+))?', line)
+            if m:
+                start = int(m.group(1))
+                count = int(m.group(2)) if m.group(2) else 1
+                for i in range(start, start + count):
+                    changed.add(i)
+    # ponytail: return empty set (not None) when diff parsed but no added lines — distinguishes "no diff info" from "diff parsed, nothing added"
+    return changed
 
 @cli.command()
 @click.option("--staged", is_flag=True, help="Check staged files only")
@@ -29,7 +57,8 @@ def _glob_any_match(name: str, patterns) -> bool:
 @click.option("--no-llm", is_flag=True, help="Skip LLM consequences")
 @click.option("--rule-id", default=None, help="Run only this rule ID")
 @click.option("--confirm-read-warnings", is_flag=True, help="Acknowledge warnings, allow commit to proceed")
-def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings):
+@click.option("--fix", is_flag=True, help="Apply auto-fixes where available")
+def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings, fix):
     """Check files for convention violations."""
     from enforcer.types import Severity
 
@@ -41,7 +70,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     if staged:
         result = subprocess.check_output(
             ["git", "diff", "--cached", "--name-only"],
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, cwd=ws,
         )
         file_list = result.decode().strip().split("\n") if result.strip() else []
     elif all_files:
@@ -59,6 +88,11 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     else:
         file_list = []
 
+    # Apply .enforcerignore (skip for --staged: user explicitly staged these files)
+    ignore_patterns = load_enforcerignore(ws) if not staged else []
+    if ignore_patterns:
+        file_list = [f for f in file_list if not is_ignored(f, ignore_patterns)]
+
     sev_map = {"error": Severity.ERROR, "warn": Severity.WARN, "info": Severity.INFO}
 
     runner = RuleRunner(
@@ -74,18 +108,39 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     shared_ctx: dict = {}
     for rule in config.rules:
         for target in getattr(rule, "read_targets", []):
-            target_path = os.path.join(ws, target.replace("**/", ""))
-            if os.path.exists(target_path):
-                target_ctx = builder.build(target.replace("**/", ""))
-                shared_ctx[target] = target_ctx
+            if target in shared_ctx:
+                continue
+            root = Path(ws)
+            for match in root.glob(target):
+                rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
+                target_ctx = builder.build(rel)
+                shared_ctx.setdefault(target, target_ctx)
 
     all_matches = []
     for f in file_list:
         if not f:
             continue
         ctx = builder.build(f)
+        if staged:
+            ctx.changed_lines = _parse_diff_changed_lines(ws, f)
         matches = runner.run_rules_for_file(ctx, shared_ctx)
         all_matches.extend(matches)
+
+    # Run metadata rules (branch name, commit message)
+    meta_matches = runner.run_metadata_rules(shared_ctx)
+    all_matches.extend(meta_matches)
+
+    # Run cross-file finalizers (duplicate detection)
+    cross_matches = runner.run_cross_file_finalizers(shared_ctx)
+    all_matches.extend(cross_matches)
+
+    if fix:
+        from enforcer.fix import apply_fixes
+        fix_providers = {r.id: r.fix for r in config.rules if r.fix is not None}
+        results = apply_fixes(all_matches, ws, fix_providers)
+        total_fixes = sum(r.fixes_applied for r in results)
+        if total_fixes > 0:
+            click.echo(f"Applied {total_fixes} fix(es) across {len(results)} file(s).", err=True)
 
     reporter = Reporter(format=fmt)
     output = reporter.render(all_matches, severity_actions=config.severity_actions)

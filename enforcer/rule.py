@@ -4,8 +4,7 @@ import fnmatch
 import re
 from dataclasses import dataclass, field
 from typing import Callable
-from enforcer.types import Severity, Match, FileContext, LLMConsequence
-from enforcer.matchers.allowlist import AllowlistMatcher
+from enforcer.types import Severity, Match, FileContext, LLMConsequence, RuleType
 from enforcer.combinators.core import AllOf
 from enforcer.predicates.combinators import All as AllPred
 
@@ -13,16 +12,19 @@ def _is_combinator(obj) -> bool:
     return (hasattr(obj, "matchers") or hasattr(obj, "matcher")) and hasattr(obj, "find")
 
 def _run_matcher(matcher, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
-    if isinstance(matcher, AllowlistMatcher):
-        return matcher.find(file_ctx, shared_ctx)
-    return matcher.find(file_ctx)
+    return matcher.find(file_ctx, shared_ctx)
 
 def _glob_match(path: str, pattern: str) -> bool:
-    """Match path against glob pattern, supporting ** recursive globs (fnmatch does not handle **)."""
-    normalized = re.sub(r'^\*+/', '', pattern)
-    if fnmatch.fnmatch(path, normalized):
-        return True
-    return fnmatch.fnmatch(path, pattern)
+    """Match path against glob pattern, supporting ** recursive globs (fnmatch does not handle **).
+    ** matches zero or more path segments — 'dir/**/x' matches both 'dir/x' and 'dir/a/b/x'."""
+    candidates = {pattern}
+    candidates.add(re.sub(r"/\*\*", "", pattern))   # dir/**/x -> dir/x      (zero segments)
+    candidates.add(re.sub(r"\*\*/", "", pattern))    # **/x -> x             (leading zero segments)
+    candidates.add(pattern.replace("**", "*"))       # ** -> *               (single-seg wildcard)
+    for c in candidates:
+        if fnmatch.fnmatch(path, c):
+            return True
+    return False
 
 @dataclass
 class Rule:
@@ -38,6 +40,9 @@ class Rule:
     message: str | Callable = ""
     fix_instruction: str = ""
     llm_consequence: LLMConsequence | None = None
+    diff_only: bool = False
+    rule_type: RuleType = RuleType.CONTENT
+    fix: Callable | None = None
 
     def check(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
         """Run all matchers, filter by predicates, stamp metadata, render message. Returns list of Match objects."""
@@ -49,6 +54,14 @@ class Rule:
         else:
             combined = AllOf(self.matchers)
             all_matches = combined.find(file_ctx, shared_ctx)
+
+        # ponytail: diff_only — suppress matches on unchanged lines. line==0 = file-level matchers (LineCountMatcher, FileExistsMatcher, etc.) always pass through.
+        if self.diff_only and file_ctx.changed_lines is not None:
+            all_matches = [m for m in all_matches if m.line in file_ctx.changed_lines or m.line == 0]
+
+        # ponytail: attach file_ctx to each match so AST predicates can access the AST
+        for m in all_matches:
+            m._file_ctx = file_ctx
 
         for pred in self.predicates:
             all_matches = [m for m in all_matches if pred.test(m)]

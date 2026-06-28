@@ -2,7 +2,7 @@
 from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Any
 
 class Severity(Enum):
     """Convention violation severity level. ERROR blocks commit, WARN blocks unless confirmed, INFO is advisory."""
@@ -17,6 +17,11 @@ class Needs(Enum):
     AST_PY = "ast_py"
     AST_CSS = "ast_css"
 
+class RuleType(Enum):
+    """Whether a rule operates on file contents (per-file) or git metadata (once per run)."""
+    CONTENT = "content"
+    METADATA = "metadata"
+
 @dataclass
 class Match:
     """A single rule violation found in a file. Carries location, message, and optional LLM response."""
@@ -29,6 +34,9 @@ class Match:
     fix_instruction: str = ""
     llm_response: str = ""
     matched_value: str = ""
+    fix_applied: str = ""
+    # ponytail: attached by Rule.check() so AST predicates can access the file's AST. Not set for matches created outside Rule.check().
+    _file_ctx: Any = None
 
 @dataclass
 class FileContext:
@@ -36,6 +44,7 @@ class FileContext:
     path: str
     raw: str | None = None
     ast: object | None = None
+    changed_lines: set[int] | None = None
 
 @dataclass
 class LLMConsequence:

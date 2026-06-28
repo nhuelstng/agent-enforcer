@@ -88,7 +88,20 @@ def run_mcp_server():
         msg = None
         try:
             msg = json.loads(line)
-            if msg.get("method") == "tools/list":
+            method = msg.get("method")
+            if method == "initialize":
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg.get("id"),
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "serverInfo": {"name": "enforcer", "version": "1.0.0"},
+                        "capabilities": {"tools": {}},
+                    }
+                }
+                sys.stdout.write(json.dumps(response) + "\n")
+                sys.stdout.flush()
+            elif method == "tools/list":
                 response = {
                     "jsonrpc": "2.0",
                     "id": msg.get("id"),
@@ -154,6 +167,16 @@ def run_mcp_server():
                     "jsonrpc": "2.0",
                     "id": msg.get("id"),
                     "result": {"content": [{"type": "text", "text": result}]}
+                }
+                sys.stdout.write(json.dumps(response) + "\n")
+                sys.stdout.flush()
+            elif method == "notifications/initialized":
+                pass
+            else:
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg.get("id"),
+                    "error": {"code": -32601, "message": f"Method not found: {method}"}
                 }
                 sys.stdout.write(json.dumps(response) + "\n")
                 sys.stdout.flush()

@@ -10,13 +10,25 @@ class StringMatchesPredicate:
     """Tests whether a string value matches a regex pattern."""
     pattern: str | Pattern
 
+    def __post_init__(self):
+        if isinstance(self.pattern, str):
+            self._compiled = re.compile(self.pattern)
+        else:
+            self._compiled = self.pattern
+
     def test(self, match: Match) -> bool:
-        return bool(re.search(self.pattern, match.matched_value))
+        return bool(self._compiled.search(match.matched_value))
 
 @dataclass
 class StringNotMatchesPredicate:
     """Tests whether a string value does NOT match a regex pattern."""
     pattern: str | Pattern
 
+    def __post_init__(self):
+        if isinstance(self.pattern, str):
+            self._compiled = re.compile(self.pattern)
+        else:
+            self._compiled = self.pattern
+
     def test(self, match: Match) -> bool:
-        return not bool(re.search(self.pattern, match.matched_value))
+        return not bool(self._compiled.search(match.matched_value))
