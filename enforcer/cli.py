@@ -108,7 +108,8 @@ def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str
 @click.option("--rule-id", default=None, help="Run only this rule ID")
 @click.option("--confirm-read-warnings", is_flag=True, help="Acknowledge warnings, allow commit to proceed")
 @click.option("--fix", is_flag=True, help="Apply auto-fixes where available")
-def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings, fix):
+@click.option("--output", "-o", default=None, help="Output file (default: stdout)")
+def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings, fix, output):
     """Check files for convention violations."""
     from enforcer.types import Severity
 
@@ -153,8 +154,12 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
             click.echo(f"Applied {total_fixes} fix(es) across {len(results)} file(s).", err=True)
 
     reporter = Reporter(format=fmt)
-    output = reporter.render(all_matches, severity_actions=config.severity_actions)
-    click.echo(output)
+    output_text = reporter.render(all_matches, severity_actions=config.severity_actions)
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(output_text)
+    else:
+        click.echo(output_text)
     sys.exit(reporter.exit_code(all_matches, severity_actions=config.severity_actions, confirm_warnings=confirm_read_warnings))
 
 @cli.command()
