@@ -57,4 +57,5 @@ class FileContextBuilder:
         return needs
 
     def clear_cache(self):
+        """Clear the FileContext cache."""
         self._cache.clear()

@@ -10,6 +10,7 @@ class CommentPerFunctionMatcher:
     needs: Needs = Needs.AST_TS
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag functions whose comment count exceeds the configured maximum. Returns list of Match."""
         if not file_ctx.ast:
             return []
         matches: list[Match] = []

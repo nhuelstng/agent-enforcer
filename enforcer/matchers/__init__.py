@@ -15,6 +15,7 @@ from enforcer.matchers.branch_name import BranchNameMatcher
 from enforcer.matchers.commit_message import CommitMessageMatcher
 from enforcer.matchers.naming_convention import NamingConventionMatcher
 from enforcer.matchers.duplicate_code import DuplicateCodeMatcher
+from enforcer.matchers.docstring import DocstringMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -33,4 +34,5 @@ __all__ = [
     "CommitMessageMatcher",
     "NamingConventionMatcher",
     "DuplicateCodeMatcher",
+    "DocstringMatcher",
 ]

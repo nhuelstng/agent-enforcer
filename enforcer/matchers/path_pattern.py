@@ -11,6 +11,7 @@ class PathNotMatchingMatcher:
     needs: Needs | None = None
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Emit a match if the file path does NOT match the configured glob. Returns list of Match."""
         if not fnmatch.fnmatch(file_ctx.path, self.pattern):
             return [Match(file=file_ctx.path, line=0, matched_value=file_ctx.path)]
         return []

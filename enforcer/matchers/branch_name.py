@@ -18,6 +18,7 @@ class BranchNameMatcher:
         self._compiled = re.compile(self.pattern)
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag current git branch if it doesn't match the required pattern. Returns list of Match."""
         cwd = self.workspace
         try:
             result = subprocess.run(

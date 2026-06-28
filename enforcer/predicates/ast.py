@@ -44,6 +44,7 @@ class HasDecoratorPredicate:
             self._compiled = re.compile(self.pattern)
 
     def test(self, match: Match) -> bool:
+        """Return True if match passes the predicate filter."""
         ctx = getattr(match, "_file_ctx", None)
         node = _get_node_at_line(ctx, match.line) if ctx else None
         if not node:
@@ -74,6 +75,7 @@ class NodeNamePredicate:
         self._compiled = re.compile(self.pattern)
 
     def test(self, match: Match) -> bool:
+        """Return True if match passes the predicate filter."""
         ctx = getattr(match, "_file_ctx", None)
         node = _get_node_at_line(ctx, match.line) if ctx else None
         if not node:

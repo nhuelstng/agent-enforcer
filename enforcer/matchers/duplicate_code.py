@@ -38,6 +38,7 @@ class DuplicateCodeMatcher:
         self._ctx_key = f"_dup_index_{self.min_tokens}_{self.min_overlap}"
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Collect token n-grams for the file into shared_ctx for cross-file duplication analysis. Returns list of Match."""
         shared_ctx = shared_ctx if shared_ctx is not None else {}
         if file_ctx.raw is None:
             return []
@@ -79,6 +80,7 @@ class DuplicateCodeMatcher:
         return 1
 
     def finalize_duplicates(self, shared_ctx: dict) -> list[Match]:
+        """Emit cross-file matches for file pairs sharing above-threshold n-gram overlap. Returns list of Match."""
         idx = shared_ctx.get(self._ctx_key)
         if not idx or idx.get("finalized"):
             return []
