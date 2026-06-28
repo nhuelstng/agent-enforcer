@@ -25,7 +25,7 @@ class FileContextBuilder:
 
         if cached:
             if ast_need and cached.ast is None:
-                if cached.raw:
+                if cached.raw is not None:
                     cached.ast = ts_parse(cached.raw, ast_need)
             return cached
 
@@ -33,7 +33,7 @@ class FileContextBuilder:
         try:
             with open(full_path, "r", encoding="utf-8") as f:
                 raw = f.read()
-        except (IOError, OSError):
+        except (IOError, OSError, UnicodeDecodeError):
             return FileContext(path=path, raw=None)
 
         ctx = FileContext(path=path, raw=raw)

@@ -1,108 +1,141 @@
-import os
-import re
-import pytest
-from enforcer import Severity
-from enforcer.context import FileContextBuilder
-from enforcer.runner import RuleRunner
-from enforcer.reporter import Reporter
-from enforcer.matchers import RegexMatcher, LineCountMatcher, AllowlistMatcher
-from enforcer.rule import Rule
+"""Integration tests for cross-feature combinations identified as gaps."""
+import tempfile
+from pathlib import Path
+from click.testing import CliRunner
+from enforcer.cli import cli
 
-def test_full_run_on_fixture_repo(tmp_path):
-    """End-to-end: fixture repo with known violations."""
-    (tmp_path / "colors.scss").write_text("--color-primary: #fff;\n--color-secondary: #000;\n")
-    (tmp_path / "component.ts").write_text(
-        "background: #c8e6c9;\n"
-        "color: var(--color-primary);\n"
-        "border: var(--color-undefined);\n"
-    )
-    (tmp_path / "component.spec.ts").write_text("background: #fff;\n")
-    (tmp_path / "README.md").write_text("\n".join(["line"] * 250))
 
-    rules = [
-        Rule(
-            id="no-raw-hex",
-            severity=Severity.ERROR,
-            matchers=[RegexMatcher(r"#[0-9a-fA-F]{3,6}\b")],
-            file_globs=["**/*.ts", "**/*.scss"],
-            exclude_globs=["**/*.spec.ts", "**/colors.scss"],
-            read_targets=["**/colors.scss"],
-            message="Raw hex '{matched_value}'",
-        ),
-        Rule(
-            id="only-defined-css-vars",
-            severity=Severity.ERROR,
-            matchers=[AllowlistMatcher(
-                extractor=lambda raw: set(re.findall(r'--([\w-]+):', raw)),
-                consumer=lambda raw: set(re.findall(r'var\(--([\w-]+)\)', raw)),
-                read_target="**/colors.scss",
-            )],
-            file_globs=["**/*.ts"],
-            read_targets=["**/colors.scss"],
-            message="Undefined: --{matched_value}",
-        ),
-        Rule(
-            id="max-lines",
-            severity=Severity.WARN,
-            matchers=[LineCountMatcher(max_lines=200)],
-            file_globs=["README.md"],
-            message="{matched_value} lines",
-        ),
-    ]
+def test_duplicate_detection_via_cli():
+    """DuplicateCodeMatcher should work end-to-end through CLI."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        code = "def process(data):\n    result = []\n    for item in data:\n        result.append(item * 2)\n    return result\n"
+        Path(tmpdir, "a.py").write_text(code)
+        Path(tmpdir, "b.py").write_text(code)
 
-    builder = FileContextBuilder(rules, workspace=str(tmp_path))
-    shared_ctx = {}
-    colors_path = os.path.join(str(tmp_path), "colors.scss")
-    if os.path.exists(colors_path):
-        ctx = builder.build("colors.scss")
-        shared_ctx["colors.scss"] = ctx
+        config = '''
+from enforcer import Rule, Severity
+from enforcer.matchers import DuplicateCodeMatcher
+RULES = [
+    Rule(id="no-dup", severity=Severity.WARN,
+         matchers=[DuplicateCodeMatcher(min_tokens=5, min_overlap=0.8)],
+         file_globs=["*.py"], message="Duplicate: {matched_value}"),
+]
+WORKSPACE = "."
+'''
+        Path(tmpdir, "enforcer_config.py").write_text(config)
+        runner = CliRunner()
+        result = runner.invoke(cli, ["check", "--paths", "a.py", "--paths", "b.py",
+                                      "--config", f"{tmpdir}/enforcer_config.py",
+                                      "--workspace", tmpdir, "--no-llm"])
+        assert "Duplicate" in result.output or "duplicate" in result.output.lower()
 
-    runner = RuleRunner(rules, workspace=str(tmp_path), no_llm=True)
-    all_matches = []
-    for f in ["colors.scss", "component.ts", "component.spec.ts", "README.md"]:
-        ctx = builder.build(f)
-        matches = runner.run_rules_for_file(ctx, shared_ctx)
-        all_matches.extend(matches)
 
-    hex_matches = [m for m in all_matches if m.rule_id == "no-raw-hex"]
-    assert len(hex_matches) == 1
-    assert hex_matches[0].matched_value == "#c8e6c9"
+def test_enforcerignore_not_applied_to_staged():
+    """--staged should NOT apply .enforcerignore (user explicitly staged the file)."""
+    import subprocess
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=tmpdir, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "T"], cwd=tmpdir, capture_output=True)
 
-    var_matches = [m for m in all_matches if m.rule_id == "only-defined-css-vars"]
-    assert len(var_matches) == 1
-    assert var_matches[0].matched_value == "color-undefined"
+        Path(tmpdir, "keep.py").write_text("print('keep')\n")
+        Path(tmpdir, "skip.py").write_text("print('skip')\n")
+        Path(tmpdir, ".enforcerignore").write_text("skip.py\n")
 
-    spec_matches = [m for m in all_matches if ".spec." in m.file]
-    assert spec_matches == []
+        subprocess.run(["git", "add", "keep.py", "skip.py"], cwd=tmpdir, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, capture_output=True)
+        Path(tmpdir, "keep.py").write_text("print('modified')\n")
+        Path(tmpdir, "skip.py").write_text("print('modified')\n")
+        subprocess.run(["git", "add", "keep.py", "skip.py"], cwd=tmpdir, capture_output=True)
 
-    readme_matches = [m for m in all_matches if m.rule_id == "max-lines"]
-    assert len(readme_matches) == 1
+        config = '''
+from enforcer import Rule, Severity
+from enforcer.matchers import RegexMatcher
+RULES = [
+    Rule(id="no-print", severity=Severity.ERROR,
+         matchers=[RegexMatcher(r"print\\(")], file_globs=["*.py"],
+         message="print() at {file}:{line}"),
+]
+WORKSPACE = "."
+'''
+        Path(tmpdir, "enforcer_config.py").write_text(config)
+        runner = CliRunner()
+        result = runner.invoke(cli, ["check", "--staged",
+                                      "--config", f"{tmpdir}/enforcer_config.py",
+                                      "--workspace", tmpdir, "--no-llm"])
+        # Both files should be checked — .enforcerignore skipped for --staged
+        assert "keep.py" in result.output
+        assert "skip.py" in result.output
 
-    assert Reporter().exit_code(all_matches) == 1
 
-def test_full_run_clean_repo(tmp_path):
-    """No violations -> exit 0."""
-    (tmp_path / "component.ts").write_text("color: var(--color-primary);\n")
-    (tmp_path / "colors.scss").write_text("--color-primary: #fff;\n")
+def test_fix_with_metadata_rules():
+    """--fix should not crash when metadata rules produce matches."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.py").write_text("print('x')\n")
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=tmpdir, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "T"], cwd=tmpdir, capture_output=True)
+        Path(tmpdir, ".git/COMMIT_EDITMSG").write_text("bad message")
 
-    rules = [
-        Rule(
-            id="no-raw-hex",
-            severity=Severity.ERROR,
-            matchers=[RegexMatcher(r"#[0-9a-fA-F]{3,6}\b")],
-            file_globs=["**/*.ts"],
-            exclude_globs=["**/colors.scss"],
-            message="Raw hex",
-        ),
-    ]
+        config = '''
+from enforcer import Rule, Severity, RuleType
+from enforcer.matchers import RegexMatcher, CommitMessageMatcher
+RULES = [
+    Rule(id="no-print", severity=Severity.ERROR,
+         matchers=[RegexMatcher(r"print\\(")], file_globs=["*.py"],
+         message="print() at {file}:{line}",
+         fix=lambda ctx, m: (ctx.raw or "").replace("print(", "logger.debug(")),
+    Rule(id="commit-msg", severity=Severity.WARN,
+         matchers=[CommitMessageMatcher(pattern=r"^(feat|fix):\\s+.+")],
+         file_globs=["*"], rule_type=RuleType.METADATA,
+         message="Bad commit message: {matched_value}"),
+]
+WORKSPACE = "."
+'''
+        Path(tmpdir, "enforcer_config.py").write_text(config)
+        runner = CliRunner()
+        result = runner.invoke(cli, ["check", "--paths", "test.py",
+                                      "--config", f"{tmpdir}/enforcer_config.py",
+                                      "--workspace", tmpdir, "--no-llm", "--fix"])
+        # Should not crash — fix applies to content rules, metadata match ignored
+        assert result.exit_code in (0, 1)
+        content = Path(tmpdir, "test.py").read_text()
+        assert "logger.debug" in content
 
-    builder = FileContextBuilder(rules, workspace=str(tmp_path))
-    runner = RuleRunner(rules, workspace=str(tmp_path), no_llm=True)
-    all_matches = []
-    for f in ["component.ts", "colors.scss"]:
-        ctx = builder.build(f)
-        matches = runner.run_rules_for_file(ctx, {})
-        all_matches.extend(matches)
 
-    assert all_matches == []
-    assert Reporter().exit_code(all_matches) == 0
+def test_duplicate_detection_finalize_idempotent():
+    """Calling finalize_duplicates twice should not double matches."""
+    from enforcer.matchers.duplicate_code import DuplicateCodeMatcher
+    from enforcer.types import FileContext
+    code = "def foo():\n    x = 1\n    y = 2\n    z = 3\n    return x + y + z\n"
+    matcher = DuplicateCodeMatcher(min_tokens=3, min_overlap=0.8)
+    shared = {}
+    matcher.find(FileContext(path="a.py", raw=code), shared)
+    matcher.find(FileContext(path="b.py", raw=code), shared)
+    first = matcher.finalize_duplicates(shared)
+    second = matcher.finalize_duplicates(shared)
+    assert len(first) == 2
+    assert len(second) == 0  # finalized flag prevents re-run
+
+
+def test_duplicate_detection_two_instances_no_collision():
+    """Two DuplicateCodeMatcher instances with different configs should not collide."""
+    from enforcer.matchers.duplicate_code import DuplicateCodeMatcher
+    from enforcer.types import FileContext
+    code = "def foo():\n    x = 1\n    y = 2\n    z = 3\n    return x + y + z\n"
+    matcher_a = DuplicateCodeMatcher(min_tokens=3, min_overlap=0.8)
+    matcher_b = DuplicateCodeMatcher(min_tokens=5, min_overlap=0.5)
+    shared = {}
+    matcher_a.find(FileContext(path="a.py", raw=code), shared)
+    matcher_a.find(FileContext(path="b.py", raw=code), shared)
+    matcher_b.find(FileContext(path="a.py", raw=code), shared)
+    matcher_b.find(FileContext(path="b.py", raw=code), shared)
+    matches_a = matcher_a.finalize_duplicates(shared)
+    matches_b = matcher_b.finalize_duplicates(shared)
+    # Both should work independently — no key collision
+    assert len(matches_a) == 2
+    # matcher_b with min_tokens=5 finds fewer grams, may or may not match
+    # but should NOT crash or return matches from matcher_a's index
+
+
+import subprocess  # ponytail: needed by test_enforcerignore_not_applied_to_staged

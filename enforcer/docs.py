@@ -19,7 +19,7 @@ def render_rules_markdown(rules: list[Rule]) -> str:
         lines.append("")
 
         if rule.message:
-            msg = rule.message if callable(rule.message) else rule.message
+            msg = "(dynamic)" if callable(rule.message) else rule.message
             lines.append(f"**Message:** {msg}")
             lines.append("")
 

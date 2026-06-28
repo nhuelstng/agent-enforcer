@@ -2,12 +2,11 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enforcer.types import Match, FileContext
-from enforcer.matchers.allowlist import AllowlistMatcher
 
 def _run(matcher, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
-    if isinstance(matcher, AllowlistMatcher):
-        return matcher.find(file_ctx, shared_ctx or {})
-    return matcher.find(file_ctx)
+    if shared_ctx is None:
+        shared_ctx = {}
+    return matcher.find(file_ctx, shared_ctx)
 
 @dataclass
 class AllOf:

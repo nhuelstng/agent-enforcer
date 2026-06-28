@@ -18,6 +18,10 @@ class IntPredicate:
     op: str
     value: int
 
+    def __post_init__(self):
+        if self.op not in _OPS:
+            raise ValueError(f"Invalid op: {self.op!r}. Valid: {sorted(_OPS)}")
+
     def test(self, match: Match) -> bool:
         try:
             val = int(match.matched_value)

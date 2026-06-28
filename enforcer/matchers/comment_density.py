@@ -9,7 +9,7 @@ class CommentPerFunctionMatcher:
     max_comments: int
     needs: Needs = Needs.AST_TS
 
-    def find(self, file_ctx: FileContext) -> list[Match]:
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         if not file_ctx.ast:
             return []
         matches: list[Match] = []
@@ -28,20 +28,20 @@ class CommentPerFunctionMatcher:
         func_types = {"function_declaration", "function_definition", "function",
                        "method_definition", "method_declaration"}
         result = []
-        for child in node.children:
-            if child.type in func_types:
-                result.append(child)
-            result.extend(self._find_functions(child))
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current.type in func_types:
+                result.append(current)
+            stack.extend(reversed(current.children))
         return result
 
     def _count_comments(self, func_node) -> int:
         count = 0
-        for node in self._walk_all(func_node):
+        stack = [func_node]
+        while stack:
+            node = stack.pop()
             if "comment" in node.type:
                 count += 1
+            stack.extend(reversed(node.children))
         return count
-
-    def _walk_all(self, node):
-        yield node
-        for child in node.children:
-            yield from self._walk_all(child)
