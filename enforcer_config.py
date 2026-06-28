@@ -3,6 +3,12 @@
 This config enforces the conventions documented in AGENTS.md on this very
 repo. It is the dogfood config — the tool checks itself.
 
+Severity philosophy:
+  ERROR — style/correctness violations. Always blocks. Must fix before commit.
+  WARN  — critical-component reminders. Blocks unless --confirm-read-warnings.
+          Fires when you touch files that have broad blast radius. The reminder
+          tells you what to verify before acknowledging.
+
 Setup (one-time):
   enforcer install --force
   export ENFORCER_CONFIG=enforcer_config.py
@@ -23,11 +29,16 @@ from enforcer.matchers import (
     CommitMessageMatcher,
     NamingConventionMatcher,
     DocstringMatcher,
+    AlwaysMatcher,
 )
 
 WORKSPACE = "."
 
 RULES = [
+    # ════════════════════════════════════════════════════════════════════
+    # ERROR — style/correctness rules. Always block. Must fix.
+    # ════════════════════════════════════════════════════════════════════
+
     # ─── Git metadata: branch naming ─────────────────────────────────────
     Rule(
         id="branch-naming",
@@ -42,7 +53,7 @@ RULES = [
     # ─── Git metadata: commit message format ─────────────────────────────
     Rule(
         id="commit-message",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[CommitMessageMatcher(pattern=r"^(feat|fix|docs|refactor|test|chore|perf|ci|build|style|revert)(\(.+\))?:\s+.+")],
         file_globs=["*"],
         rule_type=RuleType.METADATA,
@@ -53,7 +64,7 @@ RULES = [
     # ─── Test pairing: every matcher has a test ──────────────────────────
     Rule(
         id="matcher-test-paired",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/matchers/*.py",
             derived_glob="tests/test_matchers/test_{stem}*.py",
@@ -69,7 +80,7 @@ RULES = [
     # ─── Test pairing: every predicate has a test ─────────────────────────
     Rule(
         id="predicate-test-paired",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/predicates/*.py",
             derived_glob="tests/test_predicates/test_*.py",
@@ -85,7 +96,7 @@ RULES = [
     # ─── Test pairing: every combinator has a test ───────────────────────
     Rule(
         id="combinator-test-paired",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/combinators/*.py",
             derived_glob="tests/test_combinators/test_*.py",
@@ -101,7 +112,7 @@ RULES = [
     # ─── Test pairing: core modules have tests ───────────────────────────
     Rule(
         id="core-test-paired",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/*.py",
             derived_glob="tests/test_{stem}*.py",
@@ -117,7 +128,7 @@ RULES = [
     # ─── Naming: functions must be snake_case ───────────────────────────
     Rule(
         id="function-snake-case",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[NamingConventionMatcher(
             declaration_types=["function_definition"],
             pattern=r"^[a-z_][a-z0-9_]*$",
@@ -131,7 +142,7 @@ RULES = [
     # ─── Naming: classes must be CapWords ───────────────────────────────
     Rule(
         id="class-capwords",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[NamingConventionMatcher(
             declaration_types=["class_definition"],
             pattern=r"^[A-Z][a-zA-Z0-9]*$",
@@ -176,7 +187,7 @@ RULES = [
     # ─── Function complexity: max lines ──────────────────────────────────
     Rule(
         id="function-max-lines",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[FunctionComplexityMatcher(metric="lines", max_value=75)],
         file_globs=["enforcer/**/*.py"],
         exclude_globs=["enforcer/cli.py"],
@@ -188,7 +199,7 @@ RULES = [
     # ─── Function complexity: max params ─────────────────────────────────
     Rule(
         id="function-max-params",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[FunctionComplexityMatcher(metric="params", max_value=5)],
         file_globs=["enforcer/**/*.py"],
         exclude_globs=["enforcer/cli.py"],
@@ -200,7 +211,7 @@ RULES = [
     # ─── Function complexity: cyclomatic ─────────────────────────────────
     Rule(
         id="cyclomatic-complexity",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[FunctionComplexityMatcher(metric="cyclomatic", max_value=10)],
         file_globs=["enforcer/**/*.py"],
         exclude_globs=["enforcer/cli.py"],
@@ -212,7 +223,7 @@ RULES = [
     # ─── No wildcard imports ─────────────────────────────────────────────
     Rule(
         id="no-wildcard-imports",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[ImportMatcher(forbidden_patterns=[r"import\s+\*", r"from\s+\S+\s+import\s+\*"])],
         file_globs=["enforcer/**/*.py"],
         message="Wildcard import at {file}:{line}. Use explicit imports.",
@@ -223,7 +234,7 @@ RULES = [
     # ─── TODO needs owner ────────────────────────────────────────────────
     Rule(
         id="todo-needs-owner",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[RegexMatcher(r"#\s*(TODO|FIXME|HACK|XXX)\b(?!\s*\(@)")],
         file_globs=["enforcer/**/*.py"],
         message="TODO/FIXME without owner at {file}:{line}. Use '# TODO(@name): …' or remove.",
@@ -234,11 +245,83 @@ RULES = [
     # ─── Docstrings on public functions ─────────────────────────────────
     Rule(
         id="docstring-public",
-        severity=Severity.WARN,
+        severity=Severity.ERROR,
         matchers=[DocstringMatcher()],
         file_globs=["enforcer/**/*.py"],
         message="Function '{matched_value}' at {file}:{line} missing docstring. Public functions must be documented.",
         fix_instruction='Add a docstring: """<one-line description>."""',
+        diff_only=True,
+    ),
+
+    # ════════════════════════════════════════════════════════════════════
+    # WARN — critical-component reminders. Block unless --confirm-read-warnings.
+    # Fires when you touch files with broad blast radius. The reminder tells
+    # you what to verify before acknowledging.
+    # ════════════════════════════════════════════════════════════════════
+
+    # ─── Reminder: core types changed — verify everything ───────────────
+    Rule(
+        id="verify-types-changed",
+        severity=Severity.WARN,
+        matchers=[AlwaysMatcher(matched_value="types.py changed")],
+        file_globs=["enforcer/types.py"],
+        message="Core types changed in {file}. Every matcher/predicate/combinator depends on these. Run full test suite: pytest --tb=short -q",
+        fix_instruction="Verify: pytest passes, no matcher breaks on new types.py.",
+        diff_only=True,
+    ),
+
+    # ─── Reminder: rule.py changed — verify glob matching + check() ──────
+    Rule(
+        id="verify-rule-changed",
+        severity=Severity.WARN,
+        matchers=[AlwaysMatcher(matched_value="rule.py changed")],
+        file_globs=["enforcer/rule.py"],
+        message="Rule/glob matching changed in {file}. _glob_match and Rule.check() affect every rule. Run: pytest tests/test_rule.py tests/test_runner.py",
+        fix_instruction="Verify: glob matching works for ** patterns, Rule.check() stamps metadata correctly.",
+        diff_only=True,
+    ),
+
+    # ─── Reminder: runner.py changed — verify finalizers + severity ──────
+    Rule(
+        id="verify-runner-changed",
+        severity=Severity.WARN,
+        matchers=[AlwaysMatcher(matched_value="runner.py changed")],
+        file_globs=["enforcer/runner.py"],
+        message="Runner changed in {file}. Cross-file finalizers and severity filtering affect all rules. Run: pytest tests/test_runner.py tests/test_metadata_rules.py",
+        fix_instruction="Verify: run_cross_file_finalizers works, severity filtering correct, LLM consequences fire.",
+        diff_only=True,
+    ),
+
+    # ─── Reminder: context.py changed — verify parse-once cache ──────────
+    Rule(
+        id="verify-context-changed",
+        severity=Severity.WARN,
+        matchers=[AlwaysMatcher(matched_value="context.py changed")],
+        file_globs=["enforcer/context.py"],
+        message="FileContextBuilder changed in {file}. Parse-once cache drives all AST matchers. Run: pytest tests/test_context.py tests/test_parse_once.py",
+        fix_instruction="Verify: AST populated lazily, cache hits don't reparse, needs_for_file aggregates correctly.",
+        diff_only=True,
+    ),
+
+    # ─── Reminder: config.py changed — verify load_config ───────────────
+    Rule(
+        id="verify-config-changed",
+        severity=Severity.WARN,
+        matchers=[AlwaysMatcher(matched_value="config.py changed")],
+        file_globs=["enforcer/config.py"],
+        message="Config loader changed in {file}. load_config executes enforcer_config.py as module. Run: pytest tests/test_config.py",
+        fix_instruction="Verify: RULES/WORKSPACE/SEVERITY_ACTIONS/LLM_CONFIG extracted correctly, defaults work.",
+        diff_only=True,
+    ),
+
+    # ─── Reminder: parser changed — verify AST for all languages ────────
+    Rule(
+        id="verify-parser-changed",
+        severity=Severity.WARN,
+        matchers=[AlwaysMatcher(matched_value="parser changed")],
+        file_globs=["enforcer/parsers/*.py"],
+        message="Parser changed in {file}. Tree-sitter parse affects all AST matchers. Run: pytest tests/test_parsers.py tests/test_parse_once.py",
+        fix_instruction="Verify: Python/TS/CSS ASTs parse correctly, language_for_path maps extensions right.",
         diff_only=True,
     ),
 ]

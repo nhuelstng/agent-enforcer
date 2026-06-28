@@ -55,8 +55,10 @@ class Rule:
             combined = AllOf(self.matchers)
             all_matches = combined.find(file_ctx, shared_ctx)
 
-        # ponytail: diff_only — suppress matches on unchanged lines. line==0 = file-level matchers (LineCountMatcher, FileExistsMatcher, etc.) always pass through.
-        if self.diff_only and file_ctx.changed_lines is not None:
+        # ponytail: diff_only — only fire on changed lines. If changed_lines is None (not staged mode), suppress entirely.
+        if self.diff_only:
+            if file_ctx.changed_lines is None:
+                return []
             all_matches = [m for m in all_matches if m.line in file_ctx.changed_lines or m.line == 0]
 
         # ponytail: attach file_ctx to each match so AST predicates can access the AST
