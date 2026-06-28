@@ -23,6 +23,7 @@ class IntPredicate:
             raise ValueError(f"Invalid op: {self.op!r}. Valid: {sorted(_OPS)}")
 
     def test(self, match: Match) -> bool:
+        """Return True if match passes the predicate filter."""
         try:
             val = int(match.matched_value)
         except (ValueError, TypeError):

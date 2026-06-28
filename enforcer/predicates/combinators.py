@@ -8,6 +8,7 @@ class All:
     predicates: list
 
     def test(self, match) -> bool:
+        """Return True if match passes the predicate filter."""
         return all(p.test(match) for p in self.predicates)
 
 @dataclass
@@ -16,6 +17,7 @@ class Any:
     predicates: list
 
     def test(self, match) -> bool:
+        """Return True if match passes the predicate filter."""
         return any(p.test(match) for p in self.predicates)
 
 @dataclass
@@ -24,4 +26,5 @@ class NotP:
     predicate: object
 
     def test(self, match) -> bool:
+        """Return True if match passes the predicate filter."""
         return not self.predicate.test(match)

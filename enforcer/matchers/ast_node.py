@@ -11,6 +11,7 @@ class AstNodeMatcher:
     needs: Needs = Needs.AST_TS
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Walk AST for nodes matching the configured type and optional scope. Returns list of Match."""
         if not file_ctx.ast:
             return []
         matches: list[Match] = []

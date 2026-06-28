@@ -12,6 +12,7 @@ class FileExistsMatcher:
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Emit a match if a file matching the read_target glob exists. Returns list of Match."""
         shared_ctx = shared_ctx or {}
         if self.read_target in shared_ctx:
             return [Match(

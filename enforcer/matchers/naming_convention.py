@@ -28,6 +28,7 @@ class NamingConventionMatcher:
         self._compiled = re.compile(self.pattern)
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag declaration names that don't match the required regex pattern. Returns list of Match."""
         if not file_ctx.ast:
             return []
         matches: list[Match] = []
