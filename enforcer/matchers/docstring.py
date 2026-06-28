@@ -19,6 +19,7 @@ class DocstringMatcher:
     needs: Needs = Needs.AST_PY
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag public functions missing docstrings in the AST. Returns list of Match."""
         if not file_ctx.ast:
             return []
         matches: list[Match] = []

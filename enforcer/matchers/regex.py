@@ -12,6 +12,7 @@ class RegexMatcher:
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Find regex pattern matches line by line in file text. Returns list of Match."""
         matches: list[Match] = []
         if not file_ctx.raw:
             return matches

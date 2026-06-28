@@ -44,6 +44,7 @@ class FunctionComplexityMatcher:
     needs: Needs = Needs.AST_PY
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag functions whose complexity metric exceeds the configured maximum. Returns list of Match."""
         if not file_ctx.ast:
             return []
         matches: list[Match] = []

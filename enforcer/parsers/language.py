@@ -14,5 +14,6 @@ _EXT_TO_NEEDS = {
 }
 
 def language_for_path(path: str) -> Needs | None:
+    """Return the Needs (AST kind) for a file path based on its extension."""
     ext = os.path.splitext(path)[1]
     return _EXT_TO_NEEDS.get(ext)

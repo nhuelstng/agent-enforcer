@@ -17,6 +17,7 @@ class CommitMessageMatcher:
         self._compiled = re.compile(self.pattern)
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag commit message if its first line doesn't match the required pattern. Returns list of Match."""
         ws = self.workspace
         msg_path = Path(ws, ".git", "COMMIT_EDITMSG")
         if not msg_path.exists():

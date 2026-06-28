@@ -56,7 +56,7 @@ RULES = [
         severity=Severity.WARN,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/matchers/*.py",
-            derived_glob="tests/test_matchers/test_{stem}.py",
+            derived_glob="tests/test_matchers/test_{stem}*.py",
             exclude_stems=["__init__"],
         )],
         file_globs=["enforcer/matchers/*.py"],
@@ -72,7 +72,7 @@ RULES = [
         severity=Severity.WARN,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/predicates/*.py",
-            derived_glob="tests/test_predicates/test_{stem}.py",
+            derived_glob="tests/test_predicates/test_*.py",
             exclude_stems=["__init__"],
         )],
         file_globs=["enforcer/predicates/*.py"],
@@ -88,7 +88,7 @@ RULES = [
         severity=Severity.WARN,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/combinators/*.py",
-            derived_glob="tests/test_combinators/test_{stem}.py",
+            derived_glob="tests/test_combinators/test_*.py",
             exclude_stems=["__init__"],
         )],
         file_globs=["enforcer/combinators/*.py"],
@@ -104,11 +104,11 @@ RULES = [
         severity=Severity.WARN,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/*.py",
-            derived_glob="tests/test_{stem}.py",
+            derived_glob="tests/test_{stem}*.py",
             exclude_stems=["__init__"],
         )],
         file_globs=["enforcer/*.py"],
-        exclude_globs=["enforcer/__init__.py"],
+        exclude_globs=["enforcer/__init__.py", "enforcer/matchers/**", "enforcer/predicates/**", "enforcer/combinators/**", "enforcer/parsers/**"],
         message="No test file for core module {file}.",
         fix_instruction="Create tests/test_{stem}.py",
         diff_only=True,

@@ -23,6 +23,7 @@ class ImportMatcher:
         self._compiled = [re.compile(p) for p in self.forbidden_patterns]
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Walk AST for import statements matching forbidden regex patterns. Returns list of Match."""
         if not file_ctx.ast:
             return []
         matches: list[Match] = []

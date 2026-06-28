@@ -20,6 +20,7 @@ class PairedFileMatcher:
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag source files whose derived paired file does not exist. Returns list of Match."""
         path = file_ctx.path
         stem = Path(path).stem
 

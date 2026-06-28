@@ -14,6 +14,7 @@ class AllOf:
     matchers: list
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Return combined matches if all matchers find at least one match, else empty. Returns list of Match."""
         results = [_run(m, file_ctx, shared_ctx) for m in self.matchers]
         if all(r for r in results):
             return [m for r in results for m in r]
@@ -25,6 +26,7 @@ class AnyOf:
     matchers: list
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Return combined matches if any matcher finds a match, else empty. Returns list of Match."""
         results = [_run(m, file_ctx, shared_ctx) for m in self.matchers]
         if any(r for r in results):
             return [m for r in results if r for m in r]
@@ -36,6 +38,7 @@ class OneOf:
     matchers: list
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Return matches if exactly one matcher finds a match, else empty. Returns list of Match."""
         results = [_run(m, file_ctx, shared_ctx) for m in self.matchers]
         non_empty = [r for r in results if r]
         if len(non_empty) == 1:
@@ -49,6 +52,7 @@ class Not:
     message_on_absence: str = "Expected pattern not found."
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Emit synthetic match if inner matcher finds nothing, else empty. Returns list of Match."""
         results = _run(self.matcher, file_ctx, shared_ctx)
         if results:
             return []
@@ -66,6 +70,7 @@ class NoneOf:
     message_on_absence: str = "All forbidden patterns absent."
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Emit synthetic match if no matcher finds a match, else empty. Returns list of Match."""
         results = [_run(m, file_ctx, shared_ctx) for m in self.matchers]
         if any(r for r in results):
             return []

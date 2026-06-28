@@ -17,6 +17,7 @@ class StringMatchesPredicate:
             self._compiled = self.pattern
 
     def test(self, match: Match) -> bool:
+        """Return True if match passes the predicate filter."""
         return bool(self._compiled.search(match.matched_value))
 
 @dataclass
@@ -31,4 +32,5 @@ class StringNotMatchesPredicate:
             self._compiled = self.pattern
 
     def test(self, match: Match) -> bool:
+        """Return True if match passes the predicate filter."""
         return not bool(self._compiled.search(match.matched_value))
