@@ -144,14 +144,15 @@ route checks and changelogs.
 3. Each rule renders as:
    - `### {id}` heading.
    - One imperative sentence: the `message` field with `{placeholders}`
-     stripped (e.g. `Function '{matched_value}' at {file}:{line} must be
-     snake_case` → "Functions must be snake_case."). Placeholder stripping is
-     a regex replace of `{[a-z_]+}` patterns; the surrounding sentence is
-     kept as-is.
+     stripped via `re.sub(r"\{[a-z_]+\}", "")`, then double spaces collapsed.
+     E.g. `Function '{matched_value}' at {file}:{line} must be snake_case` →
+     "Function '' at must be snake_case." (awkward but truthful). The fix is
+     to tighten messages in `enforcer_config.py` during the rationale
+     backfill (step 1 of rollout), not to add a `prose` field.
    - `**Why:**` block — the `rationale` field verbatim, if non-empty.
-   - `**Applies to:**` line — file globs in human form where possible
-     (`enforcer/**/*.py` → "all Python files under `enforcer/`"). METADATA
-     rules get the suffix "(metadata rule, checked once per run)".
+   - `**Applies to:**` line — file globs verbatim (e.g. `enforcer/**/*.py`).
+     No human-form translation — keeps the renderer trivial and the output
+     unambiguous. METADATA rules get the suffix "(metadata rule, checked once per run)".
    - `**Excludes:**` line if `exclude_globs` non-empty.
    - `**Fix:**` line — `fix_instruction` verbatim.
    - `**Read targets:**` line if `read_targets` non-empty.
@@ -354,7 +355,7 @@ tests. Every new core module ships with a test file.
 - Rules grouped by severity (ERROR before WARN before INFO)
 - Within group, sorted by `id`
 - Determinism: two calls with same input → byte-identical output
-- Placeholder stripping: `Function '{matched_value}' at {file}:{line}` → "Function at" (placeholders removed, double spaces collapsed)
+- Placeholder stripping: `Function '{matched_value}' at {file}:{line}` → "Function '' at must be snake_case." (placeholders removed, double spaces collapsed)
 
 **`tests/test_matchers/test_doc_sync.py` cases:**
 - In-sync file → no matches
