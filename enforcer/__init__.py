@@ -1,5 +1,5 @@
-"""Convention enforcement DSL for coding agents. Public API: Rule, Severity, Needs, RuleType, Match, FileContext, LLMConsequence."""
-from enforcer.types import Severity, Needs, RuleType, Match, FileContext, LLMConsequence
+"""Convention enforcement DSL for coding agents. Public API: Rule, Severity, Needs, RuleType, Match, FileContext, LLMConsequence, ChangeContext."""
+from enforcer.types import Severity, Needs, RuleType, Match, FileContext, LLMConsequence, ChangeContext
 from enforcer.rule import Rule
 from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
@@ -10,7 +10,7 @@ from enforcer.fix import apply_fixes, FixResult
 from enforcer.ignore import load_enforcerignore, is_ignored
 
 __all__ = [
-    "Severity", "Needs", "RuleType", "Match", "FileContext", "LLMConsequence", "Rule",
+    "Severity", "Needs", "RuleType", "Match", "FileContext", "LLMConsequence", "ChangeContext", "Rule",
     "RuleRunner", "Reporter", "FileContextBuilder", "Config", "load_config",
     "LLMExecutor", "apply_fixes", "FixResult", "load_enforcerignore", "is_ignored",
 ]
