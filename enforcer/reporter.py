@@ -37,7 +37,7 @@ class Reporter:
                 "locations": [{
                     "physicalLocation": {
                         "artifactLocation": {"uri": m.file},
-                        "region": {"startLine": m.line, "startColumn": max(m.column, 1)},
+                        "region": {"startLine": max(m.line, 1), "startColumn": max(m.column, 1)},
                     }
                 }],
             })
