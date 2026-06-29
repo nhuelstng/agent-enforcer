@@ -283,7 +283,7 @@ The workflow lives at `.github/workflows/enforcer.yml`. The composite action at 
 ### Cross-org usage
 
 ```yaml
-- uses: your-org/pre-commit-agent-enforcer/.github/actions/enforcer@main
+- uses: nhuelstng/agent-enforcer/.github/actions/enforcer@main
   with:
     install-method: pip
     token: ${{ secrets.ENFORCER_PAT }}
