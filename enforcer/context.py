@@ -5,6 +5,19 @@ from enforcer.types import FileContext, Needs
 from enforcer.parsers.language import language_for_path
 from enforcer.parsers.tree_sitter import parse as ts_parse
 
+
+def _collect_needs(matcher, needs: set[Needs]) -> None:
+    """Walk combinator tree, collect Needs from all leaf matchers."""
+    stack: list = [matcher]
+    while stack:
+        m = stack.pop()
+        if hasattr(m, "matchers") and isinstance(m.matchers, list):
+            stack.extend(m.matchers)
+        elif hasattr(m, "matcher") and m.matcher is not None:
+            stack.append(m.matcher)
+        if hasattr(m, "needs") and m.needs:
+            needs.add(m.needs)
+
 class FileContextBuilder:
     """Builds and caches FileContext objects. Each file is read once; AST is populated lazily when needed."""
     def __init__(self, rules: list, workspace: str = "."):
@@ -52,8 +65,7 @@ class FileContextBuilder:
             if any(_glob_match(path, glob) for glob in rule.file_globs):
                 if not any(_glob_match(path, pat) for pat in rule.exclude_globs):
                     for matcher in rule.matchers:
-                        if hasattr(matcher, "needs") and matcher.needs:
-                            needs.add(matcher.needs)
+                        _collect_needs(matcher, needs)
         return needs
 
     def clear_cache(self):

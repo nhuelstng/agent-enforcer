@@ -1,20 +1,43 @@
 """Combinator implementations: compose matchers with AND/OR/NOT logic."""
 from __future__ import annotations
 from dataclasses import dataclass, field
-from enforcer.types import Match, FileContext
+from enforcer.types import Match, FileContext, Needs
 
 def _run(matcher, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
     if shared_ctx is None:
         shared_ctx = {}
     return matcher.find(file_ctx, shared_ctx)
 
+
+def _collect_finalizers(matcher) -> list:
+    """Walk combinator tree iteratively, return matchers with finalize_duplicates.
+
+    Non-combinator matchers: returned if they have finalize_duplicates.
+    Combinators (AllOf/AnyOf/OneOf/NoneOf): descend into .matchers list.
+    Not: descend into .matcher attribute.
+    """
+    finalizers: list = []
+    stack: list = [matcher]
+    while stack:
+        m = stack.pop()
+        if hasattr(m, "matchers") and isinstance(m.matchers, list):
+            stack.extend(m.matchers)
+        elif hasattr(m, "matcher") and m.matcher is not None:
+            stack.append(m.matcher)
+        if hasattr(m, "finalize_duplicates") and callable(m.finalize_duplicates):
+            finalizers.append(m)
+    return finalizers
+
 @dataclass
 class AllOf:
     """All matchers must find at least one match. Returns combined matches if all succeed."""
     matchers: list
+    needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Return combined matches if all matchers find at least one match, else empty. Returns list of Match."""
+        if shared_ctx is None:
+            shared_ctx = {}
         results = [_run(m, file_ctx, shared_ctx) for m in self.matchers]
         if all(r for r in results):
             return [m for r in results for m in r]
@@ -24,9 +47,12 @@ class AllOf:
 class AnyOf:
     """At least one matcher must find a match. Returns combined matches from all that matched."""
     matchers: list
+    needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Return combined matches if any matcher finds a match, else empty. Returns list of Match."""
+        if shared_ctx is None:
+            shared_ctx = {}
         results = [_run(m, file_ctx, shared_ctx) for m in self.matchers]
         if any(r for r in results):
             return [m for r in results if r for m in r]
@@ -36,9 +62,12 @@ class AnyOf:
 class OneOf:
     """Exactly one matcher must find a match. Fails if zero or more than one match."""
     matchers: list
+    needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Return matches if exactly one matcher finds a match, else empty. Returns list of Match."""
+        if shared_ctx is None:
+            shared_ctx = {}
         results = [_run(m, file_ctx, shared_ctx) for m in self.matchers]
         non_empty = [r for r in results if r]
         if len(non_empty) == 1:
@@ -50,9 +79,12 @@ class Not:
     """Negation: emits a synthetic match if the inner matcher finds NOTHING. Used to enforce 'file must exist', 'pattern must be absent'."""
     matcher: object
     message_on_absence: str = "Expected pattern not found."
+    needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Emit synthetic match if inner matcher finds nothing, else empty. Returns list of Match."""
+        if shared_ctx is None:
+            shared_ctx = {}
         results = _run(self.matcher, file_ctx, shared_ctx)
         if results:
             return []
@@ -68,9 +100,12 @@ class NoneOf:
     """No matcher may find a match. Emits a synthetic match if any matcher finds something."""
     matchers: list
     message_on_absence: str = "All forbidden patterns absent."
+    needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Emit synthetic match if no matcher finds a match, else empty. Returns list of Match."""
+        if shared_ctx is None:
+            shared_ctx = {}
         results = [_run(m, file_ctx, shared_ctx) for m in self.matchers]
         if any(r for r in results):
             return []

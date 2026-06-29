@@ -285,7 +285,10 @@ def docs(config_path, output):
     config = load_config(config_path)
     md = render_rules_markdown(config.rules)
     if output:
-        _assert_output_contained(output, config.workspace or ".")
+        ws = config.workspace
+        if not ws or ws == ".":
+            ws = str(Path(config_path).resolve().parent)
+        _assert_output_contained(output, ws)
         with open(output, "w", encoding="utf-8") as f:
             f.write(md)
         click.echo(f"Documentation written to {output}")

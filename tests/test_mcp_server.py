@@ -9,7 +9,7 @@ def test_list_conventions_returns_markdown():
 
 
 def test_verify_fix_returns_pass_or_fail():
-    result = json.loads(verify_fix(path="README.md", rule_id="readme-max-lines"))
+    result = json.loads(verify_fix(path="README.md", rule_id="readme-max-lines", no_llm=True))
     assert "summary" in result
     assert "issues" in result
 
@@ -20,7 +20,7 @@ def test_verify_fix_diff_only_rule_fires():
     with open(f, "w") as fh:
         fh.write('print("hello")\n')
     try:
-        result = json.loads(verify_fix(path=f, rule_id="no-print"))
+        result = json.loads(verify_fix(path=f, rule_id="no-print", no_llm=True))
         assert result["summary"]["total"] > 0
     finally:
         os.unlink(f)
@@ -32,7 +32,7 @@ def test_verify_fix_unknown_rule():
 
 
 def test_check_conventions_with_paths():
-    result = json.loads(check_conventions(paths=["README.md"]))
+    result = json.loads(check_conventions(paths=["README.md"], no_llm=True))
     assert "summary" in result
 
 
