@@ -19,6 +19,9 @@ An agent must use these terms correctly in code, commits, and discussion:
 - **Needs** — enum declaring what a matcher requires: `RAW`, `AST_PY`, `AST_TS`, `AST_CSS`. Drives parse-once caching.
 - **Severity** — `ERROR` (style/correctness, always blocks), `WARN` (critical-component reminder, blocks unless `--confirm-read-warnings`), `INFO` (advisory).
 - **RuleType** — `CONTENT` (checked per-file) vs `METADATA` (checked once per run, e.g. branch name, commit message).
+- **LLMMatcher** — matcher that calls an LLM as the check itself. Returns `Match` objects from structured JSON verdicts. Composes via combinators like any matcher. Defined in `enforcer/matchers/llm_check.py`.
+- **ChangeContext** — carries change metadata (commit message, branch, created/modified/deleted/renamed file lists). Stored in `shared_ctx["__change__"]`. Read by METADATA-phase and finalizer matchers. Defined in `enforcer/types.py`.
+- **FileContext.status** — per-file event kind: `"added"`, `"modified"`, `"deleted"`, `"renamed"`. Populated from `git diff --name-status`. Default `"modified"`. Existing matchers ignore it; event-aware matchers check it.
 
 ## Branch Convention
 
@@ -128,7 +131,7 @@ enforcer/
   llm.py          — LLMExecutor: calls LLM provider on rule failure
   docs.py         — markdown rule documentation generator
   mcp_server.py   — MCP server interface
-  matchers/       — 17 matchers, each in own file
+  matchers/       — 18 matchers, each in own file
   predicates/     — post-match filters (AST, string, int, combinators)
   combinators/    — matcher combiners (AllOf, AnyOf, Not, NoneOf, OneOf)
   parsers/         — tree-sitter parser + language detection
@@ -168,7 +171,7 @@ To install (one-time):
 python -m enforcer.cli install --force
 ```
 
-The config has 21 rules: 15 ERROR (style/correctness — always block) + 6 WARN (critical-component reminders — block unless acknowledged). WARN rules fire when you stage changes to files with broad blast radius (`types.py`, `rule.py`, `runner.py`, `context.py`, `config.py`, `parsers/`). Each WARN tells you what tests to run before acknowledging:
+The config has 25 rules: 18 ERROR (style/correctness — always block) + 7 WARN (6 critical-component reminders + 1 LLM sanity check — block unless acknowledged). WARN rules fire when you stage changes to files with broad blast radius (`types.py`, `rule.py`, `runner.py`, `context.py`, `config.py`, `parsers/`), or run an LLM-based commit-message alignment check. Each WARN tells you what tests to run before acknowledging:
 ```bash
 ENFORCER_CONFIRM_WARNINGS=1 git commit -m "..."
 ```
