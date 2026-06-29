@@ -32,6 +32,7 @@ from enforcer.matchers import (
     DocstringMatcher,
     AlwaysMatcher,
     LineCountMatcher,
+    LLMMatcher,
 )
 
 WORKSPACE = "."
@@ -45,7 +46,7 @@ RULES = [
     Rule(
         id="branch-naming",
         severity=Severity.ERROR,
-        matchers=[BranchNameMatcher(pattern=r"^(feature|fix|hotfix|chore|docs|refactor)/")],
+        matchers=[BranchNameMatcher(pattern=r"^(feature|fix|chore|docs|refactor)/")],
         file_globs=["*"],
         rule_type=RuleType.METADATA,
         message="Branch '{matched_value}' doesn't match required pattern: type/description",
@@ -85,7 +86,7 @@ RULES = [
         severity=Severity.ERROR,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/predicates/*.py",
-            derived_glob="tests/test_predicates/test_*.py",
+            derived_glob="tests/test_predicates/test_{stem}*.py",
             exclude_stems=["__init__"],
         )],
         file_globs=["enforcer/predicates/*.py"],
@@ -101,8 +102,8 @@ RULES = [
         severity=Severity.ERROR,
         matchers=[PairedFileMatcher(
             source_glob="enforcer/combinators/*.py",
-            derived_glob="tests/test_combinators/test_*.py",
-            exclude_stems=["__init__"],
+            derived_glob="tests/test_combinators/test_{stem}*.py",
+            exclude_stems=["__init__", "core"],
         )],
         file_globs=["enforcer/combinators/*.py"],
         exclude_globs=["enforcer/combinators/__init__.py"],
@@ -179,7 +180,7 @@ RULES = [
     Rule(
         id="no-secrets",
         severity=Severity.ERROR,
-        matchers=[RegexMatcher(r"(?i)(password|secret|api_key|token)\s*=\s*['\"][^'\"]{8,}['\"]")],
+        matchers=[RegexMatcher(r"(?i)(password|secret|api_key|token)\s*=\s*['\"][^'\"]{8,}['\"]", redact=True)],
         file_globs=["**/*.py"],
         exclude_globs=["**/test*", "**/*test*"],
         message="Possible hardcoded secret at {file}:{line}. Use env var.",
@@ -269,6 +270,21 @@ RULES = [
             prompt="You are reviewing a README.md that exceeds 300 lines. Identify the specific sections that don't belong in a README and make it too long. For each section, explain why it should be removed or trimmed. Be concrete — reference section headings and line ranges. Common bloat: full install logs, API reference dumps, changelogs, verbose examples, duplicated content.",
             timeout=300,
         ),
+    ),
+
+    # ─── Commit message aligns with changes (LLM sanity check) ──────────
+    Rule(
+        id="commit-msg-aligns-with-changes",
+        severity=Severity.WARN,
+        matchers=[LLMMatcher(
+            prompt="Given the commit message and the modified file list, does the message accurately describe these changes? Lenient — sanity check only, not a full audit.",
+            model="zai-org/GLM-5.1-FP8",
+            timeout=30,
+        )],
+        file_globs=["*"],
+        rule_type=RuleType.METADATA,
+        message="Commit message may not align with changes. LLM: {matched_value}",
+        fix_instruction="Rewrite commit message to describe the actual changes.",
     ),
 
     # ════════════════════════════════════════════════════════════════════

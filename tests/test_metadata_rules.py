@@ -55,3 +55,48 @@ def test_runner_runs_metadata_rules_once():
         # Metadata rules fire via run_metadata_rules()
         meta_matches = runner.run_metadata_rules({})
         assert len(meta_matches) == 1
+
+
+def test_metadata_sentinel_does_not_false_match_regex():
+    """RegexMatcher with a common pattern must not false-match the runner's metadata sentinel."""
+    from enforcer.runner import RuleRunner
+    from enforcer.matchers.regex import RegexMatcher
+    meta_rule = Rule(
+        id="no-false-metadata",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(pattern=r"password\s*=")],
+        file_globs=["*"],
+        rule_type=RuleType.METADATA,
+    )
+    runner = RuleRunner([meta_rule], workspace=".", no_llm=True)
+    matches = runner.run_metadata_rules({})
+    assert matches == []
+
+
+def test_commit_msg_alignment_rule_exists():
+    """enforcer_config.py should have a commit-msg-aligns-with-changes rule."""
+    import sys
+    sys.path.insert(0, ".")
+    import enforcer_config
+    rule_ids = [r.id for r in enforcer_config.RULES]
+    assert "commit-msg-aligns-with-changes" in rule_ids
+
+
+def test_commit_msg_alignment_rule_uses_llm_matcher():
+    """The rule should use an LLMMatcher."""
+    import sys
+    sys.path.insert(0, ".")
+    import enforcer_config
+    from enforcer.matchers.llm_check import LLMMatcher
+    rule = next(r for r in enforcer_config.RULES if r.id == "commit-msg-aligns-with-changes")
+    assert isinstance(rule.matchers[0], LLMMatcher)
+
+
+def test_commit_msg_alignment_rule_is_metadata_type():
+    """The rule should be METADATA type (runs once, not per-file)."""
+    import sys
+    sys.path.insert(0, ".")
+    import enforcer_config
+    from enforcer.types import RuleType
+    rule = next(r for r in enforcer_config.RULES if r.id == "commit-msg-aligns-with-changes")
+    assert rule.rule_type == RuleType.METADATA
