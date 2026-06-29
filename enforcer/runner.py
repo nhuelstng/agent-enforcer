@@ -1,10 +1,8 @@
 """RuleRunner: applies rules to files, handles severity filtering and LLM consequence execution."""
 from __future__ import annotations
-from enforcer.types import Severity, Match, FileContext, RuleType
+from enforcer.types import Severity, Match, FileContext, RuleType, SEVERITY_RANK
 from enforcer.rule import Rule, _glob_match
 from enforcer.llm import LLMExecutor
-
-_SEVERITY_ORDER = {Severity.INFO: 0, Severity.WARN: 1, Severity.ERROR: 2}
 
 class RuleRunner:
     """Runs rules against files. Filters by severity, executes LLM consequences with shared context."""
@@ -30,7 +28,7 @@ class RuleRunner:
         for rule in self.content_rules:
             if not self._file_matches(file_ctx.path, rule):
                 continue
-            if _SEVERITY_ORDER.get(rule.severity, 0) < _SEVERITY_ORDER.get(self.min_severity, 0):
+            if SEVERITY_RANK.get(rule.severity, 0) < SEVERITY_RANK.get(self.min_severity, 0):
                 continue
             matches = rule.check(file_ctx, shared_ctx)
             if matches and rule.llm_consequence:
@@ -44,12 +42,13 @@ class RuleRunner:
         (branch name, commit message) via the matchers themselves. The fake
         FileContext carries the workspace path and a non-empty raw sentinel so
         matchers that gate on `file_ctx.raw` still fire."""
+        shared_ctx["__llm_enabled__"] = self.llm_executor.enabled
         all_matches: list[Match] = []
         for rule in self.metadata_rules:
-            if _SEVERITY_ORDER.get(rule.severity, 0) < _SEVERITY_ORDER.get(self.min_severity, 0):
+            if SEVERITY_RANK.get(rule.severity, 0) < SEVERITY_RANK.get(self.min_severity, 0):
                 continue
-            # ponytail: raw sentinel — AlwaysMatcher/RegexMatcher gate on truthy raw
-            fake_ctx = FileContext(path=self.workspace, raw="(metadata)")
+            # ponytail: sentinel deliberately uses a string unlikely to appear in any real regex pattern; avoids false matches from RegexMatcher scanning metadata rules
+            fake_ctx = FileContext(path=self.workspace, raw="__enforcer_sentinel__")
             matches = rule.check(fake_ctx, shared_ctx)
             if matches and rule.llm_consequence:
                 matches = self.llm_executor.execute(matches, rule.llm_consequence, fake_ctx, shared_ctx)
@@ -58,19 +57,45 @@ class RuleRunner:
 
     def run_cross_file_finalizers(self, shared_ctx: dict) -> list[Match]:
         """Call finalize_duplicates on any matcher with that method, after all files processed."""
+        from enforcer.combinators.core import _collect_finalizers
         all_matches: list[Match] = []
         for rule in self.content_rules:
-            if _SEVERITY_ORDER.get(rule.severity, 0) < _SEVERITY_ORDER.get(self.min_severity, 0):
+            if SEVERITY_RANK.get(rule.severity, 0) < SEVERITY_RANK.get(self.min_severity, 0):
                 continue
+            if rule.diff_only:
+                continue
+            finalizers: list = []
             for matcher in rule.matchers:
-                if hasattr(matcher, "finalize_duplicates"):
-                    matches = matcher.finalize_duplicates(shared_ctx)
-                    for m in matches:
-                        m.rule_id = rule.id
-                        m.severity = rule.severity
-                        m.fix_instruction = rule.fix_instruction
-                        m.message = rule._render_message(m)
-                    all_matches.extend(matches)
+                finalizers.extend(_collect_finalizers(matcher))
+            seen: set[int] = set()
+            unique_finalizers: list = []
+            for f in finalizers:
+                if id(f) in seen:
+                    continue
+                seen.add(id(f))
+                unique_finalizers.append(f)
+            for matcher in unique_finalizers:
+                matches = matcher.finalize_duplicates(shared_ctx)
+                filtered: list[Match] = []
+                for m in matches:
+                    if not any(_glob_match(m.file, g) for g in rule.file_globs):
+                        continue
+                    if any(_glob_match(m.file, g) for g in rule.exclude_globs):
+                        continue
+                    filtered.append(m)
+                for pred in rule.predicates:
+                    for m in filtered:
+                        for v in shared_ctx.values():
+                            if hasattr(v, "path") and v.path == m.file:
+                                m.file_ctx = v
+                                break
+                    filtered = [m for m in filtered if pred.test(m)]
+                for m in filtered:
+                    m.rule_id = rule.id
+                    m.severity = rule.severity
+                    m.fix_instruction = rule.fix_instruction
+                    m.message = rule._render_message(m)
+                all_matches.extend(filtered)
         return all_matches
 
     def _file_matches(self, path: str, rule: Rule) -> bool:
@@ -82,6 +107,7 @@ class RuleRunner:
 
     def run(self, file_contexts: list[FileContext], shared_ctx: dict) -> list[Match]:
         """Run rules against multiple files. Returns aggregated list of Match objects."""
+        shared_ctx["__llm_enabled__"] = self.llm_executor.enabled
         all_matches: list[Match] = []
         for ctx in file_contexts:
             matches = self.run_rules_for_file(ctx, shared_ctx)

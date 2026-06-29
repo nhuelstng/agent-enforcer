@@ -3,6 +3,8 @@ from enforcer import Severity, FileContext
 from enforcer.runner import RuleRunner
 from enforcer.matchers import RegexMatcher, LineCountMatcher
 from enforcer.rule import Rule
+from enforcer.types import SEVERITY_RANK
+import enforcer.runner as runner_module
 
 def test_runner_collects_all_matches():
     rules = [
@@ -83,3 +85,51 @@ def test_runner_filter_by_severity():
     matches = runner.run_rules_for_file(ctx, {})
     assert len(matches) == 1
     assert matches[0].rule_id == "err"
+
+def test_runner_uses_centralized_severity_rank():
+    assert not hasattr(runner_module, "_SEVERITY_ORDER")
+    from enforcer.types import SEVERITY_RANK as TYPES_RANK
+    assert runner_module.SEVERITY_RANK is TYPES_RANK
+
+
+def test_runner_sets_llm_enabled_flag_in_run():
+    """RuleRunner.run() should set shared_ctx["__llm_enabled__"] = executor.enabled."""
+    from enforcer.runner import RuleRunner
+    from enforcer.types import FileContext, Severity
+    from enforcer.matchers.always import AlwaysMatcher
+    from enforcer.rule import Rule
+
+    rule = Rule(id="x", severity=Severity.INFO, matchers=[AlwaysMatcher()], file_globs=["*"])
+    runner = RuleRunner([rule], workspace=".", no_llm=True)
+    shared = {}
+    runner.run([FileContext(path="foo.py", raw="x = 1")], shared)
+    assert shared.get("__llm_enabled__") is False
+
+
+def test_runner_sets_llm_enabled_flag_in_metadata_rules():
+    """RuleRunner.run_metadata_rules() should set shared_ctx["__llm_enabled__"] = executor.enabled."""
+    from enforcer.runner import RuleRunner
+    from enforcer.types import Severity, RuleType
+    from enforcer.matchers.always import AlwaysMatcher
+    from enforcer.rule import Rule
+
+    rule = Rule(id="m", severity=Severity.INFO, matchers=[AlwaysMatcher()],
+                file_globs=["*"], rule_type=RuleType.METADATA)
+    runner = RuleRunner([rule], workspace=".", no_llm=True)
+    shared = {}
+    runner.run_metadata_rules(shared)
+    assert shared.get("__llm_enabled__") is False
+
+
+def test_runner_sets_llm_enabled_true_when_not_disabled():
+    """When no_llm=False, __llm_enabled__ should be True."""
+    from enforcer.runner import RuleRunner
+    from enforcer.types import FileContext, Severity
+    from enforcer.matchers.always import AlwaysMatcher
+    from enforcer.rule import Rule
+
+    rule = Rule(id="x", severity=Severity.INFO, matchers=[AlwaysMatcher()], file_globs=["*"])
+    runner = RuleRunner([rule], workspace=".", no_llm=False)
+    shared = {}
+    runner.run([FileContext(path="foo.py", raw="x = 1")], shared)
+    assert shared.get("__llm_enabled__") is True
