@@ -78,3 +78,67 @@ def test_cli_config_path(runner, empty_config):
     with patch("enforcer.runner.RuleRunner.run_rules_for_file", return_value=[]):
         result = runner.invoke(cli, ["check", "--config", empty_config, "--paths", "x.ts"])
         assert result.exit_code == 0
+
+def test_staged_mode_sets_file_status(tmp_path, monkeypatch):
+    """Staged mode should populate FileContext.status from git diff --name-status."""
+    import subprocess
+    from click.testing import CliRunner
+    from enforcer.cli import cli
+
+    monkeypatch.chdir(tmp_path)
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=tmp_path, capture_output=True)
+
+    (tmp_path / "new.py").write_text("x = 1\n")
+    subprocess.run(["git", "add", "new.py"], cwd=tmp_path, capture_output=True)
+
+    config = """
+from enforcer import Rule, Severity
+from enforcer.matchers import AlwaysMatcher
+RULES = [Rule(id="status-test", severity=Severity.INFO, matchers=[AlwaysMatcher()], file_globs=["*"])]
+WORKSPACE = "."
+SEVERITY_ACTIONS = {}
+LLM_CONFIG = {}
+"""
+    (tmp_path / "enforcer_config.py").write_text(config)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["check", "--staged", "--no-llm", "--config", "enforcer_config.py"])
+    assert result.exit_code == 0
+
+
+def test_base_ref_mode_sets_file_status(tmp_path, monkeypatch):
+    """--base-ref mode should populate FileContext.status."""
+    import subprocess
+    from click.testing import CliRunner
+    from enforcer.cli import cli
+
+    monkeypatch.chdir(tmp_path)
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "checkout", "-b", "master"], cwd=tmp_path, capture_output=True)
+
+    (tmp_path / "base.py").write_text("x = 1\n")
+    subprocess.run(["git", "add", "base.py"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+
+    subprocess.run(["git", "checkout", "-b", "feature/test"], cwd=tmp_path, capture_output=True)
+    (tmp_path / "new.py").write_text("x = 2\n")
+    subprocess.run(["git", "add", "new.py"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "feat: add new"], cwd=tmp_path, capture_output=True)
+
+    config = """
+from enforcer import Rule, Severity
+from enforcer.matchers import AlwaysMatcher
+RULES = [Rule(id="status-test", severity=Severity.INFO, matchers=[AlwaysMatcher()], file_globs=["*"])]
+WORKSPACE = "."
+SEVERITY_ACTIONS = {}
+LLM_CONFIG = {}
+"""
+    (tmp_path / "enforcer_config.py").write_text(config)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["check", "--base-ref", "master", "--no-llm", "--config", "enforcer_config.py"])
+    assert result.exit_code == 0
