@@ -129,7 +129,7 @@ class TestLLMDedup:
         consequence = LLMConsequence(provider="test", model="test", prompt="check")
 
         executor = LLMExecutor(enabled=True)
-        with patch.object(executor, "_call_llm", return_value="response") as mock_call:
+        with patch("enforcer.llm.call_llm", return_value="response") as mock_call:
             result = executor.execute(matches, consequence, ctx)
         assert mock_call.call_count == 1
         assert all(m.llm_response == "response" for m in result)
