@@ -75,6 +75,8 @@ class Reporter:
         return json.dumps({"summary": summary, "issues": issues}, indent=2)
 
     def _render_text(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> str:
+        if confirm_warnings:
+            matches = [m for m in matches if m.severity == Severity.ERROR]
         if not matches:
             return "No issues found.\n"
         lines = []
