@@ -36,6 +36,7 @@ def check_conventions(paths: list[str] | None = None, format: str = "json") -> s
 
     change_ctx = _build_change_context(ws, status_map)
     shared_ctx["__change__"] = change_ctx
+    shared_ctx["__llm_enabled__"] = runner.llm_executor.enabled
 
     all_matches = _run_checks(
         runner, builder, file_list, shared_ctx, ws,

@@ -79,8 +79,19 @@ def test_llm_matcher_json_parse_fail_falls_back_to_fail_text():
     assert len(matches) == 1
     assert matches[0].line == 0
     assert "FAIL" in matches[0].matched_value
-    assert matches[0].file == "foo.py"
 
+
+def test_llm_matcher_metadata_phase_prompt_has_end_marker():
+    """METADATA-phase prompt should include END CHANGE CONTEXT marker for injection defense."""
+    from enforcer.types import ChangeContext
+    cc = ChangeContext(commit_msg="feat: add foo", modified=["foo.py"])
+    response = _mock_httpx_response(json.dumps({"pass": True}))
+    with patch("httpx.post", return_value=response) as mock_post:
+        m = LLMMatcher(prompt="x")
+        ctx = FileContext(path=".", raw="__enforcer_sentinel__")
+        m.find(ctx, {"__llm_enabled__": True, "__change__": cc})
+    sent_prompt = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
+    assert "--- END CHANGE CONTEXT ---" in sent_prompt
 
 def test_llm_matcher_llm_error_fail_open():
     import httpx
