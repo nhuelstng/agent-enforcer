@@ -14,7 +14,7 @@ from enforcer.ignore import load_enforcerignore, is_ignored
 def _config_path() -> str:
     return os.environ.get("ENFORCER_CONFIG", "enforcer_config.py")
 
-def check_conventions(paths: list[str] | None = None, format: str = "json") -> str:
+def check_conventions(paths: list[str] | None = None, format: str = "json", no_llm: bool = False) -> str:
     """Run convention checks. Returns formatted output."""
     config = load_config(_config_path())
     ws = config.workspace
@@ -30,7 +30,7 @@ def check_conventions(paths: list[str] | None = None, format: str = "json") -> s
     if ignore_patterns:
         file_list = [f for f in file_list if not is_ignored(f, ignore_patterns)]
 
-    runner = RuleRunner(config.rules, workspace=ws, no_llm=False, llm_config=config.llm_config)
+    runner = RuleRunner(config.rules, workspace=ws, no_llm=no_llm, llm_config=config.llm_config)
     builder = FileContextBuilder(config.rules, workspace=ws)
     shared_ctx = _build_shared_ctx(config, builder, ws)
 
@@ -55,7 +55,7 @@ def list_conventions() -> str:
     config = load_config(_config_path())
     return render_rules_markdown(config.rules)
 
-def verify_fix(path: str, rule_id: str, format: str = "json") -> str:
+def verify_fix(path: str, rule_id: str, format: str = "json", no_llm: bool = False) -> str:
     """Re-check a single rule on a single file. Returns formatted output."""
     config = load_config(_config_path())
     ws = config.workspace
@@ -64,7 +64,7 @@ def verify_fix(path: str, rule_id: str, format: str = "json") -> str:
     if not rule:
         return json.dumps({"summary": {"total": 0, "errors": 0, "warnings": 0, "info": 0}, "issues": []})
 
-    runner = RuleRunner(config.rules, workspace=ws, no_llm=False, llm_config=config.llm_config)
+    runner = RuleRunner(config.rules, workspace=ws, no_llm=no_llm, llm_config=config.llm_config)
     builder = FileContextBuilder(config.rules, workspace=ws)
     shared_ctx = _build_shared_ctx(config, builder, ws)
 
