@@ -10,13 +10,13 @@ class Reporter:
     def __init__(self, format: str = "text"):
         self.format = format
 
-    def render(self, matches: list[Match], severity_actions: dict | None = None) -> str:
+    def render(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> str:
         """Format matches according to self.format (text/json/sarif)."""
         if self.format == "json":
             return self._render_json(matches)
         if self.format == "sarif":
             return self._render_sarif(matches)
-        return self._render_text(matches, severity_actions)
+        return self._render_text(matches, severity_actions, confirm_warnings)
 
     def _render_sarif(self, matches: list[Match]) -> str:
         _SEV_TO_SARIF = {Severity.ERROR: "error", Severity.WARN: "warning", Severity.INFO: "note"}
@@ -74,7 +74,7 @@ class Reporter:
             issues.append(issue)
         return json.dumps({"summary": summary, "issues": issues}, indent=2)
 
-    def _render_text(self, matches: list[Match], severity_actions: dict | None = None) -> str:
+    def _render_text(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> str:
         if not matches:
             return "No issues found.\n"
         lines = []
@@ -97,7 +97,7 @@ class Reporter:
         errors_block = summary["errors"] > 0
         if errors_block:
             lines.append(f"Summary: {summary['total']} issues ({summary['errors']} errors, {summary['warnings']} warnings, {summary['info']} info). Commit blocked.")
-        elif warnings_block:
+        elif warnings_block and not confirm_warnings:
             lines.append(f"Summary: {summary['total']} issues ({summary['errors']} errors, {summary['warnings']} warnings, {summary['info']} info). Commit blocked (warnings require confirmation).")
             lines.append("Acknowledge warnings and retry: ENFORCER_CONFIRM_WARNINGS=1 git commit ...")
         else:

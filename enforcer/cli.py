@@ -266,7 +266,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
             click.echo(f"Applied {total_fixes} fix(es) across {len(results)} file(s).", err=True)
 
     reporter = Reporter(format=fmt)
-    output_text = reporter.render(all_matches, severity_actions=config.severity_actions)
+    output_text = reporter.render(all_matches, severity_actions=config.severity_actions, confirm_warnings=confirm_read_warnings)
     if output:
         _assert_output_contained(output, ws)
         with open(output, "w", encoding="utf-8") as f:
