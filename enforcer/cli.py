@@ -156,6 +156,8 @@ def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_re
 def _build_shared_ctx(config, builder, ws: str) -> dict:
     """Build shared context dict from rule read_targets."""
     shared_ctx: dict = {}
+    shared_ctx["__rules__"] = config.rules
+    shared_ctx["__workspace__"] = config.workspace or ws
     for rule in config.rules:
         for target in getattr(rule, "read_targets", []):
             if target in shared_ctx:
@@ -289,6 +291,23 @@ def docs(config_path, output):
         click.echo(f"Documentation written to {output}")
     else:
         click.echo(md)
+
+@cli.command(name="sync-doc")
+@click.option("--config", "config_path", default="enforcer_config.py")
+@click.option("--output", "-o", default="CONVENTIONS.md")
+def sync_doc(config_path, output):
+    """Regenerate the natural-language conventions doc from configured rules."""
+    from enforcer.docs import render_rules_doc
+
+    config = load_config(config_path)
+    fresh = render_rules_doc(config.rules, workspace=config.workspace)
+
+    ws = config.workspace
+    if not ws or ws == ".":
+        ws = str(Path(config_path).resolve().parent)
+    _assert_output_contained(output, ws)
+    Path(output).write_text(fresh, encoding="utf-8")
+    click.echo(f"Wrote {output}")
 
 @cli.command()
 @click.option("--force", is_flag=True, help="Overwrite existing hook")

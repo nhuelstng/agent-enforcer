@@ -142,3 +142,60 @@ LLM_CONFIG = {}
     runner = CliRunner()
     result = runner.invoke(cli, ["check", "--base-ref", "master", "--no-llm", "--config", "enforcer_config.py"])
     assert result.exit_code == 0
+
+
+def test_cli_sync_doc_writes_file(runner, empty_config, tmp_path):
+    config_with_rule = '''
+from enforcer import Rule, Severity
+from enforcer.matchers import RegexMatcher
+RULES = [Rule(id="test-rule", severity=Severity.ERROR, matchers=[RegexMatcher(r"print")], file_globs=["*.py"], message="No print.", fix_instruction="Remove it.", rationale="Print is bad.")]
+WORKSPACE = "."
+'''
+    config_file = tmp_path / "enforcer_config.py"
+    config_file.write_text(config_with_rule)
+    output_file = tmp_path / "OUT.md"
+    result = runner.invoke(cli, ["sync-doc", "--config", str(config_file), "-o", str(output_file)])
+    assert result.exit_code == 0
+    content = output_file.read_text()
+    assert "# Conventions" in content
+    assert "### test-rule" in content
+    assert "**Why:**" in content
+    assert "Print is bad." in content
+
+
+def test_cli_sync_doc_default_output(runner, empty_config, tmp_path):
+    import os
+    monkeypatch_dir = tmp_path
+    config_file = monkeypatch_dir / "enforcer_config.py"
+    config_file.write_text('''
+from enforcer import Rule, Severity
+RULES = []
+WORKSPACE = "."
+''')
+    cwd = os.getcwd()
+    os.chdir(str(monkeypatch_dir))
+    try:
+        result = runner.invoke(cli, ["sync-doc", "--config", str(config_file)])
+        assert result.exit_code == 0
+        assert (monkeypatch_dir / "CONVENTIONS.md").exists()
+    finally:
+        os.chdir(cwd)
+
+
+def test_build_shared_ctx_stashes_rules():
+    """_build_shared_ctx must stash __rules__ and __workspace__."""
+    from enforcer.cli import _build_shared_ctx
+    from enforcer.config import Config
+    from enforcer.context import FileContextBuilder
+    from enforcer import Rule, Severity
+
+    config = Config(
+        rules=[Rule(id="x", severity=Severity.ERROR, matchers=[], file_globs=["*.py"])],
+        workspace="/tmp/test",
+    )
+    builder = FileContextBuilder(config.rules, workspace="/tmp/test")
+    ctx = _build_shared_ctx(config, builder, "/tmp/test")
+    assert "__rules__" in ctx
+    assert len(ctx["__rules__"]) == 1
+    assert ctx["__rules__"][0].id == "x"
+    assert "__workspace__" in ctx
