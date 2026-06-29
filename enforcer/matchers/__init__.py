@@ -16,6 +16,7 @@ from enforcer.matchers.commit_message import CommitMessageMatcher
 from enforcer.matchers.naming_convention import NamingConventionMatcher
 from enforcer.matchers.duplicate_code import DuplicateCodeMatcher
 from enforcer.matchers.docstring import DocstringMatcher
+from enforcer.matchers.llm_check import LLMMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -35,4 +36,5 @@ __all__ = [
     "NamingConventionMatcher",
     "DuplicateCodeMatcher",
     "DocstringMatcher",
+    "LLMMatcher",
 ]
