@@ -13,4 +13,4 @@ class AlwaysMatcher:
         """Always emit one match for the file. Returns list of Match."""
         if file_ctx.raw is None:
             return []
-        return [Match(file=file_ctx.path, line=1, matched_value=self.matched_value)]
+        return [Match(file=file_ctx.path, line=0, matched_value=self.matched_value)]
