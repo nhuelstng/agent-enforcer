@@ -260,7 +260,7 @@ Rule(
 
 ## Example config
 
-See [enforcer_config.py](enforcer_config.py) for a real working example — this repo enforces its own conventions with 22 rules (15 ERROR for style/correctness + 7 WARN for critical-component reminders, including LLM-analyzed README length).
+See [enforcer_config.py](enforcer_config.py) for a real working example — this repo enforces its own conventions with 26 rules (19 ERROR for style/correctness + 7 WARN for critical-component reminders, including LLM-analyzed README length).
 
 ## CI integration (GitHub Actions)
 
@@ -268,8 +268,8 @@ This repo includes a composite action and workflow for CI. Two scan modes:
 
 | Event | Scope |
 |-------|-------|
-| Push to feature/fix/refactor/docs/chore branch | Changed files only (diff against `origin/master`) |
-| Push to master or PR targeting master | Full repo scan |
+| Push to feature/fix/refactor/docs/chore branch | Changed files only (diff against `origin/main`) |
+| Push to main or PR targeting main | Full repo scan |
 
 The workflow lives at `.github/workflows/enforcer.yml`. The composite action at `.github/actions/enforcer/action.yml` accepts:
 
@@ -283,22 +283,16 @@ The workflow lives at `.github/workflows/enforcer.yml`. The composite action at 
 ### Cross-org usage
 
 ```yaml
-- uses: your-org/pre-commit-agent-enforcer/.github/actions/enforcer@master
+- uses: your-org/pre-commit-agent-enforcer/.github/actions/enforcer@main
   with:
     install-method: pip
     token: ${{ secrets.ENFORCER_PAT }}
-    base-ref: origin/master
+    base-ref: origin/main
 ```
 
 The PAT needs `contents:read` on the enforcer repo. The consuming repo needs `security-events: write` permission for SARIF upload.
 
 ## Running tests
-
-```bash
-pytest
-```
-
-With coverage:
 
 ```bash
 pytest --cov=enforcer
