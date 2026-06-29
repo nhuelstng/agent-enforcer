@@ -17,6 +17,7 @@ from enforcer.matchers.naming_convention import NamingConventionMatcher
 from enforcer.matchers.duplicate_code import DuplicateCodeMatcher
 from enforcer.matchers.docstring import DocstringMatcher
 from enforcer.matchers.llm_check import LLMMatcher
+from enforcer.matchers.doc_sync import DocSyncMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -37,4 +38,5 @@ __all__ = [
     "DuplicateCodeMatcher",
     "DocstringMatcher",
     "LLMMatcher",
+    "DocSyncMatcher",
 ]
