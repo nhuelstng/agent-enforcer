@@ -1,8 +1,12 @@
 """Tests for LLMMatcher: LLM-as-check matcher with structured JSON output and text fallback."""
 import json
 from unittest.mock import Mock, patch
-from enforcer.types import FileContext, Needs
+from enforcer.types import FileContext, Needs, LLMConfig, ProviderConfig
 from enforcer.matchers.llm_check import LLMMatcher
+
+_LLM_CFG = LLMConfig(default_provider="test", default_model="test-model", providers={
+    "test": ProviderConfig(base_url="http://localhost/v1", token_env="", headers={}),
+})
 
 
 def _mock_httpx_response(content: str):
@@ -16,7 +20,7 @@ def test_llm_matcher_pass_returns_no_match():
     with patch("httpx.post", return_value=response):
         m = LLMMatcher(prompt="Is this code good?")
         ctx = FileContext(path="foo.py", raw="x = 1\n")
-        matches = m.find(ctx, {"__llm_enabled__": True})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert matches == []
 
 
@@ -29,7 +33,7 @@ def test_llm_matcher_fail_json_returns_structured_matches():
     with patch("httpx.post", return_value=response):
         m = LLMMatcher(prompt="Check conventions")
         ctx = FileContext(path="foo.py", raw="x = 1\n")
-        matches = m.find(ctx, {"__llm_enabled__": True})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert len(matches) == 2
     assert matches[0].file == "foo.py"
     assert matches[0].line == 3
@@ -44,7 +48,7 @@ def test_llm_matcher_json_missing_file_defaults_to_ctx_path():
     with patch("httpx.post", return_value=response):
         m = LLMMatcher(prompt="x")
         ctx = FileContext(path="ctx.py", raw="x = 1\n")
-        matches = m.find(ctx, {"__llm_enabled__": True})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert len(matches) == 1
     assert matches[0].file == "ctx.py"
     assert matches[0].line == 5
@@ -56,7 +60,7 @@ def test_llm_matcher_json_missing_line_defaults_to_zero():
     with patch("httpx.post", return_value=response):
         m = LLMMatcher(prompt="x")
         ctx = FileContext(path="foo.py", raw="x = 1\n")
-        matches = m.find(ctx, {"__llm_enabled__": True})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert len(matches) == 1
     assert matches[0].line == 0
 
@@ -66,7 +70,7 @@ def test_llm_matcher_json_parse_fail_falls_back_to_pass_text():
     with patch("httpx.post", return_value=response):
         m = LLMMatcher(prompt="x")
         ctx = FileContext(path="foo.py", raw="x = 1\n")
-        matches = m.find(ctx, {"__llm_enabled__": True})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert matches == []
 
 
@@ -75,7 +79,7 @@ def test_llm_matcher_json_parse_fail_falls_back_to_fail_text():
     with patch("httpx.post", return_value=response):
         m = LLMMatcher(prompt="x")
         ctx = FileContext(path="foo.py", raw="x = 1\n")
-        matches = m.find(ctx, {"__llm_enabled__": True})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert len(matches) == 1
     assert matches[0].line == 0
     assert "FAIL" in matches[0].matched_value
@@ -89,7 +93,7 @@ def test_llm_matcher_metadata_phase_prompt_has_end_marker():
     with patch("httpx.post", return_value=response) as mock_post:
         m = LLMMatcher(prompt="x")
         ctx = FileContext(path=".", raw="__enforcer_sentinel__")
-        m.find(ctx, {"__llm_enabled__": True, "__change__": cc})
+        m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG, "__change__": cc})
     sent_prompt = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
     assert "--- END CHANGE CONTEXT ---" in sent_prompt
 
@@ -98,7 +102,7 @@ def test_llm_matcher_llm_error_fail_open():
     with patch("httpx.post", side_effect=httpx.TimeoutException("timeout")):
         m = LLMMatcher(prompt="x", timeout=1)
         ctx = FileContext(path="foo.py", raw="x = 1\n")
-        matches = m.find(ctx, {"__llm_enabled__": True})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert matches == []
 
 
@@ -106,7 +110,7 @@ def test_llm_matcher_disabled_when_llm_not_enabled():
     with patch("httpx.post") as mock_post:
         m = LLMMatcher(prompt="x")
         ctx = FileContext(path="foo.py", raw="x = 1\n")
-        matches = m.find(ctx, {"__llm_enabled__": False})
+        matches = m.find(ctx, {"__llm_enabled__": False, "__llm_config__": _LLM_CFG})
     assert matches == []
     mock_post.assert_not_called()
 
@@ -115,9 +119,9 @@ def test_llm_matcher_no_shared_ctx_still_works():
     """Matcher called standalone (shared_ctx=None) should not crash — defaults to enabled."""
     response = _mock_httpx_response(json.dumps({"pass": True}))
     with patch("httpx.post", return_value=response):
-        m = LLMMatcher(prompt="x")
+        m = LLMMatcher(prompt="x", provider="test", model="test-model")
         ctx = FileContext(path="foo.py", raw="x = 1\n")
-        matches = m.find(ctx, None)
+        matches = m.find(ctx, {"__llm_config__": _LLM_CFG})
     assert matches == []
 
 
@@ -129,7 +133,7 @@ def test_llm_matcher_metadata_phase_uses_change_context():
     with patch("httpx.post", return_value=response) as mock_post:
         m = LLMMatcher(prompt="Does commit msg align with changes?")
         ctx = FileContext(path=".", raw="__enforcer_sentinel__")
-        matches = m.find(ctx, {"__llm_enabled__": True, "__change__": cc})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG, "__change__": cc})
     assert matches == []
     # Verify the prompt sent to LLM includes the commit message
     call_args = mock_post.call_args
@@ -141,7 +145,7 @@ def test_llm_matcher_metadata_phase_no_change_context_returns_empty():
     """METADATA phase without ChangeContext — nothing to check."""
     ctx = FileContext(path=".", raw="__enforcer_sentinel__")
     m = LLMMatcher(prompt="x")
-    matches = m.find(ctx, {"__llm_enabled__": True})
+    matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert matches == []
 
 
@@ -158,7 +162,7 @@ def test_llm_matcher_metadata_phase_fail_returns_match():
     with patch("httpx.post", return_value=response):
         m = LLMMatcher(prompt="x")
         ctx = FileContext(path=".", raw="__enforcer_sentinel__")
-        matches = m.find(ctx, {"__llm_enabled__": True, "__change__": cc})
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG, "__change__": cc})
     assert len(matches) == 1
     assert matches[0].line == 0
     assert "FAIL" in matches[0].matched_value

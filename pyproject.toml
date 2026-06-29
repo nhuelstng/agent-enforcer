@@ -26,9 +26,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/niclashulsmann/pre-commit-agent-enforcer"
-Repository = "https://github.com/niclashulsmann/pre-commit-agent-enforcer"
-Issues = "https://github.com/niclashulsmann/pre-commit-agent-enforcer/issues"
+Homepage = "https://github.com/nhuelstng/agent-enforcer"
+Repository = "https://github.com/nhuelstng/agent-enforcer"
+Issues = "https://github.com/nhuelstng/agent-enforcer/issues"
 
 [project.optional-dependencies]
 dev = [

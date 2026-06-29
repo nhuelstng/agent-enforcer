@@ -64,11 +64,39 @@ class FileContext:
 
 @dataclass
 class LLMConsequence:
-    """Declares an LLM review that fires when a rule's deterministic check fails. One call per file+consequence."""
-    provider: str
-    model: str
+    """Declares an LLM review that fires when a rule's deterministic check fails. One call per file+consequence.
+
+    provider/model default to None — resolved from LLMConfig.default_provider/default_model.
+    Override per-rule when a specific model is needed."""
     prompt: str
+    provider: str | None = None
+    model: str | None = None
     timeout: int = 30
+
+
+@dataclass
+class ProviderConfig:
+    """Configuration for a single LLM provider. All providers use OpenAI-compatible chat-completions API.
+
+    token_env names the env var holding the API key (empty = no auth, e.g. local Ollama).
+    headers values may contain '{token}' placeholder — resolved at call time."""
+    base_url: str = ""
+    token_env: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class LLMConfig:
+    """Global LLM configuration. Set once at top of enforcer_config.py, inherited by all rules unless overridden.
+
+    default_provider/default_model: used when LLMConsequence/LLMMatcher omit provider/model.
+    providers: overrides/additions for DEFAULT_PROVIDERS in llm.py. Add custom providers here.
+    concurrency/timeout: tuning for LLMExecutor."""
+    default_provider: str = "custom"
+    default_model: str = ""
+    concurrency: int = 5
+    timeout: int = 30
+    providers: dict[str, ProviderConfig] = field(default_factory=dict)
 
 
 @dataclass

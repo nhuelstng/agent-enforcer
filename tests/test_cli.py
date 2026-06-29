@@ -94,12 +94,12 @@ def test_staged_mode_sets_file_status(tmp_path, monkeypatch):
     subprocess.run(["git", "add", "new.py"], cwd=tmp_path, capture_output=True)
 
     config = """
-from enforcer import Rule, Severity
+from enforcer import Rule, Severity, LLMConfig
 from enforcer.matchers import AlwaysMatcher
 RULES = [Rule(id="status-test", severity=Severity.INFO, matchers=[AlwaysMatcher()], file_globs=["*"])]
 WORKSPACE = "."
 SEVERITY_ACTIONS = {}
-LLM_CONFIG = {}
+LLM_CONFIG = LLMConfig()
 """
     (tmp_path / "enforcer_config.py").write_text(config)
 
@@ -130,12 +130,12 @@ def test_base_ref_mode_sets_file_status(tmp_path, monkeypatch):
     subprocess.run(["git", "commit", "-m", "feat: add new"], cwd=tmp_path, capture_output=True)
 
     config = """
-from enforcer import Rule, Severity
+from enforcer import Rule, Severity, LLMConfig
 from enforcer.matchers import AlwaysMatcher
 RULES = [Rule(id="status-test", severity=Severity.INFO, matchers=[AlwaysMatcher()], file_globs=["*"])]
 WORKSPACE = "."
 SEVERITY_ACTIONS = {}
-LLM_CONFIG = {}
+LLM_CONFIG = LLMConfig()
 """
     (tmp_path / "enforcer_config.py").write_text(config)
 

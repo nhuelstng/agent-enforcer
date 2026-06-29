@@ -20,6 +20,8 @@ from enforcer import (
     Severity,
     RuleType,
     LLMConsequence,
+    LLMConfig,
+    ProviderConfig,
 )
 from enforcer.matchers import (
     RegexMatcher,
@@ -283,8 +285,6 @@ RULES = [
         message="README.md has {matched_value} lines (max 300). LLM analyzed what doesn't belong.",
         fix_instruction="Remove or trim the sections flagged by the LLM response below.",
         llm_consequence=LLMConsequence(
-            provider="custom",
-            model="zai-org/GLM-5.1-FP8",
             prompt="You are reviewing a README.md that exceeds 300 lines. Identify the specific sections that don't belong in a README and make it too long. For each section, explain why it should be removed or trimmed. Be concrete — reference section headings and line ranges. Common bloat: full install logs, API reference dumps, changelogs, verbose examples, duplicated content.",
             timeout=300,
         ),
@@ -297,7 +297,6 @@ RULES = [
         severity=Severity.WARN,
         matchers=[LLMMatcher(
             prompt="Given the commit message and the modified file list, does the message accurately describe these changes? Lenient — sanity check only, not a full audit.",
-            model="zai-org/GLM-5.1-FP8",
             timeout=30,
         )],
         file_globs=["*"],
@@ -390,7 +389,8 @@ RULES = [
         id="conventions-md-stale",
         severity=Severity.ERROR,
         matchers=[DocSyncMatcher(config_path="enforcer_config.py", doc_path="CONVENTIONS.md")],
-        file_globs=["enforcer_config.py", "CONVENTIONS.md"],
+        file_globs=["*"],
+        rule_type=RuleType.METADATA,
         message="CONVENTIONS.md is stale or missing. Regenerate after changing rules.",
         fix_instruction="Run: enforcer sync-doc",
         rationale="A stale conventions doc misleads agents — they follow rules that no longer match the actual config. The doc must be regenerated whenever RULES changes, and direct edits to CONVENTIONS.md must not drift it from the config.",
@@ -403,7 +403,14 @@ SEVERITY_ACTIONS = {
     Severity.INFO: "hint",
 }
 
-LLM_CONFIG = {
-    "concurrency": 3,
-    "timeout": 45,
-}
+LLM_CONFIG = LLMConfig(
+    default_provider="custom",
+    default_model="zai-org/GLM-5.1-FP8",
+    concurrency=3,
+    timeout=45,
+    # Provider overrides/additions go here. Built-ins: custom, openai, anthropic, ollama, groq, mistral, deepseek.
+    # See enforcer/llm.py DEFAULT_PROVIDERS for defaults. Override base_url, token_env, headers as needed.
+    # providers={
+    #     "my-private-llm": ProviderConfig(base_url="https://llm.internal/v1", token_env="LLM_TOKEN", headers={"Authorization": "Bearer {token}"}),
+    # },
+)

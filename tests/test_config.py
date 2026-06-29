@@ -60,9 +60,10 @@ RULES = []
     assert config.workspace == "."
 
 def test_config_llm_config():
+    from enforcer.types import LLMConfig
     config_content = '''
-from enforcer import Rule, Severity
-LLM_CONFIG = {"concurrency": 3, "timeout": 60}
+from enforcer import Rule, Severity, LLMConfig
+LLM_CONFIG = LLMConfig(concurrency=3, timeout=60)
 RULES = []
 '''
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -70,4 +71,25 @@ RULES = []
         f.flush()
         config = load_config(f.name)
 
-    assert config.llm_config["concurrency"] == 3
+    assert isinstance(config.llm_config, LLMConfig)
+    assert config.llm_config.concurrency == 3
+    assert config.llm_config.timeout == 60
+
+
+def test_config_llm_config_dict_coerced():
+    """Dict-style LLM_CONFIG is coerced into LLMConfig object."""
+    from enforcer.types import LLMConfig
+    config_content = '''
+from enforcer import Rule, Severity
+LLM_CONFIG = {"concurrency": 2, "timeout": 90, "default_provider": "openai", "default_model": "gpt-4o"}
+RULES = []
+'''
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(config_content)
+        f.flush()
+        config = load_config(f.name)
+
+    assert isinstance(config.llm_config, LLMConfig)
+    assert config.llm_config.concurrency == 2
+    assert config.llm_config.default_provider == "openai"
+    assert config.llm_config.default_model == "gpt-4o"

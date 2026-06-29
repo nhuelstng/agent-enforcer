@@ -1,6 +1,7 @@
 import json
 from unittest.mock import patch, MagicMock
 from enforcer.mcp_server import check_conventions, list_conventions, verify_fix, run_mcp_server
+from enforcer.types import LLMConfig
 
 
 def test_list_conventions_returns_markdown():
@@ -139,7 +140,7 @@ def test_verify_fix_respects_file_globs():
         config = MagicMock()
         config.workspace = tmp
         config.rules = [ts_rule]
-        config.llm_config = {"concurrency": 1, "timeout": 5}
+        config.llm_config = LLMConfig(concurrency=1, timeout=5)
         config.severity_actions = {}
         with patch("enforcer.mcp_server.load_config", return_value=config):
             result = json.loads(verify_fix(path="x.py", rule_id="ts-only-regex-test"))

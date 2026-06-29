@@ -247,6 +247,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     change_ctx = _build_change_context(ws, status_map)
     shared_ctx["__change__"] = change_ctx
     shared_ctx["__llm_enabled__"] = not no_llm
+    shared_ctx["__llm_config__"] = config.llm_config
 
     all_matches = _run_checks(runner, builder, file_list, shared_ctx, ws, staged,
                               diff_ref=base_ref, status_map=status_map)

@@ -157,23 +157,67 @@ def test_get_provider_config_custom_with_token(monkeypatch):
     monkeypatch.setenv("LLM_API_TOKEN", "tok123")
     from enforcer.llm import get_provider_config
     cfg = get_provider_config("custom")
-    assert cfg["baseURL"] == "https://example.invalid/v1"
-    assert cfg["headers"]["Authorization"] == "Bearer tok123"
-    assert cfg["headers"]["X-User-Agent"] == "enforcer"
+    assert cfg.base_url == "https://example.invalid/v1"
+    assert cfg.headers["Authorization"] == "Bearer tok123"
+    assert cfg.headers["X-User-Agent"] == "enforcer"
 
 
 def test_get_provider_config_custom_no_token(monkeypatch):
     monkeypatch.delenv("LLM_API_TOKEN", raising=False)
     from enforcer.llm import get_provider_config
     cfg = get_provider_config("custom")
-    assert "Authorization" not in cfg["headers"]
-    assert cfg["headers"]["X-User-Agent"] == "enforcer"
+    assert "Authorization" not in cfg.headers
+    assert cfg.headers["X-User-Agent"] == "enforcer"
 
 
-def test_get_provider_config_unknown_provider():
+def test_get_provider_config_openai_resolves_token(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     from enforcer.llm import get_provider_config
-    cfg = get_provider_config("unknown")
-    assert cfg["baseURL"] == "https://example.invalid/v1"
+    cfg = get_provider_config("openai")
+    assert cfg.base_url == "https://api.openai.com/v1"
+    assert cfg.headers["Authorization"] == "Bearer sk-test"
+
+
+def test_get_provider_config_ollama_no_auth(monkeypatch):
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    from enforcer.llm import get_provider_config
+    cfg = get_provider_config("ollama")
+    assert cfg.base_url == "http://localhost:11434/v1"
+    assert "Authorization" not in cfg.headers
+
+
+def test_get_provider_config_unknown_raises():
+    from enforcer.llm import get_provider_config
+    with pytest.raises(ValueError, match="Unknown LLM provider"):
+        get_provider_config("nonexistent")
+
+
+def test_get_provider_config_user_override(monkeypatch):
+    """User can override base_url via LLMConfig.providers."""
+    monkeypatch.setenv("MY_TOKEN", "custom-tok")
+    from enforcer.llm import get_provider_config
+    from enforcer.types import LLMConfig, ProviderConfig
+    cfg = get_provider_config("custom", LLMConfig(
+        providers={"custom": ProviderConfig(base_url="https://custom.example.com/v1", token_env="MY_TOKEN")},
+    ))
+    assert cfg.base_url == "https://custom.example.com/v1"
+    assert "Authorization" not in cfg.headers  # override drops default headers
+
+
+def test_get_provider_config_custom_provider(monkeypatch):
+    """User can add a brand-new provider via LLMConfig.providers."""
+    monkeypatch.setenv("INTERNAL_LLM_TOKEN", "secret")
+    from enforcer.llm import get_provider_config
+    from enforcer.types import LLMConfig, ProviderConfig
+    cfg = get_provider_config("my-llm", LLMConfig(
+        providers={"my-llm": ProviderConfig(
+            base_url="https://llm.internal/v1",
+            token_env="INTERNAL_LLM_TOKEN",
+            headers={"Authorization": "Bearer {token}"},
+        )},
+    ))
+    assert cfg.base_url == "https://llm.internal/v1"
+    assert cfg.headers["Authorization"] == "Bearer secret"
 
 
 def test_call_llm_module_function_success():

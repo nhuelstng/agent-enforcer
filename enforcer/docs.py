@@ -100,7 +100,7 @@ def _render_message_doc(rule: Rule) -> list[str]:
         msg = "(dynamic message)"
     else:
         msg = rule.message or ""
-    msg = re.sub(r"\{[a-zA-Z_][a-zA-Z0-9_]*\}", "", msg)
+    msg = re.sub(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", r"<\1>", msg)
     msg = re.sub(r"  +", " ", msg).strip()
     if not msg:
         return []

@@ -4,17 +4,7 @@ Deterministic convention enforcement for coding agents — a composable DSL, CLI
 
 ## Installation
 
-Editable install (development):
-
-```bash
-pip install -e .
-```
-
-Or install from the repo:
-
-```bash
-pip install .
-```
+Editable install (development): `pip install -e .` Or install from the repo: `pip install .`
 
 Optional extras:
 
@@ -41,7 +31,7 @@ enforcer install
 
 ## CLI
 
-All commands are exposed under the `enforcer` entry point.
+All commands under the `enforcer` entry point.
 
 ### `enforcer check`
 
@@ -71,27 +61,11 @@ enforcer check --staged --confirm-read-warnings
 
 ### `enforcer docs`
 
-Generate markdown documentation of all configured rules.
-
-| Flag | Description |
-|------|-------------|
-| `--output FILE` (`-o`) | Write to file instead of stdout. |
-
-```bash
-enforcer docs -o CONVENTIONS.md
-```
+Generate markdown documentation of all configured rules. `--output FILE` (`-o`) writes to file instead of stdout.
 
 ### `enforcer sync-doc`
 
-Generate the natural-language conventions markdown from configured rules. Includes rationale for each rule.
-
-| Flag | Description |
-|------|-------------|
-| `--output FILE` (`-o`) | Write to file (default: `CONVENTIONS.md`). |
-
-```bash
-enforcer sync-doc
-enforcer sync-doc -o CONVENTIONS.md
+Generate the natural-language conventions markdown from configured rules. Includes rationale for each rule. `--output FILE` (`-o`, default `CONVENTIONS.md`).
 ```
 
 ### `enforcer install`
@@ -133,9 +107,79 @@ Maps `Severity` to action: `block` (always blocks), `block_warn` (blocks unless 
 
 ### `LLM_CONFIG`
 
+Tunes LLM execution and provider registry. All providers use the OpenAI-compatible
+chat-completions API. Set once at the top of `enforcer_config.py` — rules inherit
+the defaults unless they override `provider`/`model`.
+
 ```python
-LLM_CONFIG = {"concurrency": 5, "timeout": 30}
+from enforcer import LLMConfig, ProviderConfig
+
+LLM_CONFIG = LLMConfig(
+    default_provider="openai",       # global default, used when rule doesn't override
+    default_model="gpt-4o",          # global default model
+    concurrency=3,
+    timeout=45,
+    # providers={...},  # override/add providers (see below)
+)
 ```
+
+```python
+# Uses LLM_CONFIG defaults:
+llm_consequence=LLMConsequence(prompt="Review this file for conventions.")
+
+# Override per-rule:
+llm_consequence=LLMConsequence(prompt="...", provider="anthropic", model="claude-3-5-sonnet-20241022")
+```
+
+#### Built-in providers
+
+| Provider | `provider=` | Token env var | Default base URL |
+|----------|-------------|--------------|------------------|
+| Custom | `"custom"` | `LLM_API_TOKEN` | `https://example.invalid/v1` |
+| OpenAI | `"openai"` | `OPENAI_API_KEY` | `https://api.openai.com/v1` |
+| Anthropic | `"anthropic"` | `ANTHROPIC_API_KEY` | `https://api.anthropic.com/v1` |
+| Ollama | `"ollama"` | _(none)_ | `http://localhost:11434/v1` |
+| Groq | `"groq"` | `GROQ_API_KEY` | `https://api.groq.com/openai/v1` |
+| Mistral | `"mistral"` | `MISTRAL_API_KEY` | `https://api.mistral.ai/v1` |
+| DeepSeek | `"deepseek"` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com/v1` |
+
+Reference a provider in `LLMConsequence` or `LLMMatcher`. Omit `provider`/`model` to use the global defaults. Set the token via env var — no code change needed.
+
+#### Custom providers
+
+Add via `LLMConfig.providers` — no source edits:
+
+```python
+LLM_CONFIG = LLMConfig(
+    default_provider="my-llm",
+    default_model="internal-model",
+    providers={
+        "my-llm": ProviderConfig(
+            base_url="https://llm.internal/v1",
+            token_env="INTERNAL_LLM_TOKEN",
+            headers={"Authorization": "Bearer {token}"},
+        ),
+    },
+)
+```
+
+Reference `provider="my-internal-llm"` in any rule. Override a built-in by reusing its key.
+
+#### LLM in CI/CD
+
+Store the token as a repo secret, map to env var in the step:
+
+```yaml
+- run: enforcer check --base-ref origin/main
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+Or skip LLM entirely with `--no-llm` (the composite action uses this by default).
+
+#### `--no-llm`
+
+Disables all LLM calls. `LLMConsequence` and `LLMMatcher` rules return no matches. Use in CI without secrets, or for fast local runs.
 
 ### `WORKSPACE`
 
@@ -198,65 +242,25 @@ Rule(
 
 ## Severity model
 
-The enforcer uses two severity levels with distinct semantics:
-
 | Severity | Action | Purpose |
 |----------|--------|---------|
-| `ERROR` | Always blocks commit | Style/correctness rules: naming, tests, complexity, docstrings, imports, secrets, print, bare except. Must fix before commit. |
-| `WARN` | Blocks unless `--confirm-read-warnings` | Critical-component reminders: fires when you touch files with broad blast radius (types.py, rule.py, runner.py, etc.). Tells you what to verify before acknowledging. |
+| `ERROR` | Always blocks commit | Style/correctness rules: naming, tests, complexity, docstrings, imports, secrets. Must fix before commit. |
+| `WARN` | Blocks unless `--confirm-read-warnings` | Critical-component reminders: fires when you touch files with broad blast radius (types.py, rule.py, runner.py, etc.). Tells you what to verify. |
 | `INFO` | Advisory, never blocks | Informational output. |
 
-### WARN as critical-component reminder
-
-WARN rules fire when you stage changes to files with broad blast radius (types.py, rule.py, runner.py, etc.). Each message tells you what tests to run. Acknowledge with `ENFORCER_CONFIRM_WARNINGS=1 git commit -m "..."`. See `enforcer install` for hook setup.
+Acknowledge WARNs with `ENFORCER_CONFIRM_WARNINGS=1 git commit -m "..."` or `enforcer check --confirm-read-warnings`. See `enforcer install` for hook setup.
 
 ## MCP server
 
-A minimal MCP server exposes the enforcer over JSON-RPC on stdio. Launch with:
-
-```bash
-python -m enforcer.mcp_server
-```
-
-Three tools are available:
-
-| Tool | Description |
-|------|-------------|
-| `check_conventions` | Check files for convention violations. Args: `paths` (optional list; defaults to staged files), `format` (`json` or `text`). |
-| `list_conventions` | Return all configured rules as markdown documentation. No args. |
-| `verify_fix` | Re-check a single rule on a single file after a fix. Args: `path` (required), `rule_id` (required), `format`. |
-
-The server reads one JSON-RPC message per line from stdin and writes one response per line to stdout. Supports `tools/list` and `tools/call`.
+A minimal MCP server exposes the enforcer over JSON-RPC on stdio. Launch with `python -m enforcer.mcp_server`. Three tools: `check_conventions` (args: `paths`, `format`), `list_conventions` (no args), `verify_fix` (args: `path`, `rule_id`, `format`). Supports `tools/list` and `tools/call`.
 
 ## Available matchers, combinators, predicates
 
-See the [API docs](enforcer/matchers/__init__.py) for the full catalog. Quick reference:
-
-- **Matchers:** `RegexMatcher`, `LineCountMatcher`, `FunctionComplexityMatcher`, `PairedFileMatcher`, `ImportMatcher`, `NamingConventionMatcher`, `DocstringMatcher`, `AlwaysMatcher`, and more.
-- **Combinators:** `AllOf`, `AnyOf`, `OneOf`, `Not`, `NoneOf`.
-- **Predicates:** `IntPredicate`, `StringLengthPredicate`, `StringMatchesPredicate`, `HasDecoratorPredicate`, `NodeNamePredicate`, plus `All`/`Any`/`NotP` combinators.
+See [`enforcer/matchers/__init__.py`](enforcer/matchers/__init__.py) for the full catalog. Quick reference: matchers (`RegexMatcher`, `LineCountMatcher`, `FunctionComplexityMatcher`, `PairedFileMatcher`, `ImportMatcher`, `NamingConventionMatcher`, `DocstringMatcher`, `AlwaysMatcher`, `LLMMatcher`, …), combinators (`AllOf`, `AnyOf`, `OneOf`, `Not`, `NoneOf`), predicates (`IntPredicate`, `StringLengthPredicate`, `StringMatchesPredicate`, `HasDecoratorPredicate`, `NodeNamePredicate`, plus `All`/`Any`/`NotP`).
 
 ## Recipe: Paired file (test coverage)
 
-Enforce that source files have paired test files:
-
-```python
-Rule(
-    id="test-paired",
-    severity=Severity.ERROR,
-    matchers=[PairedFileMatcher(
-        source_glob="backend/app/api/*.py",
-        derived_glob="backend/tests/integration/test_{stem}.py",
-        exclude_stems=["__init__", "router"],
-    )],
-    file_globs=["backend/app/api/*.py"],
-    diff_only=True,
-    message="No test paired with {file}",
-    fix_instruction="Create test_{stem}.py",
-)
-```
-
-`{stem}` = filename without extension. `{dir}` = parent directory name.
+Enforce that source files have paired test files via `PairedFileMatcher(source_glob=..., derived_glob="test_{stem}.py")`. See [`enforcer_config.py`](enforcer_config.py) for working examples.
 
 ## Example config
 
@@ -264,33 +268,21 @@ See [enforcer_config.py](enforcer_config.py) for a real working example — this
 
 ## CI integration (GitHub Actions)
 
-This repo includes a composite action and workflow for CI. Two scan modes:
+Composite action at `.github/actions/enforcer/action.yml`, workflow at `.github/workflows/enforcer.yml`. Two scan modes: feature-branch pushes diff against `origin/main`; pushes to main / PRs do a full scan.
 
-| Event | Scope |
-|-------|-------|
-| Push to feature/fix/refactor/docs/chore branch | Changed files only (diff against `origin/main`) |
-| Push to main or PR targeting main | Full repo scan |
-
-The workflow lives at `.github/workflows/enforcer.yml`. The composite action at `.github/actions/enforcer/action.yml` accepts:
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `install-method` | `pip` | `skip` \| `pip` \| `wheel` |
-| `base-ref` | `""` | Git ref to diff against. Empty = full scan |
-| `severity` | `error` | Minimum severity to report |
-| `token` | `github.token` | PAT for private repo cross-org checkout |
+Composite action inputs: `install-method` (`pip`|`wheel`|`skip`, default `pip`), `base-ref` (git ref, empty = full scan), `severity` (default `error`), `token` (default `github.token`; use a PAT for cross-org private repos).
 
 ### Cross-org usage
 
 ```yaml
-- uses: your-org/pre-commit-agent-enforcer/.github/actions/enforcer@main
+- uses: nhuelstng/agent-enforcer/.github/actions/enforcer@main
   with:
     install-method: pip
     token: ${{ secrets.ENFORCER_PAT }}
     base-ref: origin/main
 ```
 
-The PAT needs `contents:read` on the enforcer repo. The consuming repo needs `security-events: write` permission for SARIF upload.
+The PAT needs `contents:read` on the enforcer repo. The consuming repo needs `security-events: write` for SARIF upload.
 
 ## Running tests
 
