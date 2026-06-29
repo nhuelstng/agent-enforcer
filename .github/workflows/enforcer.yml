@@ -2,9 +2,10 @@ name: enforcer
 
 on:
   push:
-    branches: [master, "feature/**", "fix/**", "refactor/**", "docs/**", "chore/**"]
+    branches: [main, "feature/**", "fix/**", "refactor/**", "docs/**", "chore/**"]
   pull_request:
-    branches: [master]
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: enforcer-${{ github.ref }}
@@ -13,7 +14,7 @@ concurrency:
 jobs:
   changed:
     name: changed-files
-    if: github.event_name == 'push' && github.ref != 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,11 +31,11 @@ jobs:
       - uses: ./.github/actions/enforcer
         with:
           install-method: wheel
-          base-ref: origin/master
+          base-ref: origin/main
 
   full:
     name: full-scan
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
