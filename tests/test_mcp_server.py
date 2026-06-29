@@ -9,9 +9,21 @@ def test_list_conventions_returns_markdown():
 
 
 def test_verify_fix_returns_pass_or_fail():
-    result = json.loads(verify_fix(path="README.md", rule_id="max-lines-readme"))
+    result = json.loads(verify_fix(path="README.md", rule_id="readme-max-lines"))
     assert "summary" in result
     assert "issues" in result
+
+
+def test_verify_fix_diff_only_rule_fires():
+    import os
+    f = "enforcer/_test_vf.py"
+    with open(f, "w") as fh:
+        fh.write('print("hello")\n')
+    try:
+        result = json.loads(verify_fix(path=f, rule_id="no-print"))
+        assert result["summary"]["total"] > 0
+    finally:
+        os.unlink(f)
 
 
 def test_verify_fix_unknown_rule():
@@ -58,7 +70,8 @@ def test_run_mcp_server_unknown_tool():
             run_mcp_server()
     resp = json.loads(mock_out.getvalue().strip())
     assert resp["id"] == 3
-    assert "Unknown tool" in resp["result"]["content"][0]["text"]
+    assert resp["error"]["code"] == -32601
+    assert "bogus" in resp["error"]["message"]
 
 
 def test_run_mcp_server_invalid_json():
@@ -70,3 +83,64 @@ def test_run_mcp_server_invalid_json():
     resp = json.loads(mock_out.getvalue().strip())
     assert resp["id"] is None
     assert resp["error"]["code"] == -32603
+
+
+def test_run_mcp_server_error_no_leak():
+    """Exception details must not leak to client — generic message only."""
+    import io
+    leak_marker = "SECRET_INTERNAL_PATH_xyz"
+    with patch("enforcer.mcp_server._handle_tool_call",
+               side_effect=ValueError(leak_marker)):
+        req = '{"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "check_conventions", "arguments": {}}}\n'
+        with patch("sys.stdin", io.StringIO(req)):
+            with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+                run_mcp_server()
+    resp = json.loads(mock_out.getvalue().strip())
+    assert resp["id"] == 9
+    assert resp["error"]["code"] == -32603
+    assert leak_marker not in resp["error"]["message"]
+    assert "Traceback" not in resp["error"]["message"]
+
+
+def test_check_conventions_empty_paths_not_staged():
+    """paths=[] must NOT trigger staged mode (which calls git diff)."""
+    call_log: list = []
+
+    def fake_collect_files(staged, all_files, paths, ws, base_ref=None):
+        call_log.append({"staged": staged, "paths": paths})
+        return [], {}
+
+    with patch("enforcer.mcp_server._collect_files", side_effect=fake_collect_files), \
+         patch("enforcer.mcp_server._build_shared_ctx", return_value={}), \
+         patch("enforcer.mcp_server._run_checks", return_value=[]), \
+         patch("enforcer.mcp_server.RuleRunner"):
+        check_conventions(paths=[])
+    assert call_log, "collect_files must be called"
+    assert call_log[0]["staged"] is False, "paths=[] must not imply staged=True"
+
+
+def test_verify_fix_respects_file_globs():
+    """verify_fix on a rule with file_globs=['**/*.ts'] must return 0 matches for a .py file."""
+    from enforcer import Severity
+    from enforcer.rule import Rule
+    from enforcer.matchers import RegexMatcher
+    ts_rule = Rule(
+        id="ts-only-regex-test",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(r"console\.log")],
+        file_globs=["**/*.ts"],
+        message="ts only",
+    )
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as tmp:
+        py_file = os.path.join(tmp, "x.py")
+        with open(py_file, "w") as f:
+            f.write("console.log('leak')\n")
+        config = MagicMock()
+        config.workspace = tmp
+        config.rules = [ts_rule]
+        config.llm_config = {"concurrency": 1, "timeout": 5}
+        config.severity_actions = {}
+        with patch("enforcer.mcp_server.load_config", return_value=config):
+            result = json.loads(verify_fix(path="x.py", rule_id="ts-only-regex-test"))
+    assert result["summary"]["total"] == 0

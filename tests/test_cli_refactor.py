@@ -9,20 +9,20 @@ def test_collect_files_staged_empty():
     """Should return empty list when no files staged."""
     with patch("subprocess.check_output", return_value=b""):
         result = _collect_files(staged=True, all_files=False, paths=(), ws=".")
-        assert result == []
+        assert result == ([], {})
 
 
 def test_collect_files_staged_with_files():
     """Should return file list from git diff --cached."""
-    with patch("subprocess.check_output", return_value=b"file1.py\nfile2.py\n"):
+    with patch("subprocess.check_output", return_value=b"M\tfile1.py\nM\tfile2.py\n"):
         result = _collect_files(staged=True, all_files=False, paths=(), ws=".")
-        assert result == ["file1.py", "file2.py"]
+        assert result == (["file1.py", "file2.py"], {"file1.py": "modified", "file2.py": "modified"})
 
 
 def test_collect_files_paths():
     """Should return paths directly when paths provided."""
     result = _collect_files(staged=False, all_files=False, paths=("a.py", "b.py"), ws=".")
-    assert result == ["a.py", "b.py"]
+    assert result == (["a.py", "b.py"], {})
 
 
 def test_collect_files_all(tmp_path):
@@ -30,8 +30,10 @@ def test_collect_files_all(tmp_path):
     (tmp_path / "foo.py").write_text("x = 1")
     (tmp_path / "bar.py").write_text("x = 2")
     result = _collect_files(staged=False, all_files=True, paths=(), ws=str(tmp_path))
-    assert "foo.py" in result
-    assert "bar.py" in result
+    files, status_map = result
+    assert "foo.py" in files
+    assert "bar.py" in files
+    assert status_map == {}
 
 
 def test_run_checks_returns_matches():
@@ -54,15 +56,17 @@ def test_run_checks_returns_matches():
 
 
 def test_check_output_writes_file(tmp_path):
-    """--output should write results to file instead of stdout."""
+    """--output should write results to file inside workspace."""
     from click.testing import CliRunner
     from enforcer.cli import cli
-    outfile = tmp_path / "results.txt"
     runner = CliRunner()
-    result = runner.invoke(cli, ["check", "--paths", "nonexistent.py", "--output", str(outfile)])
-    assert result.exit_code == 0
-    assert outfile.exists()
-    assert "No issues found" in outfile.read_text()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        Path("enforcer_config.py").write_text("from enforcer import Rule, Severity\nRULES = []\nWORKSPACE = '.'\n")
+        outfile = "results.txt"
+        result = runner.invoke(cli, ["check", "--paths", "nonexistent.py", "--output", outfile])
+        assert result.exit_code == 0
+        assert Path(outfile).exists()
+        assert "No issues found" in Path(outfile).read_text()
 
 
 def test_parse_diff_changed_lines_with_ref():
@@ -88,11 +92,25 @@ def test_parse_diff_changed_lines_staged_no_ref():
         assert "--cached" in cmd
 
 
+def test_collect_files_staged_filters_blank_lines():
+    """Should drop empty entries when git output has blank lines mid-stream."""
+    with patch("subprocess.check_output", return_value=b"M\ta.py\n\nM\tb.py\n"):
+        result = _collect_files(staged=True, all_files=False, paths=(), ws=".")
+    assert result == (["a.py", "b.py"], {"a.py": "modified", "b.py": "modified"})
+
+
+def test_collect_files_base_ref_filters_blank_lines():
+    """Should drop empty entries when git diff base_ref output has blank lines."""
+    with patch("subprocess.check_output", return_value=b"M\ta.py\n\nM\tb.py\n"):
+        result = _collect_files(staged=False, all_files=False, paths=(), ws=".", base_ref="origin/master")
+    assert result == (["a.py", "b.py"], {"a.py": "modified", "b.py": "modified"})
+
+
 def test_collect_files_base_ref():
     """Should return file list from git diff <ref>...HEAD when base_ref provided."""
-    with patch("subprocess.check_output", return_value=b"changed.py\nother.py\n"):
+    with patch("subprocess.check_output", return_value=b"M\tchanged.py\nM\tother.py\n"):
         result = _collect_files(staged=False, all_files=False, paths=(), ws=".", base_ref="origin/master")
-        assert result == ["changed.py", "other.py"]
+    assert result == (["changed.py", "other.py"], {"changed.py": "modified", "other.py": "modified"})
 
 
 def test_run_checks_with_diff_ref():

@@ -129,20 +129,20 @@ def _build_change_context(ws: str, status_map: dict[str, str]) -> "ChangeContext
     )
 
 
-def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_ref: str | None = None) -> list[str]:
-    """Collect the list of files to check based on CLI mode."""
+def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_ref: str | None = None) -> tuple[list[str], dict[str, str]]:
+    """Collect the list of files to check based on CLI mode. Returns (file_list, status_map)."""
     if staged:
         result = subprocess.check_output(
-            ["git", "diff", "--cached", "--name-only"],
+            ["git", "diff", "--cached", "--name-status"],
             stderr=subprocess.DEVNULL, cwd=ws,
         )
-        return [f for f in result.decode().split("\n") if f.strip()]
+        return _parse_name_status(result.decode())
     if base_ref:
         result = subprocess.check_output(
-            ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+            ["git", "diff", "--name-status", f"{base_ref}...HEAD"],
             stderr=subprocess.DEVNULL, cwd=ws,
         )
-        return [f for f in result.decode().split("\n") if f.strip()]
+        return _parse_name_status(result.decode())
     if all_files:
         file_list = []
         for root, dirs, files in os.walk(ws):
@@ -150,8 +150,8 @@ def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_re
             for f in files:
                 rel = os.path.relpath(os.path.join(root, f), ws)
                 file_list.append(rel)
-        return file_list
-    return list(paths)
+        return file_list, {}
+    return list(paths), {}
 
 def _build_shared_ctx(config, builder, ws: str) -> dict:
     """Build shared context dict from rule read_targets."""
@@ -167,19 +167,27 @@ def _build_shared_ctx(config, builder, ws: str) -> dict:
                 shared_ctx.setdefault(target, target_ctx)
     return shared_ctx
 
-def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool, diff_ref: str | None = None) -> list:
+def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool,
+                diff_ref: str | None = None, status_map: dict[str, str] | None = None) -> list:
     """Run rules against each file, return aggregated matches."""
     import dataclasses
     from enforcer.types import Match
+    status_map = status_map or {}
     all_matches: list[Match] = []
     for f in file_list:
         if not f:
             continue
         ctx = builder.build(f)
+        status = status_map.get(f, "modified")
         if diff_ref is not None:
-            ctx = dataclasses.replace(ctx, changed_lines=_parse_diff_changed_lines(ws, f, ref=diff_ref))
+            ctx = dataclasses.replace(ctx, status=status,
+                                      changed_lines=_parse_diff_changed_lines(ws, f, ref=diff_ref))
         elif staged:
-            ctx = dataclasses.replace(ctx, changed_lines=_parse_diff_changed_lines(ws, f))
+            ctx = dataclasses.replace(ctx, status=status,
+                                      changed_lines=_parse_diff_changed_lines(ws, f))
+        else:
+            if status != "modified":
+                ctx = dataclasses.replace(ctx, status=status)
         matches = runner.run_rules_for_file(ctx, shared_ctx)
         all_matches.extend(matches)
     return all_matches
@@ -215,7 +223,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
         config.rules = [r for r in config.rules if r.id == rule_id]
     ws = workspace or config.workspace
 
-    file_list = _collect_files(staged, all_files, paths, ws, base_ref=base_ref)
+    file_list, status_map = _collect_files(staged, all_files, paths, ws, base_ref=base_ref)
 
     ignore_patterns = load_enforcerignore(ws) if not staged else []
     if ignore_patterns:
@@ -234,7 +242,11 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     builder = FileContextBuilder(config.rules, workspace=ws)
     shared_ctx = _build_shared_ctx(config, builder, ws)
 
-    all_matches = _run_checks(runner, builder, file_list, shared_ctx, ws, staged, diff_ref=base_ref)
+    change_ctx = _build_change_context(ws, status_map)
+    shared_ctx["__change__"] = change_ctx
+
+    all_matches = _run_checks(runner, builder, file_list, shared_ctx, ws, staged,
+                              diff_ref=base_ref, status_map=status_map)
 
     meta_matches = runner.run_metadata_rules(shared_ctx)
     all_matches.extend(meta_matches)
