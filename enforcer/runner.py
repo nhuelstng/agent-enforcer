@@ -1,6 +1,6 @@
 """RuleRunner: applies rules to files, handles severity filtering and LLM consequence execution."""
 from __future__ import annotations
-from enforcer.types import Severity, Match, FileContext, RuleType, SEVERITY_RANK
+from enforcer.types import Severity, Match, FileContext, RuleType, SEVERITY_RANK, LLMConfig
 from enforcer.rule import Rule, _glob_match
 from enforcer.llm import LLMExecutor
 
@@ -8,18 +8,20 @@ class RuleRunner:
     """Runs rules against files. Filters by severity, executes LLM consequences with shared context."""
     def __init__(self, rules: list[Rule], workspace: str = ".",
                  no_llm: bool = False, min_severity: Severity = Severity.INFO,
-                 llm_config: dict | None = None):
+                 llm_config: LLMConfig | None = None):
         self.rules = rules
         self.workspace = workspace
         self.min_severity = min_severity
         # ponytail: split once at construction — O(n), avoids filtering per run
         self.content_rules = [r for r in rules if r.rule_type == RuleType.CONTENT]
         self.metadata_rules = [r for r in rules if r.rule_type == RuleType.METADATA]
-        llm_config = llm_config or {"concurrency": 5, "timeout": 30}
+        llm_config = llm_config or LLMConfig()
+        self.llm_config = llm_config
         self.llm_executor = LLMExecutor(
-            concurrency=llm_config.get("concurrency", 5),
-            timeout=llm_config.get("timeout", 30),
+            concurrency=llm_config.concurrency,
+            timeout=llm_config.timeout,
             enabled=not no_llm,
+            llm_config=llm_config,
         )
 
     def run_rules_for_file(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
@@ -43,6 +45,7 @@ class RuleRunner:
         FileContext carries the workspace path and a non-empty raw sentinel so
         matchers that gate on `file_ctx.raw` still fire."""
         shared_ctx["__llm_enabled__"] = self.llm_executor.enabled
+        shared_ctx["__llm_config__"] = self.llm_config
         all_matches: list[Match] = []
         for rule in self.metadata_rules:
             if SEVERITY_RANK.get(rule.severity, 0) < SEVERITY_RANK.get(self.min_severity, 0):
@@ -108,6 +111,7 @@ class RuleRunner:
     def run(self, file_contexts: list[FileContext], shared_ctx: dict) -> list[Match]:
         """Run rules against multiple files. Returns aggregated list of Match objects."""
         shared_ctx["__llm_enabled__"] = self.llm_executor.enabled
+        shared_ctx["__llm_config__"] = self.llm_config
         all_matches: list[Match] = []
         for ctx in file_contexts:
             matches = self.run_rules_for_file(ctx, shared_ctx)

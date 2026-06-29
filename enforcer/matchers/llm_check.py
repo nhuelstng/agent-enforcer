@@ -17,10 +17,13 @@ _JSON_PREAMBLE = (
 class LLMMatcher:
     """Matcher that calls an LLM and parses the verdict into Match objects.
     JSON output preferred; falls back to PASS/FAIL text scan.
-    Fail-open on LLM errors (returns no matches)."""
+    Fail-open on LLM errors (returns no matches).
+
+    provider/model default to None — resolved from shared_ctx['__llm_config__'] defaults.
+    Override per-matcher when a specific model is needed."""
     prompt: str
-    provider: str = "skainet"
-    model: str = "zai-org/GLM-5.1-FP8"
+    provider: str | None = None
+    model: str | None = None
     timeout: int = 30
     needs: Needs = Needs.RAW
 
@@ -36,7 +39,8 @@ class LLMMatcher:
             return []
 
         prompt = self._build_prompt(file_ctx, shared_ctx, is_metadata, change_ctx)
-        response = call_llm(self.provider, self.model, prompt, self.timeout)
+        llm_config = shared_ctx.get("__llm_config__")
+        response = call_llm(self.provider, self.model, prompt, self.timeout, llm_config)
         if not response:
             return []
 
