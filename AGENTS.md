@@ -2,6 +2,8 @@
 
 Convention enforcement tool for coding agents. This file defines the rules and contracts that any AI agent (or human) must follow when working in this repo.
 
+> Auto-generated rule list: see `CONVENTIONS.md` (run `enforcer sync-doc` to regenerate).
+
 ## Project Overview
 
 `pre-commit-agent-enforcer` is a deterministic convention enforcement tool for coding agents. It provides a composable DSL, CLI, and MCP server that blocks commits violating project conventions. Matchers find violations, predicates filter them, rules compose them, and the runner executes them against files.

@@ -81,6 +81,19 @@ Generate markdown documentation of all configured rules.
 enforcer docs -o CONVENTIONS.md
 ```
 
+### `enforcer sync-doc`
+
+Generate the natural-language conventions markdown from configured rules. Includes rationale for each rule.
+
+| Flag | Description |
+|------|-------------|
+| `--output FILE` (`-o`) | Write to file (default: `CONVENTIONS.md`). |
+
+```bash
+enforcer sync-doc
+enforcer sync-doc -o CONVENTIONS.md
+```
+
 ### `enforcer install`
 
 Install the pre-commit hook into `.git/hooks/pre-commit`.
