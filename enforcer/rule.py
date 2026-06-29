@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from typing import Callable
 from enforcer.types import Severity, Match, FileContext, LLMConsequence, RuleType
 from enforcer.combinators.core import AllOf
-from enforcer.predicates.combinators import All as AllPred
 
 def _is_combinator(obj) -> bool:
     return (hasattr(obj, "matchers") or hasattr(obj, "matcher")) and hasattr(obj, "find")
@@ -43,6 +42,7 @@ class Rule:
     diff_only: bool = False
     rule_type: RuleType = RuleType.CONTENT
     fix: Callable | None = None
+    rationale: str = ""
 
     def check(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
         """Run all matchers, filter by predicates, stamp metadata, render message. Returns list of Match objects."""
@@ -63,7 +63,7 @@ class Rule:
 
         # ponytail: attach file_ctx to each match so AST predicates can access the AST
         for m in all_matches:
-            m._file_ctx = file_ctx
+            m.file_ctx = file_ctx
 
         for pred in self.predicates:
             all_matches = [m for m in all_matches if pred.test(m)]

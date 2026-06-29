@@ -147,3 +147,23 @@ def test_rule_all_matches_reported():
     ctx = FileContext(path="x.ts", raw="#fff #000 #aaa #bbb #ccc")
     matches = rule.check(ctx, {})
     assert len(matches) == 5
+
+def test_rule_rationale_default_empty():
+    rule = Rule(
+        id="test",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(r"#fff")],
+        file_globs=["**/*.ts"],
+    )
+    assert rule.rationale == ""
+
+
+def test_rule_rationale_set():
+    rule = Rule(
+        id="test",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(r"#fff")],
+        file_globs=["**/*.ts"],
+        rationale="Hex colors break theming.",
+    )
+    assert rule.rationale == "Hex colors break theming."
