@@ -24,6 +24,14 @@ def _glob_any_match(name: str, patterns) -> bool:
     import fnmatch
     return any(fnmatch.fnmatch(name, p) for p in patterns)
 
+def _assert_output_contained(output: str, ws: str) -> None:
+    """Reject --output paths escaping the workspace. Prevents arbitrary file writes."""
+    output_resolved = Path(output).resolve()
+    ws_resolved = Path(ws).resolve()
+    if not output_resolved.is_relative_to(ws_resolved):
+        click.echo("Error: --output path must be within workspace.", err=True)
+        sys.exit(2)
+
 def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = None) -> set[int] | None:
     """Parse git diff -U0 for a file, return set of changed (added) line numbers.
     ref=None uses --cached (staged). ref set uses <ref>...HEAD.
@@ -54,6 +62,73 @@ def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = 
     # ponytail: return empty set (not None) when diff parsed but no added lines — distinguishes "no diff info" from "diff parsed, nothing added"
     return changed
 
+def _parse_name_status(diff_output: str) -> tuple[list[str], dict[str, str]]:
+    """Parse `git diff --name-status` output. Returns (file_list, status_map).
+    Status letters: A=added, M=modified, D=deleted, R=renamed (new path), C=copy (treat as added)."""
+    files: list[str] = []
+    status_map: dict[str, str] = {}
+    for line in diff_output.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        letter = parts[0][0].upper()
+        if letter == "R" and len(parts) >= 3:
+            path = parts[2]
+            status = "renamed"
+        elif letter == "C" and len(parts) >= 3:
+            path = parts[2]
+            status = "added"
+        else:
+            path = parts[1]
+            status = {"A": "added", "M": "modified", "D": "deleted"}.get(letter, "modified")
+        files.append(path)
+        status_map[path] = status
+    return files, status_map
+
+
+def _build_change_context(ws: str, status_map: dict[str, str]) -> "ChangeContext":
+    """Build ChangeContext from git metadata + status_map. Reads commit msg + branch."""
+    from enforcer.types import ChangeContext
+
+    commit_msg = ""
+    msg_path = Path(ws, ".git", "COMMIT_EDITMSG")
+    if msg_path.exists():
+        try:
+            content = msg_path.read_text(encoding="utf-8", errors="replace")
+            first_line = content.splitlines()[0] if content.splitlines() else ""
+            if not first_line.startswith("Merge"):
+                commit_msg = first_line
+        except OSError:
+            pass
+
+    branch = ""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, cwd=ws,
+        )
+        if result.returncode == 0:
+            branch = result.stdout.strip()
+    except Exception:
+        pass
+
+    created = [f for f, s in status_map.items() if s == "added"]
+    modified = [f for f, s in status_map.items() if s == "modified"]
+    deleted = [f for f, s in status_map.items() if s == "deleted"]
+    renamed = [f for f, s in status_map.items() if s == "renamed"]
+
+    return ChangeContext(
+        commit_msg=commit_msg,
+        branch=branch,
+        created=created,
+        modified=modified,
+        deleted=deleted,
+        renamed=renamed,
+    )
+
+
 def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_ref: str | None = None) -> list[str]:
     """Collect the list of files to check based on CLI mode."""
     if staged:
@@ -61,13 +136,13 @@ def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_re
             ["git", "diff", "--cached", "--name-only"],
             stderr=subprocess.DEVNULL, cwd=ws,
         )
-        return result.decode().strip().split("\n") if result.strip() else []
+        return [f for f in result.decode().split("\n") if f.strip()]
     if base_ref:
         result = subprocess.check_output(
             ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
             stderr=subprocess.DEVNULL, cwd=ws,
         )
-        return result.decode().strip().split("\n") if result.strip() else []
+        return [f for f in result.decode().split("\n") if f.strip()]
     if all_files:
         file_list = []
         for root, dirs, files in os.walk(ws):
@@ -94,6 +169,7 @@ def _build_shared_ctx(config, builder, ws: str) -> dict:
 
 def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool, diff_ref: str | None = None) -> list:
     """Run rules against each file, return aggregated matches."""
+    import dataclasses
     from enforcer.types import Match
     all_matches: list[Match] = []
     for f in file_list:
@@ -101,9 +177,9 @@ def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str
             continue
         ctx = builder.build(f)
         if diff_ref is not None:
-            ctx.changed_lines = _parse_diff_changed_lines(ws, f, ref=diff_ref)
+            ctx = dataclasses.replace(ctx, changed_lines=_parse_diff_changed_lines(ws, f, ref=diff_ref))
         elif staged:
-            ctx.changed_lines = _parse_diff_changed_lines(ws, f)
+            ctx = dataclasses.replace(ctx, changed_lines=_parse_diff_changed_lines(ws, f))
         matches = runner.run_rules_for_file(ctx, shared_ctx)
         all_matches.extend(matches)
     return all_matches
@@ -177,6 +253,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     reporter = Reporter(format=fmt)
     output_text = reporter.render(all_matches, severity_actions=config.severity_actions)
     if output:
+        _assert_output_contained(output, ws)
         with open(output, "w", encoding="utf-8") as f:
             f.write(output_text)
     else:
@@ -193,6 +270,7 @@ def docs(config_path, output):
     config = load_config(config_path)
     md = render_rules_markdown(config.rules)
     if output:
+        _assert_output_contained(output, config.workspace or ".")
         with open(output, "w", encoding="utf-8") as f:
             f.write(md)
         click.echo(f"Documentation written to {output}")
