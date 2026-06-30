@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to post comments on"
+        required: true
+        type: string
 
 concurrency:
   group: enforcer-${{ github.ref }}
@@ -53,3 +58,35 @@ jobs:
         with:
           install-method: wheel
           base-ref: ""
+
+  comment-pr:
+    name: post-pr-comments
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: build-wheel
+        run: pip install build && python -m build --wheel
+      - name: install-deps
+        run: pip install dist/*.whl PyGithub
+      - name: run-enforcer
+        run: |
+          python -m enforcer.cli check --all --no-llm --format json --output violations.json
+      - name: post-comments
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          python scripts/post_pr_comments.py \
+            --json violations.json \
+            --pr "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --sha "$COMMIT_SHA"
