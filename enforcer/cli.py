@@ -93,7 +93,13 @@ def _build_change_context(ws: str, status_map: dict[str, str]) -> "ChangeContext
     from enforcer.types import ChangeContext
 
     commit_msg = ""
-    msg_path = Path(ws, ".git", "COMMIT_EDITMSG")
+    # ponytail: ENFORCER_COMMIT_MSG_FILE is set by commit-msg hook, points to git's message file.
+    # COMMIT_EDITMSG fallback covers standalone invocation (no hook installed).
+    msg_file = os.environ.get("ENFORCER_COMMIT_MSG_FILE")
+    if msg_file:
+        msg_path = Path(msg_file)
+    else:
+        msg_path = Path(ws, ".git", "COMMIT_EDITMSG")
     if msg_path.exists():
         try:
             content = msg_path.read_text(encoding="utf-8", errors="replace")
@@ -314,21 +320,26 @@ def sync_doc(config_path, output):
     click.echo(f"Wrote {output}")
 
 @cli.command()
-@click.option("--force", is_flag=True, help="Overwrite existing hook")
+@click.option("--force", is_flag=True, help="Overwrite existing hooks")
 def install(force):
-    """Install pre-commit hook into .git/hooks/pre-commit."""
+    """Install pre-commit and prepare-commit-msg hooks."""
     import shutil
 
-    hook_path = os.path.join(".git", "hooks", "pre-commit")
-    if os.path.exists(hook_path) and not force:
-        click.echo(f"Hook already exists at {hook_path}. Use --force to overwrite.")
-        sys.exit(1)
+    hooks_dir = os.path.join(".git", "hooks")
+    scripts_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
-    hook_source = os.path.join(os.path.dirname(__file__), "..", "scripts", "pre-commit-hook")
-    hook_source = os.path.normpath(hook_source)
-    shutil.copy(hook_source, hook_path)
-    os.chmod(hook_path, 0o755)
-    click.echo(f"Installed pre-commit hook to {hook_path}")
+    hooks = [
+        ("commit-msg", "commit-msg-hook"),
+    ]
+    for hook_name, script_name in hooks:
+        hook_path = os.path.join(hooks_dir, hook_name)
+        if os.path.exists(hook_path) and not force:
+            click.echo(f"Hook already exists at {hook_path}. Use --force to overwrite.")
+            sys.exit(1)
+        hook_source = os.path.join(scripts_dir, script_name)
+        shutil.copy(hook_source, hook_path)
+        os.chmod(hook_path, 0o755)
+        click.echo(f"Installed {hook_name} hook to {hook_path}")
 
 if __name__ == "__main__":
     cli()
