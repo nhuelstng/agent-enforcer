@@ -12,6 +12,11 @@ class DocSyncMatcher:
     Reads config rules from shared_ctx["__rules__"] (set by the CLI runner),
     falling back to load_config(self.config_path) when called standalone.
     Reads the doc file from self.doc_path on disk.
+
+    What:       flags when the on-disk doc at `doc_path` differs from a fresh render of the current rules
+    Ignores:    matching renders (no diff); unreadable/missing doc files (treated as empty, will flag if render is non-empty)
+    Basis:      RAW (renders rules to markdown, compares to on-disk file text)
+    shared_ctx: reads `__rules__`, `__workspace__`
     """
     config_path: str
     doc_path: str

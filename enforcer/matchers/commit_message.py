@@ -10,7 +10,13 @@ from enforcer.types import Match, FileContext, Needs
 class CommitMessageMatcher:
     """Flags if the commit message (first line) doesn't match the required pattern.
     Reads from ENFORCER_COMMIT_MSG_FILE env var (set by commit-msg hook), falling back
-    to .git/COMMIT_EDITMSG. Skips merge commits."""
+    to .git/COMMIT_EDITMSG. Skips merge commits.
+
+    What:       flags the commit message when its first line doesn't match `pattern`
+    Ignores:    merge commits (first line starts with "Merge"); missing message file; unreadable files; messages that match
+    Basis:      RAW (regex on first line of commit message file)
+    shared_ctx: none (defensive default only)
+    """
     pattern: str
     workspace: str = "."
     needs: Needs = Needs.RAW

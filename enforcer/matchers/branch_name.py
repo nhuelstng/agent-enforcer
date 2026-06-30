@@ -8,7 +8,13 @@ from enforcer.types import Match, FileContext, Needs
 @dataclass
 class BranchNameMatcher:
     """Flags if the current git branch name doesn't match the required pattern.
-    Set allow_branches to skip check for specific branches (main, master, develop)."""
+    Set allow_branches to skip check for specific branches (main, master, develop).
+
+    What:       flags the current git branch when it doesn't match `pattern`
+    Ignores:    allow_branches (default main/master/develop); detached HEAD; git failures (returns empty)
+    Basis:      RAW (subprocess `git rev-parse --abbrev-ref HEAD`)
+    shared_ctx: none (defensive default only)
+    """
     pattern: str
     allow_branches: list[str] = field(default_factory=lambda: ["main", "master", "develop"])
     workspace: str = "."

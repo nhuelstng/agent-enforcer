@@ -335,3 +335,18 @@ class TestCombinatorRecursionClean:
         rule = Rule(id="nested", severity=Severity.ERROR, matchers=[nested], file_globs=["*.py"], message="m")
         text = render_rule_explainer(rule, workspace=".")
         assert "Rule: nested" in text  # did not crash
+
+
+from enforcer import matchers as matcher_pkg
+
+
+class TestAllMatchersHaveStructuredDocstring:
+    """every exported matcher class has What: and Basis: in its docstring."""
+
+    @pytest.mark.parametrize("class_name", matcher_pkg.__all__)
+    def test_has_what_and_basis(self, class_name):
+        cls = getattr(matcher_pkg, class_name)
+        doc = inspect.getdoc(cls) or ""
+        sections = _parse_docstring_sections(doc)
+        assert "What" in sections, f"{class_name} missing 'What:' docstring section"
+        assert "Basis" in sections, f"{class_name} missing 'Basis:' docstring section"

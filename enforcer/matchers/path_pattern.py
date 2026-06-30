@@ -6,7 +6,13 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class PathNotMatchingMatcher:
-    """Emits a match if the file path matches the given glob. Used to enforce path conventions via Not combinator."""
+    """Emits a match if the file path matches the given glob. Used to enforce path conventions via Not combinator.
+
+    What:       flags any file whose path does NOT match `pattern` (emit = violation; intended for Not combinator)
+    Ignores:    file contents; paths that match `pattern`
+    Basis:      RAW (fnmatch on file_ctx.path only; needs is None — no parse required)
+    shared_ctx: none (defensive default only)
+    """
     pattern: str
     needs: Needs | None = None
 

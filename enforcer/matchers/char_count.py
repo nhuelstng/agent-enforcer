@@ -5,7 +5,13 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class CharCountMatcher:
-    """Counts characters in file, emits a match if the count fails the predicate."""
+    """Counts characters in file, emits a match if the count fails the predicate.
+
+    What:       flags any file whose character count exceeds `max_chars`
+    Ignores:    empty files (raw is None); files at or below the threshold
+    Basis:      RAW (len() of file_ctx.raw)
+    shared_ctx: none (defensive default only)
+    """
     max_chars: int
     needs: Needs = Needs.RAW
 

@@ -5,7 +5,13 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class CommentPerFunctionMatcher:
-    """For each function in the AST, counts comments and code lines. Emits a match if ratio is below threshold."""
+    """For each function in the AST, counts comments and code lines. Emits a match if ratio is below threshold.
+
+    What:       flags any function whose comment-node count exceeds `max_comments`
+    Ignores:    files with no parsed AST; functions at or below the threshold; non-comment nodes
+    Basis:      AST_TS (walks file_ctx.ast for function and comment nodes)
+    shared_ctx: none (defensive default only)
+    """
     max_comments: int
     needs: Needs = Needs.AST_TS
 

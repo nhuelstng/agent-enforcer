@@ -38,7 +38,13 @@ _PARAM_NODE_TYPES = {
 @dataclass
 class FunctionComplexityMatcher:
     """Walks the AST for function/method nodes, computes a complexity metric, emits if over threshold.
-    Set needs=AST_PY for Python, needs=AST_TS for TypeScript."""
+    Set needs=AST_PY for Python, needs=AST_TS for TypeScript.
+
+    What:       flags functions whose `metric` (lines/params/nesting/cyclomatic) exceeds `max_value`
+    Ignores:    files with no parsed AST; __init__ methods (params metric only); nested functions (analyzed independently); functions at or below threshold
+    Basis:      AST_PY (default; AST_TS when overridden) — walks file_ctx.ast function nodes
+    shared_ctx: none (defensive default only)
+    """
     metric: str  # "lines", "params", "nesting", "cyclomatic"
     max_value: int
     needs: Needs = Needs.AST_PY

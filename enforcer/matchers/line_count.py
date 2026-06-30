@@ -5,7 +5,13 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class LineCountMatcher:
-    """Counts lines in file, emits a match if the count fails the predicate."""
+    """Counts lines in file, emits a match if the count fails the predicate.
+
+    What:       flags any file whose line count exceeds `max_lines`
+    Ignores:    empty files (raw is None); files at or below the threshold
+    Basis:      RAW (counts splitlines() of file_ctx.raw)
+    shared_ctx: none (defensive default only)
+    """
     max_lines: int
     needs: Needs = Needs.RAW
 

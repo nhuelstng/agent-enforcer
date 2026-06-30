@@ -6,7 +6,13 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class FileExistsMatcher:
-    """Checks if any file matching read_target glob exists. Emits no match if found; used with Not combinator to flag missing files."""
+    """Checks if any file matching read_target glob exists. Emits no match if found; used with Not combinator to flag missing files.
+
+    What:       flags (emits a Match) when a file matching `read_target` exists — intended for use with Not to require absence
+    Ignores:    non-existent targets; workspace glob with no matches
+    Basis:      RAW (pathlib.Path.glob on workspace; shared_ctx read_target lookup)
+    shared_ctx: checks read_target key presence for cached existence
+    """
     read_target: str
     workspace: str = "."
     needs: Needs = Needs.RAW

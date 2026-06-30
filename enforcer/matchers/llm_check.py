@@ -19,7 +19,13 @@ class LLMMatcher:
     Fail-open on LLM errors (returns no matches).
 
     provider/model default to None — resolved from shared_ctx['__llm_config__'] defaults.
-    Override per-matcher when a specific model is needed."""
+    Override per-matcher when a specific model is needed.
+
+    What:       flags violations reported by the LLM (parsed from JSON `violations` array, or FAIL text fallback)
+    Ignores:    LLM-disabled runs (`__llm_enabled__ is False`); metadata mode with no change_ctx; empty/error responses (fail-open); PASS verdicts
+    Basis:      RAW (sends file_ctx.raw or change context to LLM; cross-file via shared_ctx change metadata)
+    shared_ctx: reads `__llm_enabled__`, `__change__` (ChangeContext), `__llm_config__`
+    """
     prompt: str
     provider: str | None = None
     model: str | None = None

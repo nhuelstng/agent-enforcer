@@ -14,6 +14,11 @@ class KeySetSyncMatcher:
     Target files are resolved from shared_ctx by glob-matching the keys populated
     by the runner's read_targets mechanism. No direct file I/O — fully testable
     via an injected shared_ctx dict.
+
+    What:       flags keys present in source (via source_extractor, minus exclude_keys) but absent from the union of target file keys
+    Ignores:    empty files (raw falsy); __-prefixed shared_ctx keys; the source file itself; exclude_keys; keys present in targets
+    Basis:      RAW (extracts from file_ctx.raw and target_ctx.raw; cross-file via shared_ctx glob lookup)
+    shared_ctx: reads target FileContexts by glob match against target_globs
     """
     source_extractor: Extractor
     target_extractor: Extractor

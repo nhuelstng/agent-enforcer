@@ -5,7 +5,13 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class AstNodeMatcher:
-    """Walks the tree-sitter AST, finds nodes of a given type within an optional scope (e.g., function, class)."""
+    """Walks the tree-sitter AST, finds nodes of a given type within an optional scope (e.g., function, class).
+
+    What:       flags every AST node whose type matches `node_type` (optionally scoped to class/function/module body)
+    Ignores:    files with no parsed AST; nodes of other types; scopes not in {class, function, module}
+    Basis:      AST_TS (walks file_ctx.ast tree-sitter tree)
+    shared_ctx: none (defensive default only)
+    """
     node_type: str
     scope: str | None = None
     needs: Needs = Needs.AST_TS

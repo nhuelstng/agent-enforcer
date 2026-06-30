@@ -19,7 +19,13 @@ _DECL_NODE_TYPES = {
 class NamingConventionMatcher:
     """Walks AST for declaration nodes, flags names that don't match the required pattern.
     declaration_types: which node types to check (e.g. ['function_definition', 'class_definition']).
-    pattern: regex the declaration name must match. If it doesn't match, the name is flagged."""
+    pattern: regex the declaration name must match. If it doesn't match, the name is flagged.
+
+    What:       flags declaration names (functions/classes/variables per declaration_types) that don't match `pattern`
+    Ignores:    files with no parsed AST; declaration node types not in declaration_types; nodes with no extractable identifier; names that match
+    Basis:      AST_PY (default; AST_TS when overridden) — walks file_ctx.ast for declaration nodes
+    shared_ctx: none (defensive default only)
+    """
     declaration_types: list[str]
     pattern: str
     needs: Needs = Needs.AST_PY
