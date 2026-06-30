@@ -19,6 +19,7 @@ from enforcer.matchers.docstring import DocstringMatcher
 from enforcer.matchers.llm_check import LLMMatcher
 from enforcer.matchers.doc_sync import DocSyncMatcher
 from enforcer.matchers.keyset_sync import KeySetSyncMatcher
+from enforcer.matchers.test_coverage import TestCoverageMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -41,4 +42,5 @@ __all__ = [
     "LLMMatcher",
     "DocSyncMatcher",
     "KeySetSyncMatcher",
+    "TestCoverageMatcher",
 ]
