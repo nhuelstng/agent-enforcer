@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs, ChangeContext
 from enforcer.llm import call_llm, escape_content
 
-
 _JSON_PREAMBLE = (
     "You are a convention checker. Output JSON only, no prose.\n"
     '{"pass": true}  if checks pass\n'
@@ -75,9 +74,12 @@ class LLMMatcher:
         return "\n".join(parts)
 
     def _parse_response(self, response: str, file_ctx: FileContext) -> list[Match]:
-        """Parse LLM response into Match list. JSON first, text fallback second."""
+        """Parse LLM response into Match list. Uses json_repair to handle prose-wrapped, fenced, or malformed JSON."""
+        from json_repair import loads as repair_loads
         try:
-            data = json.loads(response)
+            data = repair_loads(response)
+            if not isinstance(data, dict):
+                return self._text_fallback(response, file_ctx)
             if data.get("pass") is True:
                 return []
             violations = data.get("violations", [])
@@ -94,17 +96,19 @@ class LLMMatcher:
                     message=v.get("reason", ""),
                 ))
             return matches
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError, ValueError):
             return self._text_fallback(response, file_ctx)
 
     def _text_fallback(self, response: str, file_ctx: FileContext) -> list[Match]:
-        """PASS/FAIL text scan fallback. Returns list of Match."""
+        """PASS/FAIL text scan fallback. Pure prose (no PASS/FAIL marker) fails open."""
         stripped = response.strip()
         if stripped.upper().startswith("PASS"):
             return []
-        return [Match(
-            file=file_ctx.path,
-            line=0,
-            matched_value=response,
-            message=response,
-        )]
+        if stripped.upper().startswith("FAIL"):
+            return [Match(
+                file=file_ctx.path,
+                line=0,
+                matched_value=stripped,
+                message=stripped,
+            )]
+        return []
