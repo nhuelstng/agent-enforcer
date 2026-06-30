@@ -78,7 +78,7 @@ No test file for core module <file>.
 
 **Applies to:** enforcer/*.py
 
-**Excludes:** enforcer/__init__.py, enforcer/matchers/**, enforcer/predicates/**, enforcer/combinators/**, enforcer/parsers/**
+**Excludes:** enforcer/__init__.py, enforcer/matchers/**, enforcer/predicates/**, enforcer/combinators/**, enforcer/parsers/**, enforcer/extractors/**
 
 **Fix:** Create tests/test_{stem}.py
 

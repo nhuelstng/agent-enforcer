@@ -130,7 +130,7 @@ RULES = [
             exclude_stems=["__init__"],
         )],
         file_globs=["enforcer/*.py"],
-        exclude_globs=["enforcer/__init__.py", "enforcer/matchers/**", "enforcer/predicates/**", "enforcer/combinators/**", "enforcer/parsers/**"],
+        exclude_globs=["enforcer/__init__.py", "enforcer/matchers/**", "enforcer/predicates/**", "enforcer/combinators/**", "enforcer/parsers/**", "enforcer/extractors/**"],
         message="No test file for core module {file}.",
         fix_instruction="Create tests/test_{stem}.py",
         diff_only=True,
