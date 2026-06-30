@@ -66,3 +66,42 @@ def test_inline_body_empty_fix_instruction():
     body = inline_body(v)
     assert "Fix: (none)" in body
     assert "(WARN)" in body
+
+
+from unittest.mock import MagicMock
+
+from scripts.pr_commenter import existing_inline_keys
+
+
+def test_existing_inline_keys_extracts_triplets():
+    c1 = MagicMock()
+    c1.body = "<!-- enforcer rule_id=no-print -->\nstuff"
+    c1.path = "src/app.py"
+    c1.line = 42
+    c1.user.login = "github-actions[bot]"
+
+    c2 = MagicMock()
+    c2.body = "<!-- enforcer rule_id=no-docstring -->\nstuff"
+    c2.path = "src/util.py"
+    c2.line = 10
+    c2.user.login = "github-actions[bot]"
+
+    c3 = MagicMock()
+    c3.body = "<!-- enforcer rule_id=no-print -->\nstuff"
+    c3.path = "src/app.py"
+    c3.line = 42
+    c3.user.login = "human-user"  # not bot, should be ignored
+
+    c4 = MagicMock()
+    c4.body = "some other comment without marker"
+    c4.path = "src/app.py"
+    c4.line = 42
+    c4.user.login = "github-actions[bot]"
+
+    pr = MagicMock()
+    pr.get_review_comments.return_value = [c1, c2, c3, c4]
+
+    keys = existing_inline_keys(pr)
+    assert ("src/app.py", 42, "no-print") in keys
+    assert ("src/util.py", 10, "no-docstring") in keys
+    assert len(keys) == 2  # c3 filtered (not bot), c4 filtered (no marker)
