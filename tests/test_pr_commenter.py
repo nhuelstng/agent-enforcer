@@ -448,3 +448,27 @@ def test_upsert_summary_no_existing_comment_all_unchecked():
     assert "- [ ] `verify-types-changed`" in created_body
     assert "- [x]" not in created_body
     assert url == "https://github.com/owner/repo/issues/1#issuecomment-1"
+
+
+def test_post_comments_threads_mode_to_summary():
+    pr = MagicMock()
+    pr.number = 1
+    pr.get_review_comments.return_value = []
+
+    new_comment = MagicMock()
+    new_comment.html_url = "https://github.com/owner/repo/issues/1#issuecomment-1"
+    new_comment.body = ""
+    issue = MagicMock()
+    issue.get_comments.return_value = []
+    issue.create_comment.return_value = new_comment
+
+    repo = MagicMock()
+    repo.get_issue.return_value = issue
+
+    violations = [
+        {"rule_id": "verify-types-changed", "severity": "warn", "file": "enforcer/types.py",
+         "line": 15, "message": "Core types changed", "fix_instruction": "Run pytest"},
+    ]
+    post_comments(repo, pr, violations, sha="abc123", mode="all")
+    created_body = issue.create_comment.call_args[0][0]
+    assert "(mode: all)" in created_body
