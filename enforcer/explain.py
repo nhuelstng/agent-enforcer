@@ -231,3 +231,36 @@ def render_rule_explainer(rule: Rule, workspace: str = ".") -> str:
         lines.extend(_render_matcher_block(matcher, i, workspace))
 
     return "\n".join(lines)
+
+
+def render_rule_explainer_json(rule: Rule, workspace: str = ".") -> dict:
+    """Render a rule explainer as a JSON-serializable dict."""
+    matchers_data = []
+    for matcher in rule.matchers or []:
+        explainer = render_matcher_explainer(matcher)
+        test_path = _find_paired_test(explainer.class_name, workspace)
+        example = _extract_worked_example(test_path, explainer.class_name) if test_path else None
+        matchers_data.append({
+            "class_name": explainer.class_name,
+            "docstring_sections": explainer.docstring_sections,
+            "configured_params": {k: repr(v) for k, v in explainer.configured_params.items()},
+            "paired_test": str(test_path) if test_path else None,
+            "worked_example": {
+                "test_class": example.test_class_name,
+                "test_method": example.test_method_name,
+                "snippet": example.snippet,
+                "file_path": example.file_path,
+                "line": example.line,
+            } if example else None,
+        })
+    return {
+        "rule_id": rule.id,
+        "severity": rule.severity.value,
+        "file_globs": rule.file_globs,
+        "diff_only": rule.diff_only,
+        "rule_type": rule.rule_type.value,
+        "message": "(dynamic)" if callable(rule.message) else rule.message,
+        "fix_instruction": rule.fix_instruction,
+        "rationale": rule.rationale,
+        "matchers": matchers_data,
+    }

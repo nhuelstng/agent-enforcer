@@ -1,5 +1,6 @@
 """Tests for explain module: rule/matcher reflection and rendering."""
 import inspect
+import json
 from dataclasses import is_dataclass
 import pytest
 from pathlib import Path
@@ -10,6 +11,7 @@ from enforcer.explain import (
     MatcherExplainer,
     render_matcher_explainer,
     render_rule_explainer,
+    render_rule_explainer_json,
     _find_paired_test,
     _extract_worked_example,
     WorkedExample,
@@ -219,3 +221,37 @@ class TestRenderRuleExplainerClean:
         text = render_rule_explainer(rule, workspace=".")
         assert "Rule: empty" in text
         assert "Matchers (0):" in text
+
+
+class TestRenderRuleExplainerJsonFound:
+    """returns a JSON-serializable dict with rule metadata and matcher details."""
+
+    @pytest.mark.parametrize("key", [
+        "rule_id", "severity", "file_globs", "diff_only", "message",
+        "fix_instruction", "rationale", "matchers",
+    ])
+    def test_has_key(self, key):
+        rule = _sample_rule()
+        data = render_rule_explainer_json(rule, workspace=".")
+        assert key in data
+
+    def test_matchers_list_has_class_name(self):
+        rule = _sample_rule()
+        data = render_rule_explainer_json(rule, workspace=".")
+        assert len(data["matchers"]) == 1
+        assert data["matchers"][0]["class_name"] == "RegexMatcher"
+
+    def test_json_serializable(self):
+        rule = _sample_rule()
+        data = render_rule_explainer_json(rule, workspace=".")
+        # must not raise
+        json.dumps(data)
+
+
+class TestRenderRuleExplainerJsonClean:
+    """handles rules with no matchers."""
+
+    def test_empty_matchers_list(self):
+        rule = Rule(id="empty", severity=Severity.INFO, matchers=[], file_globs=["*.py"], message="m")
+        data = render_rule_explainer_json(rule, workspace=".")
+        assert data["matchers"] == []
