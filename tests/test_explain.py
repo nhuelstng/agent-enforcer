@@ -350,3 +350,23 @@ class TestAllMatchersHaveStructuredDocstring:
         sections = _parse_docstring_sections(doc)
         assert "What" in sections, f"{class_name} missing 'What:' docstring section"
         assert "Basis" in sections, f"{class_name} missing 'Basis:' docstring section"
+
+
+class TestMatcherDocstringStructuredRule:
+    """the matcher-docstring-structured rule is configured and would catch missing What:."""
+
+    def test_rule_exists_in_config(self):
+        from enforcer.config import load_config
+        config = load_config("enforcer_config.py")
+        rule_ids = [r.id for r in config.rules]
+        assert "matcher-docstring-structured" in rule_ids
+
+
+class TestMatcherTestPositiveNegativeRule:
+    """the matcher-test-positive-negative rule is configured."""
+
+    def test_rule_exists_in_config(self):
+        from enforcer.config import load_config
+        config = load_config("enforcer_config.py")
+        rule_ids = [r.id for r in config.rules]
+        assert "matcher-test-positive-negative" in rule_ids
