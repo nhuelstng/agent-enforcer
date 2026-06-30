@@ -48,3 +48,20 @@ def test_allowlist_needs_raw():
         read_target="**/colors.scss",
     )
     assert matcher.needs == Needs.RAW
+
+
+def test_allowlist_multi_file_glob_union(tmp_path):
+    """AllowlistMatcher should union keys across ALL files matching the read_target glob."""
+    matcher = AllowlistMatcher(
+        extractor=lambda raw: set(raw.split()),
+        consumer=lambda raw: set(raw.split()),
+        read_target="**/allowlist.txt",
+    )
+    ctx = FileContext(path="x.py", raw="SECRET_KEY\nSAFE_KEY\n")
+    shared_ctx = {
+        "__workspace__": ".",
+        "dir1/allowlist.txt": FileContext(path="dir1/allowlist.txt", raw="SAFE_KEY\n"),
+        "dir2/allowlist.txt": FileContext(path="dir2/allowlist.txt", raw="SECRET_KEY\n"),
+    }
+    matches = matcher.find(ctx, shared_ctx=shared_ctx)
+    assert matches == []

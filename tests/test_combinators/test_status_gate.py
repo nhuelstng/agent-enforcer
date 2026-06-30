@@ -49,6 +49,13 @@ def test_status_gate_passes_shared_ctx_to_inner():
     assert matches == []
 
 
+def test_status_gate_needs_raw():
+    """StatusGate inherits needs from inner matcher (default RAW)."""
+    from enforcer.types import Needs
+    from enforcer.matchers import RegexMatcher
+    assert StatusGate(RegexMatcher("x")).needs == Needs.RAW
+
+
 def test_status_gate_finalizer_collected():
     """A matcher with finalize_duplicates inside StatusGate must still be collected by _collect_finalizers."""
     from enforcer.combinators.core import _collect_finalizers
