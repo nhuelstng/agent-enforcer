@@ -84,3 +84,29 @@ def upsert_summary(repo, pr, violations: list[dict], sha: str) -> str:
             return comment.html_url
     comment = issue.create_comment(body)
     return comment.html_url
+
+
+def post_inline_comments(pr, violations: list[dict]) -> tuple[int, int]:
+    """Post inline review comments, skipping duplicates and file-level violations.
+    Returns (posted, skipped)."""
+    existing = existing_inline_keys(pr)
+    posted = 0
+    skipped = 0
+    for v in violations:
+        file = v.get("file")
+        line = v.get("line")
+        rule_id = v.get("rule_id", "")
+        if not file or not line:
+            skipped += 1
+            continue
+        if (file, line, rule_id) in existing:
+            skipped += 1
+            continue
+        body = inline_body(v)
+        pr.create_review_comment(
+            body=body,
+            path=file,
+            line=line,
+        )
+        posted += 1
+    return posted, skipped
