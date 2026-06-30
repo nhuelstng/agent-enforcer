@@ -60,3 +60,15 @@ def inline_body(violation: dict) -> str:
         f"{message}\n\n"
         f"Fix: {fix}"
     )
+
+
+def existing_inline_keys(pr) -> set[tuple[str, int, str]]:
+    """Extract (path, line, rule_id) keys from existing bot review comments."""
+    keys = set()
+    for c in pr.get_review_comments():
+        if c.user.login != "github-actions[bot]":
+            continue
+        m = RULE_MARKER_RE.search(c.body)
+        if m:
+            keys.add((c.path, c.line, m.group(1)))
+    return keys
