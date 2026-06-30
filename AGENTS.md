@@ -133,8 +133,9 @@ enforcer/
   ignore.py       — .enforcerignore loading and matching
   llm.py          — LLMExecutor: calls LLM provider on rule failure
   docs.py         — markdown rule documentation generator
+  explain.py      — rule explainer (reflects over matchers, renders for `enforcer explain`)
   mcp_server.py   — MCP server interface
-  matchers/       — 20 matchers, each in own file (incl. KeySetSyncMatcher)
+  matchers/       — 21 matchers, each in own file (incl. KeySetSyncMatcher, TestCoverageMatcher)
   predicates/     — post-match filters (AST, string, int, combinators)
   combinators/    — matcher combiners (AllOf, AnyOf, Not, NoneOf, OneOf, StatusGate)
   extractors/     — key-set extractors (env, json, yaml, ini, terraform)
@@ -153,7 +154,25 @@ tests/
 4. Add to `enforcer/matchers/__init__.py` `__all__`
 5. Write `tests/test_matchers/test_<name>.py`
 6. Add a Rule to `enforcer_config.py` if self-enforcing
-7. Run `pytest` — all tests must pass
+7. **Document the matcher with a structured docstring.** Class docstring must include `What:` (what it flags) and `Basis:` (RAW/AST_PY/AST_TS/AST_CSS) sections. Example:
+
+   ```python
+   @dataclass
+   class MyMatcher:
+       """One-line summary.
+
+       What:       flags <what>
+       Ignores:    <what it doesn't catch>
+       Basis:      <RAW or AST_*>
+       shared_ctx: <keys or none>
+       """
+   ```
+
+8. **Write positive and negative parameterized tests.** Test file must contain:
+   - Positive case: `test_*_fail` / `test_*_flags` — uses `assert` on a non-empty match list. Parameterized with >=3 examples via `@pytest.mark.parametrize`.
+   - Negative case: `test_*_success` / `test_*_clean` — uses `assert not` or `assert len(...) == 0`. Parameterized with >=3 examples.
+   - Minimum: 2 parameterized methods x 3 examples = 6 cases per matcher.
+9. Run `pytest` — all tests must pass
 
 ## Config Injection Contract
 
