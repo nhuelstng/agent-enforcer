@@ -54,7 +54,7 @@ def summary_body(
         msg = v.get("message", "")
         rows.append(f"| {sev} | `{rule}` | `{path}:{line}` | {msg} |")
     table = "\n".join(rows)
-    return (
+    body = (
         f"{SUMMARY_MARKER}\n"
         f"## Enforcer Scan Results\n\n"
         f"Scan of `{sha}` on {date_str} (mode: {mode}).\n\n"
@@ -65,8 +65,22 @@ def summary_body(
         f"|----------|------|-----------|---------|\n"
         f"{table}\n\n"
         f"</details>\n\n"
-        f"Inline comments posted for each anchorable violation. Re-run to refresh.\n"
     )
+    warn_items = [v for v in violations if v.get("severity", "").lower() == "warn"]
+    if warn_items:
+        checked = checked or set()
+        checklist_lines = []
+        for v in warn_items:
+            rule = v.get("rule_id", "?")
+            path = v.get("file", "?")
+            line = v.get("line", 0)
+            msg = v.get("message", "")
+            box = "x" if (rule, path, line) in checked else " "
+            checklist_lines.append(f"- [{box}] `{rule}` \u2014 `{path}:{line}` \u2014 {msg}")
+        checklist = "\n".join(checklist_lines)
+        body += f"## WARN Checklist\n\n{checklist}\n\n"
+    body += "Inline comments posted for each anchorable violation. Re-run to refresh.\n"
+    return body
 
 
 def inline_body(violation: dict) -> str:

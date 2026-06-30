@@ -343,3 +343,46 @@ def test_summary_body_mode_in_header():
 
     body_all = summary_body([], sha="abc123", mode="all")
     assert "(mode: all)" in body_all
+
+
+def test_summary_body_warn_checklist():
+    violations = [
+        {"rule_id": "no-print", "severity": "error", "file": "src/app.py",
+         "line": 42, "message": "Print statements not allowed",
+         "fix_instruction": "Use logging instead of print()."},
+        {"rule_id": "verify-types-changed", "severity": "warn", "file": "enforcer/types.py",
+         "line": 15, "message": "Core types changed. Run full test suite",
+         "fix_instruction": "Run pytest --tb=short -q"},
+    ]
+    body = summary_body(violations, sha="abc123", mode="diff")
+    assert "## WARN Checklist" in body
+    assert "- [ ] `verify-types-changed`" in body
+    assert "enforcer/types.py:15" in body
+    assert "Core types changed. Run full test suite" in body
+    # ERROR violation should NOT be in checklist
+    assert "- [ ] `no-print`" not in body
+
+
+def test_summary_body_no_checklist_when_zero_warn():
+    violations = [
+        {"rule_id": "no-print", "severity": "error", "file": "src/app.py",
+         "line": 42, "message": "Print statements not allowed",
+         "fix_instruction": "Use logging instead of print()."},
+    ]
+    body = summary_body(violations, sha="abc123", mode="diff")
+    assert "## WARN Checklist" not in body
+
+
+def test_summary_body_preserves_checked_state():
+    violations = [
+        {"rule_id": "verify-types-changed", "severity": "warn", "file": "enforcer/types.py",
+         "line": 15, "message": "Core types changed",
+         "fix_instruction": "Run pytest"},
+        {"rule_id": "verify-runner-changed", "severity": "warn", "file": "enforcer/runner.py",
+         "line": 8, "message": "Runner changed",
+         "fix_instruction": "Run pytest"},
+    ]
+    checked = {("verify-types-changed", "enforcer/types.py", 15)}
+    body = summary_body(violations, sha="abc123", mode="diff", checked=checked)
+    assert "- [x] `verify-types-changed`" in body
+    assert "- [ ] `verify-runner-changed`" in body
