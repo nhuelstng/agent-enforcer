@@ -94,4 +94,4 @@ def test_main_reads_github_token(tmp_path):
                 "--repo", "owner/repo",
                 "--sha", "abc123",
             ])
-    mock_github.assert_called_once_with(token="test-token-123")
+    mock_github.assert_called_once_with(login_or_token="test-token-123")

@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
         from scripts.pr_commenter import post_comments as _post_comments
         globals()["post_comments"] = _post_comments
 
-    gh = Github(token=token)
+    gh = Github(login_or_token=token)
     repo = gh.get_repo(args.repo)
     pr = repo.get_pull(args.pr)
 
