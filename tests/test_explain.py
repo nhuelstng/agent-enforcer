@@ -255,3 +255,47 @@ class TestRenderRuleExplainerJsonClean:
         rule = Rule(id="empty", severity=Severity.INFO, matchers=[], file_globs=["*.py"], message="m")
         data = render_rule_explainer_json(rule, workspace=".")
         assert data["matchers"] == []
+
+
+from enforcer.explain import load_rule_for_explain, ExplainResult
+
+
+class TestLoadRuleForExplainFound:
+    """finds a rule by exact id match."""
+
+    @pytest.mark.parametrize("rule_id,expected_found", [
+        ("no-raw-hex", True),
+        ("max-lines-readme", False),
+        ("nonexistent-rule", False),
+    ])
+    def test_finds_or_not(self, rule_id, expected_found, tmp_path):
+        cfg = tmp_path / "enforcer_config.py"
+        cfg.write_text('''
+from enforcer import Rule, Severity
+from enforcer.matchers import RegexMatcher
+RULES = [
+    Rule(id="no-raw-hex", severity=Severity.ERROR, matchers=[RegexMatcher(r"#fff")], file_globs=["*.ts"], message="m"),
+]
+WORKSPACE = "."
+''')
+        result = load_rule_for_explain(str(cfg), rule_id)
+        assert (result.rule is not None) == expected_found
+
+
+class TestLoadRuleForExplainClean:
+    """suggests close matches when rule id not found."""
+
+    def test_suggests_close_matches(self, tmp_path):
+        cfg = tmp_path / "enforcer_config.py"
+        cfg.write_text('''
+from enforcer import Rule, Severity
+from enforcer.matchers import RegexMatcher
+RULES = [
+    Rule(id="no-raw-hex", severity=Severity.ERROR, matchers=[RegexMatcher(r"#fff")], file_globs=["*.ts"], message="m"),
+    Rule(id="no-print", severity=Severity.ERROR, matchers=[RegexMatcher(r"print")], file_globs=["*.py"], message="m"),
+]
+WORKSPACE = "."
+''')
+        result = load_rule_for_explain(str(cfg), "no-raw-he")
+        assert result.rule is None
+        assert "no-raw-hex" in result.suggestions

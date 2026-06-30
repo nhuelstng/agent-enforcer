@@ -233,6 +233,42 @@ def render_rule_explainer(rule: Rule, workspace: str = ".") -> str:
     return "\n".join(lines)
 
 
+@dataclass
+class ExplainResult:
+    """Result of looking up a rule for explain: the rule (or None) + close-match suggestions."""
+    rule: Rule | None
+    suggestions: list[str] = dataclasses.field(default_factory=list)
+    config_workspace: str = "."
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Compute Levenshtein distance between two strings. Stdlib-only, O(n*m)."""
+    if len(a) < len(b):
+        a, b = b, a
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def load_rule_for_explain(config_path: str, rule_id: str) -> ExplainResult:
+    """Load config, find rule by id. Returns ExplainResult with rule or close-match suggestions."""
+    from enforcer.config import load_config
+    config = load_config(config_path)
+    rule = next((r for r in config.rules if r.id == rule_id), None)
+    suggestions: list[str] = []
+    if rule is None:
+        # ponytail: suggest rules within edit distance 5, sorted by distance
+        scored = sorted((_levenshtein(rule_id, r.id), r.id) for r in config.rules)
+        suggestions = [s for _, s in scored[:5] if _levenshtein(rule_id, s) <= 5]
+    return ExplainResult(rule=rule, suggestions=suggestions, config_workspace=config.workspace or ".")
+
+
 def render_rule_explainer_json(rule: Rule, workspace: str = ".") -> dict:
     """Render a rule explainer as a JSON-serializable dict."""
     matchers_data = []
