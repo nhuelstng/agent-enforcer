@@ -34,3 +34,35 @@ def test_summary_body_with_violations():
     assert "<details>" in body
     assert "<summary>Violations</summary>" in body
     assert "| Severity | Rule | File:Line | Message |" in body
+
+
+from scripts.pr_commenter import inline_body, RULE_MARKER_RE
+
+
+def test_inline_body_has_marker_and_fields():
+    v = {
+        "rule_id": "no-print",
+        "severity": "error",
+        "message": "Print statements not allowed",
+        "fix_instruction": "Use logging instead of print().",
+    }
+    body = inline_body(v)
+    m = RULE_MARKER_RE.search(body)
+    assert m is not None
+    assert m.group(1) == "no-print"
+    assert "**`no-print`**" in body
+    assert "(ERROR)" in body
+    assert "Print statements not allowed" in body
+    assert "Fix: Use logging instead of print()." in body
+
+
+def test_inline_body_empty_fix_instruction():
+    v = {
+        "rule_id": "no-docstring",
+        "severity": "warn",
+        "message": "Missing docstring",
+        "fix_instruction": None,
+    }
+    body = inline_body(v)
+    assert "Fix: (none)" in body
+    assert "(WARN)" in body
