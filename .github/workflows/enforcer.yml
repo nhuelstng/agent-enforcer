@@ -86,6 +86,7 @@ jobs:
           PR_NUMBER: ${{ github.event.inputs.pr_number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
+          PYTHONPATH: "."
         run: |
           python scripts/post_pr_comments.py \
             --json violations.json \
