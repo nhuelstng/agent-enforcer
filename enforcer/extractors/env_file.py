@@ -9,6 +9,7 @@ class EnvFileKeys:
     Skips blank lines, comments (#), and lines without '='. Key is the
     substring before the first '=', stripped."""
     def extract(self, raw: str) -> set[str]:
+        """Parse env-style text and return the set of KEY names before '='."""
         keys: set[str] = set()
         for line in raw.splitlines():
             s = line.strip()
