@@ -1,7 +1,10 @@
 """Post enforcer violations to GitHub PR as comments. Testable logic module."""
 from __future__ import annotations
 
+import re
+
 SUMMARY_MARKER = "<!-- enforcer-summary -->"
+RULE_MARKER_RE = re.compile(r"<!-- enforcer rule_id=(\S+) -->")
 
 
 def summary_body(violations: list[dict], sha: str) -> str:
@@ -42,4 +45,18 @@ def summary_body(violations: list[dict], sha: str) -> str:
         f"{table}\n\n"
         f"</details>\n\n"
         f"Inline comments posted for each anchorable violation. Re-run to refresh.\n"
+    )
+
+
+def inline_body(violation: dict) -> str:
+    """Render an inline review comment body for a single violation."""
+    rule_id = violation.get("rule_id", "?")
+    severity = violation.get("severity", "info").upper()
+    message = violation.get("message", "")
+    fix = violation.get("fix_instruction") or "(none)"
+    return (
+        f"<!-- enforcer rule_id={rule_id} -->\n"
+        f"**`{rule_id}`** ({severity})\n\n"
+        f"{message}\n\n"
+        f"Fix: {fix}"
     )
