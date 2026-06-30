@@ -85,6 +85,15 @@ def verify_fix(path: str, rule_id: str, format: str = "json", no_llm: bool = Fal
     reporter = Reporter(format=format)
     return reporter.render(matches, severity_actions=config.severity_actions)
 
+def explain_rule(rule_id: str) -> str:
+    """Explain a rule: what it matches, what it ignores, worked example. Returns JSON."""
+    import json
+    from enforcer.explain import load_rule_for_explain, render_rule_explainer_json
+    result = load_rule_for_explain(_config_path(), rule_id)
+    if result.rule is None:
+        return json.dumps({"error": f"No rule with id '{rule_id}'", "suggestions": result.suggestions})
+    return json.dumps(render_rule_explainer_json(result.rule, workspace=result.config_workspace), indent=2)
+
 def _tool_definitions() -> list[dict]:
     """Return MCP tool definitions for tools/list response."""
     return [
@@ -120,6 +129,17 @@ def _tool_definitions() -> list[dict]:
                 "required": ["path", "rule_id"],
             },
         },
+        {
+            "name": "explain_rule",
+            "description": "Explain what a rule matches, what it ignores, and show a worked example",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "rule_id": {"type": "string"},
+                },
+                "required": ["rule_id"],
+            },
+        },
     ]
 
 
@@ -147,6 +167,8 @@ def _handle_tool_call(params: dict, msg_id) -> str | None:
         return list_conventions()
     if tool_name == "verify_fix":
         return verify_fix(path=args.get("path"), rule_id=args.get("rule_id"), format=args.get("format", "json"))
+    if tool_name == "explain_rule":
+        return explain_rule(rule_id=args.get("rule_id"))
     _send_error(msg_id, -32601, f"Unknown tool: {tool_name}")
     return None
 

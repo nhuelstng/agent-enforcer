@@ -15,7 +15,13 @@ _FUNC_NODE_TYPES = {
 class DocstringMatcher:
     """Walks AST for function nodes, flags public functions missing docstrings.
     Skips _-prefixed (private, including dunders). Checks if the first statement
-    in the function body is an expression_statement containing a string."""
+    in the function body is an expression_statement containing a string.
+
+    What:       flags public functions (name not _-prefixed) whose body's first statement is not a string expression
+    Ignores:    files with no parsed AST; private/dunder functions; functions with a docstring
+    Basis:      AST_PY (walks file_ctx.ast for function_definition nodes and their block/expression_statement/string children)
+    shared_ctx: none (defensive default only)
+    """
     needs: Needs = Needs.AST_PY
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:

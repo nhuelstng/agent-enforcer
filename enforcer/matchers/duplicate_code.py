@@ -28,7 +28,13 @@ class DuplicateCodeMatcher:
     emits cross-file matches for pairs sharing above-threshold overlap.
 
     Uses overlap coefficient (overlap / min(len_a, len_b)). Inverted index for
-    O(K) candidate pair generation."""
+    O(K) candidate pair generation.
+
+    What:       flags file pairs whose token n-gram overlap ratio >= `min_overlap` (cross-file duplication)
+    Ignores:    files with raw=None; already-indexed files (deduped by path); pairs below threshold; sub-min_tokens files
+    Basis:      RAW (tokenizes file_ctx.raw; cross-file via shared_ctx inverted index)
+    shared_ctx: writes `_dup_index_{min_tokens}_{min_overlap}` key (files, ngram_files inverted index, file_lines, finalized flag)
+    """
     min_tokens: int = 10
     min_overlap: float = 0.8
     workspace: str = "."

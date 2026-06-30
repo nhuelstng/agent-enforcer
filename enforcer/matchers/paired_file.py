@@ -12,7 +12,13 @@ class PairedFileMatcher:
     """Given a source file, checks if a derived (paired) file exists.
     Uses {stem} (filename without extension) and {dir} (parent directory name) in derived_glob.
     Supports glob wildcards (*, ?) in derived_glob — matches if at least one file matches.
-    Emits a match if the paired file does NOT exist."""
+    Emits a match if the paired file does NOT exist.
+
+    What:       flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+    Ignores:    excluded stems (default __init__); spec/test files themselves; paths not matching source_glob; pairs that exist
+    Basis:      RAW (path stem/dir substitution + glob.glob on disk)
+    shared_ctx: none (defensive default only)
+    """
     source_glob: str
     derived_glob: str
     workspace: str = "."

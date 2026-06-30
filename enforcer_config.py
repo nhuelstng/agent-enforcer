@@ -36,6 +36,7 @@ from enforcer.matchers import (
     LineCountMatcher,
     LLMMatcher,
     DocSyncMatcher,
+    TestCoverageMatcher,
 )
 
 WORKSPACE = "."
@@ -152,6 +153,32 @@ RULES = [
         fix_instruction="Add a test file covering happy path, empty/malformed input, and format-specific edge cases.",
         diff_only=True,
         rationale="Extractors are pure string transforms — trivial to test. Missing tests mean regressions in key extraction go unnoticed.",
+    ),
+
+    # ─── Docstring convention: matchers must declare What: and Basis: ────
+    Rule(
+        id="matcher-docstring-structured",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(r"(?s)class\s+\w+.*?\"\"\"(?:(?!What:).)*?\"\"\"", redact=False)],
+        file_globs=["enforcer/matchers/*.py"],
+        exclude_globs=["enforcer/matchers/__init__.py", "enforcer/matchers/test_coverage.py"],
+        message="Matcher class at {file}:{line} docstring missing 'What:' or 'Basis:' section.",
+        fix_instruction="Add 'What: <what it flags>' and 'Basis: <RAW|AST_PY|AST_TS|AST_CSS>' lines to the class docstring.",
+        diff_only=True,
+        rationale="Matchers without structured docstrings can't be explained by `enforcer explain`. The What:/Basis: sections are the minimum for self-documentation.",
+    ),
+
+    # ─── Test coverage: matchers must have positive+negative parametrized tests ──
+    Rule(
+        id="matcher-test-positive-negative",
+        severity=Severity.ERROR,
+        matchers=[TestCoverageMatcher()],
+        file_globs=["tests/test_matchers/*.py"],
+        exclude_globs=["tests/test_matchers/__init__.py", "tests/test_matchers/test_test_coverage.py"],
+        message="Test file {file} missing positive or negative parameterized coverage (>=3 cases each).",
+        fix_instruction="Add a positive case (test_*_fail, assert on match list) and negative case (test_*_success, assert not), each @pytest.mark.parametrize with >=3 examples.",
+        diff_only=True,
+        rationale="Matchers enforce conventions; tests enforce matchers. Without both positive and negative parameterized cases, matcher regressions go undetected.",
     ),
 
     # ─── Naming: functions must be snake_case ───────────────────────────

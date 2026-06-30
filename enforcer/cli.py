@@ -339,5 +339,27 @@ def install(force):
         os.chmod(hook_path, 0o755)
         click.echo(f"Installed {hook_name} hook to {hook_path}")
 
+@cli.command()
+@click.argument("rule_id")
+@click.option("--config", "config_path", default="enforcer_config.py")
+@click.option("--format", "fmt", default="text", type=click.Choice(["text", "json"]))
+def explain(rule_id, config_path, fmt):
+    """Explain what a rule matches, what it ignores, and show a worked example."""
+    from enforcer.explain import load_rule_for_explain, render_rule_explainer, render_rule_explainer_json
+
+    result = load_rule_for_explain(config_path, rule_id)
+    if result.rule is None:
+        click.echo(f"No rule with id '{rule_id}' found.", err=True)
+        if result.suggestions:
+            click.echo("Did you mean one of: " + ", ".join(result.suggestions) + "?", err=True)
+        sys.exit(1)
+
+    if fmt == "json":
+        import json
+        click.echo(json.dumps(render_rule_explainer_json(result.rule, workspace=result.config_workspace), indent=2))
+    else:
+        click.echo(render_rule_explainer(result.rule, workspace=result.config_workspace))
+
+
 if __name__ == "__main__":
     cli()

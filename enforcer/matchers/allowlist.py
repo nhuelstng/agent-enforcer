@@ -7,7 +7,13 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class AllowlistMatcher:
-    """Reads an allowlist file (read_target), extracts entries via an extractor function, checks if file content violates the allowlist."""
+    """Reads an allowlist file (read_target), extracts entries via an extractor function, checks if file content violates the allowlist.
+
+    What:       flags entries found in file content (via `consumer`) that are absent from the allowlist (via `extractor` on read_target)
+    Ignores:    files with no read_target context in shared_ctx; files with raw=None; allowlisted entries
+    Basis:      RAW (extracts from file_ctx.raw and target_ctx.raw)
+    shared_ctx: reads read_target FileContext(s) by exact key or glob match
+    """
     extractor: Callable[[str], set[str]]
     consumer: Callable[[str], set[str]]
     read_target: str
