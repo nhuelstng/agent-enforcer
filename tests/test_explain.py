@@ -2,8 +2,9 @@
 import inspect
 from dataclasses import is_dataclass
 import pytest
+from pathlib import Path
 from enforcer.matchers import RegexMatcher
-from enforcer.explain import _parse_docstring_sections, MatcherExplainer, render_matcher_explainer
+from enforcer.explain import _parse_docstring_sections, MatcherExplainer, render_matcher_explainer, _find_paired_test
 
 
 class TestParseDocstringSectionsFound:
@@ -89,3 +90,31 @@ class TestRenderMatcherExplainerClean:
         assert explainer.class_name  # always has a name
         assert isinstance(explainer.docstring_sections, dict)
         assert isinstance(explainer.configured_params, dict)
+
+
+class TestFindPairedTestFound:
+    """locates the paired test file for a matcher class."""
+
+    @pytest.mark.parametrize("class_name,expected_file", [
+        ("RegexMatcher", "test_regex_matcher.py"),     # preferred long form
+        ("ImportMatcher", "test_import_matcher.py"),
+        ("DocstringMatcher", "test_docstring.py"),     # falls back to existing short form
+    ])
+    def test_finds_test_file(self, class_name, expected_file):
+        workspace = str(Path(__file__).resolve().parent.parent)  # repo root
+        result = _find_paired_test(class_name, workspace)
+        assert result is not None
+        assert result.name in (expected_file, expected_file.replace("_matcher", ""))
+
+
+class TestFindPairedTestClean:
+    """returns None when no paired test file exists."""
+
+    @pytest.mark.parametrize("class_name", [
+        "NonexistentMatcher",       # no such matcher
+        "TotallyFake",              # garbage
+        "",                         # empty
+    ])
+    def test_returns_none_when_missing(self, class_name):
+        result = _find_paired_test(class_name, str(Path(__file__).resolve().parent.parent))
+        assert result is None

@@ -4,6 +4,7 @@ import dataclasses
 import inspect
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 _SECTION_RE = re.compile(r'^\s*(What|Ignores|Basis|shared_ctx)\s*:\s*(.+)$', re.MULTILINE)
@@ -46,3 +47,27 @@ def render_matcher_explainer(matcher) -> MatcherExplainer:
         docstring_sections=sections,
         configured_params=configured,
     )
+
+
+def _snake_case_class(class_name: str) -> str:
+    """Convert CamelCase class name to snake_case: RegexMatcher -> regex_matcher."""
+    s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', class_name)
+    return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+
+def _find_paired_test(class_name: str, workspace: str) -> Path | None:
+    """Locate the paired test file for a matcher class.
+
+    Tries (in order): tests/test_matchers/test_{snake}.py, tests/test_matchers/test_{snake_without_matcher}.py.
+    Returns Path of first existing match, or None.
+    """
+    snake = _snake_case_class(class_name)
+    candidates = [
+        f"tests/test_matchers/test_{snake}.py",
+        f"tests/test_matchers/test_{snake.replace('_matcher', '')}.py",
+    ]
+    for rel in candidates:
+        p = Path(workspace) / rel
+        if p.exists():
+            return p
+    return None
