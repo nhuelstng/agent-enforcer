@@ -386,3 +386,65 @@ def test_summary_body_preserves_checked_state():
     body = summary_body(violations, sha="abc123", mode="diff", checked=checked)
     assert "- [x] `verify-types-changed`" in body
     assert "- [ ] `verify-runner-changed`" in body
+
+
+def test_upsert_summary_preserves_checked_state():
+    old_body = """<!-- enforcer-summary -->
+## Enforcer Scan Results
+
+## WARN Checklist
+
+- [x] `verify-types-changed` — `enforcer/types.py:15` — Core types changed
+- [ ] `verify-runner-changed` — `enforcer/runner.py:8` — Runner changed
+"""
+    existing = MagicMock()
+    existing.body = old_body
+    existing.html_url = "https://github.com/owner/repo/issues/1#issuecomment-99"
+
+    issue = MagicMock()
+    issue.get_comments.return_value = [existing]
+
+    repo = MagicMock()
+    repo.get_issue.return_value = issue
+
+    pr = MagicMock()
+    pr.number = 1
+
+    violations = [
+        {"rule_id": "verify-types-changed", "severity": "warn", "file": "enforcer/types.py",
+         "line": 15, "message": "Core types changed", "fix_instruction": "Run pytest"},
+        {"rule_id": "verify-runner-changed", "severity": "warn", "file": "enforcer/runner.py",
+         "line": 8, "message": "Runner changed", "fix_instruction": "Run pytest"},
+    ]
+    url = upsert_summary(repo, pr, violations, sha="abc123", mode="diff")
+    existing.edit.assert_called_once()
+    edited_body = existing.edit.call_args[0][0]
+    assert "- [x] `verify-types-changed`" in edited_body
+    assert "- [ ] `verify-runner-changed`" in edited_body
+    assert url == "https://github.com/owner/repo/issues/1#issuecomment-99"
+
+
+def test_upsert_summary_no_existing_comment_all_unchecked():
+    new_comment = MagicMock()
+    new_comment.html_url = "https://github.com/owner/repo/issues/1#issuecomment-1"
+
+    issue = MagicMock()
+    issue.get_comments.return_value = []
+    issue.create_comment.return_value = new_comment
+
+    repo = MagicMock()
+    repo.get_issue.return_value = issue
+
+    pr = MagicMock()
+    pr.number = 1
+
+    violations = [
+        {"rule_id": "verify-types-changed", "severity": "warn", "file": "enforcer/types.py",
+         "line": 15, "message": "Core types changed", "fix_instruction": "Run pytest"},
+    ]
+    url = upsert_summary(repo, pr, violations, sha="abc123", mode="diff")
+    issue.create_comment.assert_called_once()
+    created_body = issue.create_comment.call_args[0][0]
+    assert "- [ ] `verify-types-changed`" in created_body
+    assert "- [x]" not in created_body
+    assert url == "https://github.com/owner/repo/issues/1#issuecomment-1"

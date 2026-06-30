@@ -109,14 +109,23 @@ def existing_inline_keys(pr) -> set[tuple[str, int, str]]:
     return keys
 
 
-def upsert_summary(repo, pr, violations: list[dict], sha: str, now: datetime | None = None) -> str:
+def upsert_summary(
+    repo,
+    pr,
+    violations: list[dict],
+    sha: str,
+    mode: str = "diff",
+    now: datetime | None = None,
+) -> str:
     """Find existing summary comment by marker and edit, or create new. Returns comment URL."""
-    body = summary_body(violations, sha, now=now)
     issue = repo.get_issue(pr.number)
     for comment in issue.get_comments():
         if comment.body.lstrip().startswith(SUMMARY_MARKER):
+            checked = extract_checked_items(comment.body)
+            body = summary_body(violations, sha, mode=mode, now=now, checked=checked)
             comment.edit(body)
             return comment.html_url
+    body = summary_body(violations, sha, mode=mode, now=now)
     comment = issue.create_comment(body)
     return comment.html_url
 
