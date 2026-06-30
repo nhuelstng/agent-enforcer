@@ -1,6 +1,7 @@
 """KeySetSyncMatcher: cross-file key-set sync. Keys in source must appear in target files."""
 from __future__ import annotations
 from dataclasses import dataclass, field
+from enforcer.extractors.core import Extractor
 from enforcer.types import Match, FileContext, Needs
 
 
@@ -14,8 +15,8 @@ class KeySetSyncMatcher:
     by the runner's read_targets mechanism. No direct file I/O — fully testable
     via an injected shared_ctx dict.
     """
-    source_extractor: "object"
-    target_extractor: "object"
+    source_extractor: Extractor
+    target_extractor: Extractor
     target_globs: list[str]
     exclude_keys: set[str] = field(default_factory=set)
     needs: Needs = Needs.RAW
@@ -23,7 +24,7 @@ class KeySetSyncMatcher:
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Extract keys from source, check against union of target file keys, emit matches for missing keys."""
         shared_ctx = shared_ctx or {}
-        if not file_ctx.raw or not shared_ctx:
+        if not file_ctx.raw:
             return []
         used = self.source_extractor.extract(file_ctx.raw) - self.exclude_keys
         allowed: set[str] = set()

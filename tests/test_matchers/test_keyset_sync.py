@@ -78,13 +78,70 @@ def test_keyset_sync_multiple_files_per_glob():
 
 
 def test_keyset_sync_empty_shared_ctx():
-    source = _ctx(".env", "FOO=1\n")
+    """shared_ctx={} (no targets loaded) should emit matches for all source keys, not silently return []."""
+    source = _ctx(".env", "FOO=1\nBAR=2\n")
     matcher = KeySetSyncMatcher(
         source_extractor=EnvFileKeys(),
         target_extractor=TerraformBlockKeys(block_name="app_environment"),
         target_globs=["infra/*/main.tf"],
     )
-    assert matcher.find(source, {}) == []
+    matches = matcher.find(source, {})
+    values = sorted(m.matched_value for m in matches)
+    assert values == ["BAR", "FOO"]
+
+
+def test_keyset_sync_none_shared_ctx_emits_all_keys():
+    """shared_ctx=None should not crash; with no targets, all source keys are missing."""
+    matcher = KeySetSyncMatcher(
+        source_extractor=EnvFileKeys(),
+        target_extractor=TerraformBlockKeys(block_name="app_environment"),
+        target_globs=["*.tf"],
+    )
+    source = FileContext(path=".env", raw="FOO=1\nBAR=2\n")
+    matches = matcher.find(source, shared_ctx=None)
+    assert len(matches) == 2
+    values = sorted(m.matched_value for m in matches)
+    assert values == ["BAR", "FOO"]
+
+
+def test_keyset_sync_empty_dict_shared_ctx_emits_all_keys():
+    """shared_ctx={} (no targets loaded) should emit matches for all source keys, not silently return []."""
+    matcher = KeySetSyncMatcher(
+        source_extractor=EnvFileKeys(),
+        target_extractor=TerraformBlockKeys(block_name="app_environment"),
+        target_globs=["*.tf"],
+    )
+    source = FileContext(path=".env", raw="FOO=1\nBAR=2\n")
+    matches = matcher.find(source, shared_ctx={})
+    assert len(matches) == 2
+    values = sorted(m.matched_value for m in matches)
+    assert values == ["BAR", "FOO"]
+
+
+def test_keyset_sync_raw_none_returns_empty():
+    """file_ctx.raw=None should return [] (guard on raw, not shared_ctx)."""
+    matcher = KeySetSyncMatcher(
+        source_extractor=EnvFileKeys(),
+        target_extractor=TerraformBlockKeys(block_name="app_environment"),
+        target_globs=["*.tf"],
+    )
+    source = FileContext(path=".env", raw=None)
+    assert matcher.find(source, shared_ctx={}) == []
+
+
+def test_keyset_sync_exclude_key_present_in_both_source_and_target():
+    """A key in exclude_keys should be suppressed even if present in both source and target."""
+    matcher = KeySetSyncMatcher(
+        source_extractor=EnvFileKeys(),
+        target_extractor=TerraformBlockKeys(block_name="app_environment"),
+        target_globs=["*.tf"],
+        exclude_keys={"SHARED"},
+    )
+    source = FileContext(path=".env", raw="SHARED=1\nOTHER=2\n")
+    target = FileContext(path="main.tf", raw="app_environment = {\n  SHARED = \"1\"\n  OTHER = \"2\"\n}\n")
+    shared_ctx = {"main.tf": target}
+    matches = matcher.find(source, shared_ctx=shared_ctx)
+    assert matches == []
 
 
 def test_keyset_sync_skips_double_underscore_keys():
