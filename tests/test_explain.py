@@ -6,8 +6,13 @@ from enforcer.explain import _parse_docstring_sections
 class TestParseDocstringSectionsFound:
     """returns all four labeled sections when present."""
 
-    @pytest.mark.parametrize("label", ["What", "Ignores", "Basis", "shared_ctx"])
-    def test_section_present(self, label):
+    @pytest.mark.parametrize("label,expected", [
+        ("What", "flags lines matching pattern"),
+        ("Ignores", "multiline patterns"),
+        ("Basis", "RAW (regex on raw text)"),
+        ("shared_ctx", "none"),
+    ])
+    def test_section_present(self, label, expected):
         doc = f"""First line summary.
 
         What:       flags lines matching pattern
@@ -17,16 +22,14 @@ class TestParseDocstringSectionsFound:
         """
         sections = _parse_docstring_sections(doc)
         assert label in sections
-        assert sections[label]  # non-empty
+        assert sections[label] == expected
 
     @pytest.mark.parametrize("missing", ["Ignores", "Basis", "shared_ctx"])
     def test_missing_section_omitted(self, missing):
-        doc = f"""Summary.
+        doc = """Summary.
 
         What: flags lines
         """
-        if missing != "What":
-            doc = doc  # only What present
         sections = _parse_docstring_sections(doc)
         assert missing not in sections
         assert "What" in sections
