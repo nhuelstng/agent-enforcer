@@ -104,3 +104,25 @@ def test_build_change_context_empty_status_map():
         assert cc.modified == []
         assert cc.deleted == []
         assert cc.renamed == []
+
+
+def test_build_change_context_reads_env_var_commit_msg(monkeypatch, tmp_path):
+    """_build_change_context reads ENFORCER_COMMIT_MSG_FILE when set (overrides stale COMMIT_EDITMSG)."""
+    monkeypatch.delenv("ENFORCER_COMMIT_MSG_FILE", raising=False)
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True)
+
+    # Stale COMMIT_EDITMSG — must be ignored when env var set
+    editmsg = tmp_path / ".git" / "COMMIT_EDITMSG"
+    editmsg.parent.mkdir(parents=True, exist_ok=True)
+    editmsg.write_text("stale message\n")
+
+    # Fresh env var message — must win
+    fresh_msg = tmp_path / "fresh_msg.txt"
+    fresh_msg.write_text("feat: fresh from env var\n")
+    monkeypatch.setenv("ENFORCER_COMMIT_MSG_FILE", str(fresh_msg))
+
+    cc = _build_change_context(str(tmp_path), {})
+    assert "fresh from env var" in cc.commit_msg
+    assert "stale" not in cc.commit_msg
