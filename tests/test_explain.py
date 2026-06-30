@@ -1,6 +1,9 @@
 """Tests for explain module: rule/matcher reflection and rendering."""
+import inspect
+from dataclasses import is_dataclass
 import pytest
-from enforcer.explain import _parse_docstring_sections
+from enforcer.matchers import RegexMatcher
+from enforcer.explain import _parse_docstring_sections, MatcherExplainer, render_matcher_explainer
 
 
 class TestParseDocstringSectionsFound:
@@ -47,3 +50,42 @@ class TestParseDocstringSectionsClean:
     def test_no_crash(self, doc):
         sections = _parse_docstring_sections(doc)
         assert isinstance(sections, dict)
+
+
+class TestRenderMatcherExplainerFound:
+    """renders class name, docstring sections, and configured params for a matcher."""
+
+    @pytest.mark.parametrize("pattern,redact", [
+        (r"^\s*print\s*\(", False),
+        (r"password\s*=", True),
+        (r"TODO", False),
+    ])
+    def test_renders_class_name_and_pattern(self, pattern, redact):
+        matcher = RegexMatcher(pattern=pattern, redact=redact)
+        explainer = render_matcher_explainer(matcher)
+        assert explainer.class_name == "RegexMatcher"
+        assert explainer.configured_params["pattern"] == pattern
+        assert explainer.configured_params["redact"] == redact
+
+    def test_renders_docstring_sections(self):
+        matcher = RegexMatcher(pattern=r"print")
+        explainer = render_matcher_explainer(matcher)
+        # RegexMatcher will have its docstring retrofitted in Task 9;
+        # until then the explainer should still return a dict (possibly empty)
+        assert isinstance(explainer.docstring_sections, dict)
+
+    def test_explainer_is_dataclass(self):
+        assert is_dataclass(MatcherExplainer)
+
+
+class TestRenderMatcherExplainerClean:
+    """handles matchers with minimal or missing docstrings gracefully."""
+
+    @pytest.mark.parametrize("matcher_factory", [
+        lambda: RegexMatcher(pattern="x"),
+    ])
+    def test_no_crash_on_minimal_docstring(self, matcher_factory):
+        explainer = render_matcher_explainer(matcher_factory())
+        assert explainer.class_name  # always has a name
+        assert isinstance(explainer.docstring_sections, dict)
+        assert isinstance(explainer.configured_params, dict)
