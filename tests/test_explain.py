@@ -299,3 +299,39 @@ WORKSPACE = "."
         result = load_rule_for_explain(str(cfg), "no-raw-he")
         assert result.rule is None
         assert "no-raw-hex" in result.suggestions
+
+
+from enforcer.combinators import AllOf
+from enforcer.matchers import ImportMatcher
+
+
+class TestCombinatorRecursionFound:
+    """recurses into combinators to explain inner matchers."""
+
+    @pytest.mark.parametrize("combinator_factory", [
+        lambda: AllOf([RegexMatcher(pattern=r"x"), RegexMatcher(pattern=r"y")]),
+    ])
+    def test_renders_inner_matchers(self, combinator_factory):
+        combinator = combinator_factory()
+        rule = Rule(
+            id="combo-rule",
+            severity=Severity.ERROR,
+            matchers=[combinator],
+            file_globs=["*.py"],
+            message="m",
+        )
+        text = render_rule_explainer(rule, workspace=".")
+        # the combinator itself is listed
+        assert "AllOf" in text
+        # inner matchers are reflected
+        assert "RegexMatcher" in text
+
+
+class TestCombinatorRecursionClean:
+    """handles nested combinators without crash."""
+
+    def test_nested_combinator(self):
+        nested = AllOf([AllOf([RegexMatcher(pattern=r"z")])])
+        rule = Rule(id="nested", severity=Severity.ERROR, matchers=[nested], file_globs=["*.py"], message="m")
+        text = render_rule_explainer(rule, workspace=".")
+        assert "Rule: nested" in text  # did not crash

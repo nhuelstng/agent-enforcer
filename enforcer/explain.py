@@ -196,27 +196,26 @@ def _render_rule_message_fields(rule: Rule) -> list[str]:
     return lines
 
 
-def _render_matcher_block(matcher, index: int, workspace: str) -> list[str]:
-    """Render one matcher: class name, docstring sections, configured params, worked example."""
-    lines: list[str] = []
-    explainer = render_matcher_explainer(matcher)
-    lines.append(f"  {index}. {explainer.class_name}")
-    for label in ("What", "Ignores", "Basis", "shared_ctx"):
-        if label in explainer.docstring_sections:
-            lines.append(f"     {label + ':':12} {explainer.docstring_sections[label]}")
-    for param, value in explainer.configured_params.items():
-        lines.append(f"     {param}: {value!r}")
+def _flatten_matchers(matchers: list) -> list[tuple[int, object]]:
+    """Flatten matcher tree into list of (depth, matcher) tuples for rendering.
 
-    test_path = _find_paired_test(explainer.class_name, workspace)
-    if test_path:
-        example = _extract_worked_example(test_path, explainer.class_name)
-        if example:
-            lines.append("")
-            lines.append(f"     Worked example ({example.file_path}:{example.test_class_name}.{example.test_method_name}):")
-            for snippet_line in example.snippet.splitlines():
-                lines.append(f"         {snippet_line}")
-    lines.append("")
-    return lines
+    Combinators with .matchers (list) are descended; combinators with .matcher (single)
+    are descended once. Iterative DFS to avoid Python recursion limit on deep ASTs.
+    """
+    flat: list[tuple[int, object]] = []
+    # ponytail: iterative DFS, reverse-push to preserve sibling order on pop
+    stack: list[tuple[int, object]] = [(0, m) for m in reversed(matchers)]
+    while stack:
+        depth, m = stack.pop()
+        flat.append((depth, m))
+        children: list = []
+        if hasattr(m, "matchers") and isinstance(m.matchers, list):
+            children = list(m.matchers)
+        elif hasattr(m, "matcher") and m.matcher is not None:
+            children = [m.matcher]
+        for child in reversed(children):
+            stack.append((depth + 1, child))
+    return flat
 
 
 def render_rule_explainer(rule: Rule, workspace: str = ".") -> str:
@@ -225,10 +224,33 @@ def render_rule_explainer(rule: Rule, workspace: str = ".") -> str:
     lines.extend(_render_rule_header(rule))
     lines.extend(_render_rule_message_fields(rule))
 
-    matchers = rule.matchers or []
-    lines.append(f"Matchers ({len(matchers)}):")
-    for i, matcher in enumerate(matchers, 1):
-        lines.extend(_render_matcher_block(matcher, i, workspace))
+    flat = _flatten_matchers(rule.matchers or [])
+    top_level = sum(1 for d, _ in flat if d == 0)
+    lines.append(f"Matchers ({top_level}):")
+    index = 0
+    for depth, matcher in flat:
+        if depth == 0:
+            index += 1
+        explainer = render_matcher_explainer(matcher)
+        indent = "  " * (depth + 1)
+        prefix = f"{index}." if depth == 0 else "-"
+        lines.append(f"{indent}{prefix} {explainer.class_name}")
+        for label in ("What", "Ignores", "Basis", "shared_ctx"):
+            if label in explainer.docstring_sections:
+                lines.append(f"{indent}{' ' * 13}{label + ':':12} {explainer.docstring_sections[label]}")
+        for param, value in explainer.configured_params.items():
+            lines.append(f"{indent}{' ' * 13}{param}: {value!r}")
+
+        if depth == 0:
+            test_path = _find_paired_test(explainer.class_name, workspace)
+            if test_path:
+                example = _extract_worked_example(test_path, explainer.class_name)
+                if example:
+                    lines.append("")
+                    lines.append(f"{indent}{' ' * 13}Worked example ({example.file_path}:{example.test_class_name}.{example.test_method_name}):")
+                    for snippet_line in example.snippet.splitlines():
+                        lines.append(f"{indent}{' ' * 17}{snippet_line}")
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -272,12 +294,16 @@ def load_rule_for_explain(config_path: str, rule_id: str) -> ExplainResult:
 def render_rule_explainer_json(rule: Rule, workspace: str = ".") -> dict:
     """Render a rule explainer as a JSON-serializable dict."""
     matchers_data = []
-    for matcher in rule.matchers or []:
+    for depth, matcher in _flatten_matchers(rule.matchers or []):
         explainer = render_matcher_explainer(matcher)
-        test_path = _find_paired_test(explainer.class_name, workspace)
-        example = _extract_worked_example(test_path, explainer.class_name) if test_path else None
+        test_path = None
+        example = None
+        if depth == 0:
+            test_path = _find_paired_test(explainer.class_name, workspace)
+            example = _extract_worked_example(test_path, explainer.class_name) if test_path else None
         matchers_data.append({
             "class_name": explainer.class_name,
+            "depth": depth,
             "docstring_sections": explainer.docstring_sections,
             "configured_params": {k: repr(v) for k, v in explainer.configured_params.items()},
             "paired_test": str(test_path) if test_path else None,
