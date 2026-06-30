@@ -145,3 +145,48 @@ def test_verify_fix_respects_file_globs():
         with patch("enforcer.mcp_server.load_config", return_value=config):
             result = json.loads(verify_fix(path="x.py", rule_id="ts-only-regex-test"))
     assert result["summary"]["total"] == 0
+
+
+class TestMcpExplainRule:
+    """the explain_rule MCP tool returns structured rule explainer."""
+
+    def test_explain_rule_returns_json(self, tmp_path, monkeypatch):
+        cfg = tmp_path / "enforcer_config.py"
+        cfg.write_text('''
+from enforcer import Rule, Severity
+from enforcer.matchers import RegexMatcher
+RULES = [
+    Rule(id="no-print", severity=Severity.ERROR, matchers=[RegexMatcher(r"print")], file_globs=["*.py"], message="m"),
+]
+WORKSPACE = "."
+''')
+        monkeypatch.setenv("ENFORCER_CONFIG", str(cfg))
+        from enforcer.mcp_server import explain_rule
+        result = explain_rule("no-print")
+        import json
+        data = json.loads(result)
+        assert data["rule_id"] == "no-print"
+        assert data["severity"] == "error"
+
+    def test_explain_rule_unknown_returns_error(self, tmp_path, monkeypatch):
+        cfg = tmp_path / "enforcer_config.py"
+        cfg.write_text('''
+from enforcer import Rule, Severity
+from enforcer.matchers import RegexMatcher
+RULES = [
+    Rule(id="no-print", severity=Severity.ERROR, matchers=[RegexMatcher(r"print")], file_globs=["*.py"], message="m"),
+]
+WORKSPACE = "."
+''')
+        monkeypatch.setenv("ENFORCER_CONFIG", str(cfg))
+        from enforcer.mcp_server import explain_rule
+        result = explain_rule("nonexistent")
+        import json
+        data = json.loads(result)
+        assert "error" in data or "not found" in result.lower()
+
+    def test_explain_rule_in_tool_definitions(self):
+        from enforcer.mcp_server import _tool_definitions
+        tools = _tool_definitions()
+        names = [t["name"] for t in tools]
+        assert "explain_rule" in names
