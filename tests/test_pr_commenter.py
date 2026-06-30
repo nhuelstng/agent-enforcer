@@ -211,3 +211,52 @@ def test_post_inline_comments_posts_new():
     assert posted == 1
     assert skipped == 0
     pr.create_review_comment.assert_called_once()
+
+
+from scripts.pr_commenter import post_comments
+
+
+def test_post_comments_returns_counts_and_url():
+    pr = MagicMock()
+    pr.number = 1
+    pr.get_review_comments.return_value = []
+
+    new_comment = MagicMock()
+    new_comment.html_url = "https://github.com/owner/repo/issues/1#issuecomment-1"
+    issue = MagicMock()
+    issue.get_comments.return_value = []
+    issue.create_comment.return_value = new_comment
+
+    repo = MagicMock()
+    repo.get_issue.return_value = issue
+
+    violations = [
+        {"rule_id": "no-print", "file": "src/app.py", "line": 42,
+         "severity": "error", "message": "m", "fix_instruction": "f"},
+    ]
+    posted, skipped, summary_url = post_comments(repo, pr, violations, sha="abc123")
+    assert posted == 1
+    assert skipped == 0
+    assert summary_url == "https://github.com/owner/repo/issues/1#issuecomment-1"
+    issue.create_comment.assert_called_once()  # summary created
+    pr.create_review_comment.assert_called_once()  # inline posted
+
+
+def test_post_comments_zero_violations():
+    pr = MagicMock()
+    pr.number = 1
+
+    new_comment = MagicMock()
+    new_comment.html_url = "https://github.com/owner/repo/issues/1#issuecomment-1"
+    issue = MagicMock()
+    issue.get_comments.return_value = []
+    issue.create_comment.return_value = new_comment
+
+    repo = MagicMock()
+    repo.get_issue.return_value = issue
+
+    posted, skipped, summary_url = post_comments(repo, pr, [], sha="abc123")
+    assert posted == 0
+    assert skipped == 0
+    issue.create_comment.assert_called_once()  # summary still posted
+    pr.create_review_comment.assert_not_called()  # no inline

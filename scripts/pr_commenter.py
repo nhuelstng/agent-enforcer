@@ -110,3 +110,10 @@ def post_inline_comments(pr, violations: list[dict]) -> tuple[int, int]:
         )
         posted += 1
     return posted, skipped
+
+
+def post_comments(repo, pr, violations: list[dict], sha: str) -> tuple[int, int, str]:
+    """Post summary + inline comments. Returns (posted, skipped, summary_url)."""
+    summary_url = upsert_summary(repo, pr, violations, sha)
+    posted, skipped = post_inline_comments(pr, violations)
+    return posted, skipped, summary_url
