@@ -187,6 +187,7 @@ def test_post_inline_comments_skips_duplicates():
     c1.line = 42
     c1.user.login = "github-actions[bot]"
 
+    repo = MagicMock()
     pr = MagicMock()
     pr.get_review_comments.return_value = [c1]
 
@@ -196,7 +197,7 @@ def test_post_inline_comments_skips_duplicates():
         {"rule_id": "no-print", "file": "src/app.py", "line": 99,
          "severity": "error", "message": "new", "fix_instruction": "f"},
     ]
-    posted, skipped = post_inline_comments(pr, violations)
+    posted, skipped = post_inline_comments(repo, pr, violations, sha="abc123")
     assert posted == 1
     assert skipped == 1
     # Verify create_review_comment called once with the new violation
@@ -207,6 +208,7 @@ def test_post_inline_comments_skips_duplicates():
 
 
 def test_post_inline_comments_skips_file_level():
+    repo = MagicMock()
     pr = MagicMock()
     pr.get_review_comments.return_value = []
 
@@ -216,13 +218,14 @@ def test_post_inline_comments_skips_file_level():
         {"rule_id": "commit-msg", "file": None, "line": None,
          "severity": "error", "message": "msg", "fix_instruction": "f"},
     ]
-    posted, skipped = post_inline_comments(pr, violations)
+    posted, skipped = post_inline_comments(repo, pr, violations, sha="abc123")
     assert posted == 0
     assert skipped == 2
     pr.create_review_comment.assert_not_called()
 
 
 def test_post_inline_comments_posts_new():
+    repo = MagicMock()
     pr = MagicMock()
     pr.get_review_comments.return_value = []
 
@@ -230,13 +233,14 @@ def test_post_inline_comments_posts_new():
         {"rule_id": "no-print", "file": "src/app.py", "line": 42,
          "severity": "error", "message": "m", "fix_instruction": "f"},
     ]
-    posted, skipped = post_inline_comments(pr, violations)
+    posted, skipped = post_inline_comments(repo, pr, violations, sha="abc123")
     assert posted == 1
     assert skipped == 0
     pr.create_review_comment.assert_called_once()
 
 
 def test_post_inline_comments_continues_on_api_error():
+    repo = MagicMock()
     pr = MagicMock()
     pr.get_review_comments.return_value = []
 
@@ -249,7 +253,7 @@ def test_post_inline_comments_continues_on_api_error():
         {"rule_id": "no-docstring", "file": "src/util.py", "line": 7,
          "severity": "warn", "message": "missing", "fix_instruction": "add doc"},
     ]
-    posted, skipped = post_inline_comments(pr, violations)
+    posted, skipped = post_inline_comments(repo, pr, violations, sha="abc123")
     assert posted == 1
     assert skipped == 1
     assert pr.create_review_comment.call_count == 2

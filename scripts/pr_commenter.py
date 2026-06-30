@@ -89,10 +89,11 @@ def upsert_summary(repo, pr, violations: list[dict], sha: str, now: datetime | N
     return comment.html_url
 
 
-def post_inline_comments(pr, violations: list[dict]) -> tuple[int, int]:
+def post_inline_comments(repo, pr, violations: list[dict], sha: str) -> tuple[int, int]:
     """Post inline review comments, skipping duplicates and file-level violations.
     Returns (posted, skipped)."""
     existing = existing_inline_keys(pr)
+    commit = repo.get_commit(sha)
     posted = 0
     skipped = 0
     for v in violations:
@@ -109,6 +110,7 @@ def post_inline_comments(pr, violations: list[dict]) -> tuple[int, int]:
         try:
             pr.create_review_comment(
                 body=body,
+                commit=commit,
                 path=path,
                 line=line,
             )
@@ -122,5 +124,5 @@ def post_inline_comments(pr, violations: list[dict]) -> tuple[int, int]:
 def post_comments(repo, pr, violations: list[dict], sha: str, now: datetime | None = None) -> tuple[int, int, str]:
     """Post summary + inline comments. Returns (posted, skipped, summary_url)."""
     summary_url = upsert_summary(repo, pr, violations, sha, now=now)
-    posted, skipped = post_inline_comments(pr, violations)
+    posted, skipped = post_inline_comments(repo, pr, violations, sha)
     return posted, skipped, summary_url
