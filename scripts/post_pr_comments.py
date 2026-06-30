@@ -19,6 +19,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pr", required=True, type=int)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--sha", required=True)
+    parser.add_argument("--mode", default="diff", choices=["all", "diff"])
     args = parser.parse_args(argv)
 
     data = json.loads(args.json.read_text())
@@ -44,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     repo = gh.get_repo(args.repo)
     pr = repo.get_pull(args.pr)
 
-    posted, skipped, summary_url = post_comments(repo, pr, violations, args.sha)
+    posted, skipped, summary_url = post_comments(repo, pr, violations, args.sha, mode=args.mode)
     print(f"Summary: {summary_url}")
     print(f"Inline: {posted} posted, {skipped} skipped (existing)")
     return 1
