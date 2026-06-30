@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from datetime import datetime, timezone
 
 SUMMARY_MARKER = "<!-- enforcer-summary -->"
@@ -112,7 +113,8 @@ def post_inline_comments(pr, violations: list[dict]) -> tuple[int, int]:
                 line=line,
             )
             posted += 1
-        except Exception:
+        except Exception as e:
+            print(f"WARN: inline comment failed for {path}:{line} ({e})", file=sys.stderr)
             skipped += 1
     return posted, skipped
 
