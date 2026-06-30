@@ -33,8 +33,12 @@ def test_yaml_nested_keys_top_level_only():
     assert YamlKeys().extract(raw) == {"top", "nested"}
 
 
-def test_yaml_missing_pyyaml_returns_empty(monkeypatch):
-    """When PyYAML is not installed, extract returns set() — no hard dependency."""
+def test_yaml_missing_pyyaml_raises_import_error(monkeypatch):
+    """Missing PyYAML should raise ImportError, not silently return empty set.
+
+    Silent set() causes false-positives when YamlKeys feeds KeySetSyncMatcher:
+    every source key reported 'missing' because target extraction yielded nothing.
+    """
     import builtins
     real_import = builtins.__import__
 
@@ -44,5 +48,6 @@ def test_yaml_missing_pyyaml_returns_empty(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    raw = "key: value\n"
-    assert YamlKeys().extract(raw) == set()
+
+    with pytest.raises(ImportError, match="PyYAML"):
+        YamlKeys().extract("key: value\n")
