@@ -199,3 +199,60 @@ def test_build_shared_ctx_stashes_rules():
     assert len(ctx["__rules__"]) == 1
     assert ctx["__rules__"][0].id == "x"
     assert "__workspace__" in ctx
+
+
+def test_build_shared_ctx_caches_all_glob_matches(tmp_path):
+    """_build_shared_ctx must cache FileContext for every file matching a read_target glob, not just the first."""
+    from enforcer.cli import _build_shared_ctx
+    from enforcer.config import Config
+    from enforcer.context import FileContextBuilder
+    from enforcer import Rule, Severity
+    from enforcer.matchers import RegexMatcher
+
+    (tmp_path / "dev").mkdir()
+    (tmp_path / "prod").mkdir()
+    (tmp_path / "dev" / "main.tf").write_text("app_environment = {\n  FOO = \"1\"\n}\n")
+    (tmp_path / "prod" / "main.tf").write_text("app_environment = {\n  BAR = \"2\"\n}\n")
+
+    config = Config(
+        rules=[Rule(
+            id="x",
+            severity=Severity.ERROR,
+            matchers=[RegexMatcher(r"FOO")],
+            file_globs=["*.tf"],
+            read_targets=["*/main.tf"],
+        )],
+        workspace=str(tmp_path),
+    )
+    builder = FileContextBuilder(config.rules, workspace=str(tmp_path))
+    ctx = _build_shared_ctx(config, builder, str(tmp_path))
+
+    assert "dev/main.tf" in ctx
+    assert "prod/main.tf" in ctx
+    assert ctx["dev/main.tf"].raw is not None
+    assert "FOO" in ctx["dev/main.tf"].raw
+    assert "BAR" in ctx["prod/main.tf"].raw
+
+
+def test_build_shared_ctx_overlapping_globs_dedupe(tmp_path):
+    """Two rules with overlapping globs build each file's context only once."""
+    from enforcer.cli import _build_shared_ctx
+    from enforcer.config import Config
+    from enforcer.context import FileContextBuilder
+    from enforcer import Rule, Severity
+    from enforcer.matchers import RegexMatcher
+
+    (tmp_path / "shared.tf").write_text("FOO = 1\n")
+
+    config = Config(
+        rules=[
+            Rule(id="r1", severity=Severity.ERROR, matchers=[RegexMatcher(r"X")], file_globs=["*.tf"], read_targets=["*.tf"]),
+            Rule(id="r2", severity=Severity.ERROR, matchers=[RegexMatcher(r"Y")], file_globs=["*.tf"], read_targets=["*.tf"]),
+        ],
+        workspace=str(tmp_path),
+    )
+    builder = FileContextBuilder(config.rules, workspace=str(tmp_path))
+    ctx = _build_shared_ctx(config, builder, str(tmp_path))
+
+    file_keys = [k for k in ctx if not k.startswith("__")]
+    assert file_keys == ["shared.tf"]
