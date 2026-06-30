@@ -20,6 +20,8 @@ class TestCoverageMatcher:
     Basis:      AST_PY (tree-sitter AST, iterative DFS for class/method/parametrize detection)
     shared_ctx: none (stateless, reads file_ctx.ast)
     """
+    # ponytail: suppress pytest collection — class name starts with "Test" but it's a matcher, not a test
+    __test__ = False
     min_parametrize_cases: int = 3
     needs: Needs = Needs.AST_PY
 
