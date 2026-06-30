@@ -1,5 +1,17 @@
 """Tests for pr_commenter module."""
-from scripts.pr_commenter import summary_body, SUMMARY_MARKER
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+from scripts.pr_commenter import (
+    RULE_MARKER_RE,
+    SUMMARY_MARKER,
+    existing_inline_keys,
+    inline_body,
+    post_comments,
+    post_inline_comments,
+    summary_body,
+    upsert_summary,
+)
 
 
 def test_summary_body_zero_violations():
@@ -36,7 +48,10 @@ def test_summary_body_with_violations():
     assert "| Severity | Rule | File:Line | Message |" in body
 
 
-from scripts.pr_commenter import inline_body, RULE_MARKER_RE
+def test_summary_body_uses_injected_now():
+    fixed = datetime(2025, 1, 2, 3, 4, tzinfo=timezone.utc)
+    body = summary_body([], sha="abc123", now=fixed)
+    assert "2025-01-02 03:04 UTC" in body
 
 
 def test_inline_body_has_marker_and_fields():
@@ -66,11 +81,6 @@ def test_inline_body_empty_fix_instruction():
     body = inline_body(v)
     assert "Fix: (none)" in body
     assert "(WARN)" in body
-
-
-from unittest.mock import MagicMock
-
-from scripts.pr_commenter import existing_inline_keys
 
 
 def test_existing_inline_keys_extracts_triplets():
@@ -107,9 +117,6 @@ def test_existing_inline_keys_extracts_triplets():
     assert len(keys) == 2  # c3 filtered (not bot), c4 filtered (no marker)
 
 
-from scripts.pr_commenter import upsert_summary
-
-
 def test_upsert_summary_edits_existing():
     existing = MagicMock()
     existing.body = "<!-- enforcer-summary -->\nold body"
@@ -129,6 +136,25 @@ def test_upsert_summary_edits_existing():
     existing.edit.assert_called_once()
     assert url == "https://github.com/owner/repo/issues/1#issuecomment-99"
     repo.get_issue.assert_called_once_with(1)
+
+
+def test_upsert_summary_edits_existing_with_leading_whitespace():
+    existing = MagicMock()
+    existing.body = "\n  <!-- enforcer-summary -->\nold body"
+    existing.html_url = "https://github.com/owner/repo/issues/1#issuecomment-99"
+
+    issue = MagicMock()
+    issue.get_comments.return_value = [existing]
+
+    repo = MagicMock()
+    repo.get_issue.return_value = issue
+
+    pr = MagicMock()
+    pr.number = 1
+
+    url = upsert_summary(repo, pr, [], sha="abc123")
+    existing.edit.assert_called_once()
+    assert url == "https://github.com/owner/repo/issues/1#issuecomment-99"
 
 
 def test_upsert_summary_creates_new():
@@ -152,9 +178,6 @@ def test_upsert_summary_creates_new():
     url = upsert_summary(repo, pr, violations, sha="def456")
     issue.create_comment.assert_called_once()
     assert url == "https://github.com/owner/repo/issues/2#issuecomment-100"
-
-
-from scripts.pr_commenter import post_inline_comments
 
 
 def test_post_inline_comments_skips_duplicates():
@@ -213,7 +236,23 @@ def test_post_inline_comments_posts_new():
     pr.create_review_comment.assert_called_once()
 
 
-from scripts.pr_commenter import post_comments
+def test_post_inline_comments_continues_on_api_error():
+    pr = MagicMock()
+    pr.get_review_comments.return_value = []
+
+    # First call raises, second succeeds.
+    pr.create_review_comment.side_effect = [RuntimeError("api 403"), None]
+
+    violations = [
+        {"rule_id": "no-print", "file": "src/app.py", "line": 42,
+         "severity": "error", "message": "m", "fix_instruction": "f"},
+        {"rule_id": "no-docstring", "file": "src/util.py", "line": 7,
+         "severity": "warn", "message": "missing", "fix_instruction": "add doc"},
+    ]
+    posted, skipped = post_inline_comments(pr, violations)
+    assert posted == 1
+    assert skipped == 1
+    assert pr.create_review_comment.call_count == 2
 
 
 def test_post_comments_returns_counts_and_url():

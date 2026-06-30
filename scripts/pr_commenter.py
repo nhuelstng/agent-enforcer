@@ -2,15 +2,17 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 SUMMARY_MARKER = "<!-- enforcer-summary -->"
 RULE_MARKER_RE = re.compile(r"<!-- enforcer rule_id=(\S+) -->")
 
 
-def summary_body(violations: list[dict], sha: str) -> str:
+def summary_body(violations: list[dict], sha: str, now: datetime | None = None) -> str:
     """Render the summary comment body for a list of violations."""
-    from datetime import datetime, timezone
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    if now is None:
+        now = datetime.now(timezone.utc)
+    date_str = now.strftime("%Y-%m-%d %H:%M UTC")
     if not violations:
         return (
             f"{SUMMARY_MARKER}\n"
@@ -28,10 +30,10 @@ def summary_body(violations: list[dict], sha: str) -> str:
     for v in violations:
         sev = v.get("severity", "info").upper()
         rule = v.get("rule_id", "?")
-        file = v.get("file", "?")
+        path = v.get("file", "?")
         line = v.get("line", 0)
         msg = v.get("message", "")
-        rows.append(f"| {sev} | `{rule}` | `{file}:{line}` | {msg} |")
+        rows.append(f"| {sev} | `{rule}` | `{path}:{line}` | {msg} |")
     table = "\n".join(rows)
     return (
         f"{SUMMARY_MARKER}\n"
@@ -74,12 +76,12 @@ def existing_inline_keys(pr) -> set[tuple[str, int, str]]:
     return keys
 
 
-def upsert_summary(repo, pr, violations: list[dict], sha: str) -> str:
+def upsert_summary(repo, pr, violations: list[dict], sha: str, now: datetime | None = None) -> str:
     """Find existing summary comment by marker and edit, or create new. Returns comment URL."""
-    body = summary_body(violations, sha)
+    body = summary_body(violations, sha, now=now)
     issue = repo.get_issue(pr.number)
     for comment in issue.get_comments():
-        if comment.body.startswith(SUMMARY_MARKER):
+        if comment.body.lstrip().startswith(SUMMARY_MARKER):
             comment.edit(body)
             return comment.html_url
     comment = issue.create_comment(body)
@@ -93,27 +95,30 @@ def post_inline_comments(pr, violations: list[dict]) -> tuple[int, int]:
     posted = 0
     skipped = 0
     for v in violations:
-        file = v.get("file")
+        path = v.get("file")
         line = v.get("line")
         rule_id = v.get("rule_id", "")
-        if not file or not line:
+        if not path or not line:
             skipped += 1
             continue
-        if (file, line, rule_id) in existing:
+        if (path, line, rule_id) in existing:
             skipped += 1
             continue
         body = inline_body(v)
-        pr.create_review_comment(
-            body=body,
-            path=file,
-            line=line,
-        )
-        posted += 1
+        try:
+            pr.create_review_comment(
+                body=body,
+                path=path,
+                line=line,
+            )
+            posted += 1
+        except Exception:
+            skipped += 1
     return posted, skipped
 
 
-def post_comments(repo, pr, violations: list[dict], sha: str) -> tuple[int, int, str]:
+def post_comments(repo, pr, violations: list[dict], sha: str, now: datetime | None = None) -> tuple[int, int, str]:
     """Post summary + inline comments. Returns (posted, skipped, summary_url)."""
-    summary_url = upsert_summary(repo, pr, violations, sha)
+    summary_url = upsert_summary(repo, pr, violations, sha, now=now)
     posted, skipped = post_inline_comments(pr, violations)
     return posted, skipped, summary_url
