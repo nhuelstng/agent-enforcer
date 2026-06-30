@@ -115,3 +115,19 @@ class NoneOf:
             matched_value="(all absent)",
             message=self.message_on_absence,
         )]
+
+@dataclass
+class StatusGate:
+    """Runs inner matcher only when file_ctx.status is in allowed_statuses.
+    Returns [] otherwise. Composes any matcher — PairedFileMatcher, KeySetSyncMatcher,
+    RegexMatcher, anything. Replaces hand-rolled NewFilePairedFileMatcher wrapper
+    in example-repo."""
+    matcher: object
+    allowed_statuses: set[str] = field(default_factory=lambda: {"added"})
+    needs: Needs = Needs.RAW
+
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Run inner matcher only if file_ctx.status is in allowed_statuses, else return empty list."""
+        if file_ctx.status not in self.allowed_statuses:
+            return []
+        return _run(self.matcher, file_ctx, shared_ctx)
