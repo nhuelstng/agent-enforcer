@@ -160,19 +160,17 @@ def _collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_re
     return list(paths), {}
 
 def _build_shared_ctx(config, builder, ws: str) -> dict:
-    """Build shared context dict from rule read_targets."""
+    """Build shared context dict from rule read_targets. Caches FileContext per matched path (not per glob string)."""
     shared_ctx: dict = {}
     shared_ctx["__rules__"] = config.rules
     shared_ctx["__workspace__"] = config.workspace or ws
     for rule in config.rules:
         for target in getattr(rule, "read_targets", []):
-            if target in shared_ctx:
-                continue
             root = Path(ws)
             for match in root.glob(target):
                 rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
-                target_ctx = builder.build(rel)
-                shared_ctx.setdefault(target, target_ctx)
+                if rel not in shared_ctx:
+                    shared_ctx[rel] = builder.build(rel)
     return shared_ctx
 
 def _run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool,
