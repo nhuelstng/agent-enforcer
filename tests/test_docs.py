@@ -76,6 +76,7 @@ def test_render_includes_read_targets():
 
 
 import re
+import pytest
 from enforcer.docs import render_rules_doc
 
 
@@ -298,3 +299,44 @@ def test_render_doc_rule_count_in_header():
     ]
     md = render_rules_doc(rules)
     assert "2 rules configured" in md
+
+
+class TestRenderDocMatchersBlock:
+    """renders a Matchers block with class name and What: line."""
+
+    @pytest.mark.parametrize("present_substring", [
+        "**Matchers:**",
+        "RegexMatcher",
+    ])
+    def test_matchers_block_present(self, present_substring):
+        rules = [
+            Rule(
+                id="no-print",
+                severity=Severity.ERROR,
+                matchers=[RegexMatcher(r"^\s*print\s*\(")],
+                file_globs=["*.py"],
+                message="m",
+            ),
+        ]
+        md = render_rules_doc(rules)
+        assert present_substring in md
+
+    def test_matchers_block_omitted_when_no_matchers(self):
+        rules = [
+            Rule(id="empty", severity=Severity.ERROR, matchers=[], file_globs=["*.py"], message="m"),
+        ]
+        md = render_rules_doc(rules)
+        assert "**Matchers:**" not in md
+
+    def test_matchers_block_links_paired_test(self):
+        rules = [
+            Rule(
+                id="no-print",
+                severity=Severity.ERROR,
+                matchers=[RegexMatcher(r"^\s*print\s*\(")],
+                file_globs=["*.py"],
+                message="m",
+            ),
+        ]
+        md = render_rules_doc(rules)
+        assert "test_regex" in md  # paired test path referenced

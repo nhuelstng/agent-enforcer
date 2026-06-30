@@ -1,5 +1,6 @@
 """Rule documentation generator: renders configured rules as markdown."""
 from __future__ import annotations
+import inspect
 import re
 from enforcer.rule import Rule
 from enforcer.types import RuleType, Severity
@@ -91,7 +92,37 @@ def _render_rule_doc(rule: Rule) -> list[str]:
     out.extend(_render_message_doc(rule))
     out.extend(_render_rationale_doc(rule))
     out.extend(_render_target_doc(rule))
+    out.extend(_render_matchers_doc(rule))
     out.extend(_render_optional_doc(rule))
+    return out
+
+
+def _render_matchers_doc(rule: Rule) -> list[str]:
+    """Render matchers as a markdown block: class name + What: line + paired test link."""
+    if not rule.matchers:
+        return []
+    out: list[str] = ["**Matchers:**", ""]
+    for matcher in rule.matchers:
+        cls_name = type(matcher).__name__
+        doc = inspect.getdoc(matcher) or ""
+        what_line = ""
+        for line in doc.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("What:"):
+                what_line = stripped[len("What:"):].strip()
+                break
+        if what_line:
+            out.append(f"- `{cls_name}` — {what_line}")
+        else:
+            out.append(f"- `{cls_name}`")
+        try:
+            from enforcer.explain import _find_paired_test
+            test_path = _find_paired_test(cls_name, ".")
+            if test_path:
+                out.append(f"  - Tests: `{test_path}`")
+        except Exception:
+            pass  # ponytail: best-effort test link, don't crash docs generation
+    out.append("")
     return out
 
 

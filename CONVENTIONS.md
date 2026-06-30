@@ -12,6 +12,11 @@ Branch '<matched_value>' doesn't match required pattern: type/description
 
 **Applies to:** * (metadata rule, checked once per run)
 
+**Matchers:**
+
+- `BranchNameMatcher` — flags the current git branch when it doesn't match `pattern`
+  - Tests: `tests/test_matchers/test_branch_name.py`
+
 **Fix:** Rename: git branch -m <type>/<description>
 
 ---
@@ -23,6 +28,11 @@ Class '<matched_value>' at <file>:<line> must be CapWords (PascalCase)
 **Why:** CapWords (PascalCase) is the Python convention for classes (PEP 8). Distinguishes types from functions at a glance.
 
 **Applies to:** enforcer/**/*.py
+
+**Matchers:**
+
+- `NamingConventionMatcher` — flags declaration names (functions/classes/variables per declaration_types) that don't match `pattern`
+  - Tests: `tests/test_matchers/test_naming_convention.py`
 
 **Fix:** Rename to CapWords.
 
@@ -37,6 +47,11 @@ No test file for combinator <file>. Every combinator needs paired tests.
 **Why:** Combinators compose matcher logic; untested combinators can invert or short-circuit the intended logic.
 
 **Applies to:** enforcer/combinators/*.py
+
+**Matchers:**
+
+- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+  - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/combinators/__init__.py
 
@@ -54,6 +69,11 @@ Commit message '<matched_value>' doesn't follow Conventional Commits
 
 **Applies to:** * (metadata rule, checked once per run)
 
+**Matchers:**
+
+- `CommitMessageMatcher` — flags the commit message when its first line doesn't match `pattern`
+  - Tests: `tests/test_matchers/test_commit_message.py`
+
 **Fix:** Use: type(scope): description (e.g. feat(matchers): add X)
 
 ---
@@ -66,6 +86,11 @@ CONVENTIONS.md is stale or missing. Regenerate after changing rules.
 
 **Applies to:** * (metadata rule, checked once per run)
 
+**Matchers:**
+
+- `DocSyncMatcher` — flags when the on-disk doc at `doc_path` differs from a fresh render of the current rules
+  - Tests: `tests/test_matchers/test_doc_sync.py`
+
 **Fix:** Run: enforcer sync-doc
 
 ---
@@ -77,6 +102,11 @@ No test file for core module <file>.
 **Why:** Core modules (rule, runner, context, config) are load-bearing; untested core changes can break every rule.
 
 **Applies to:** enforcer/*.py
+
+**Matchers:**
+
+- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+  - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/__init__.py, enforcer/matchers/**, enforcer/predicates/**, enforcer/combinators/**, enforcer/parsers/**, enforcer/extractors/**
 
@@ -94,6 +124,11 @@ Function at <file>:<line> has cyclomatic complexity <matched_value> (max 10). Re
 
 **Applies to:** enforcer/**/*.py
 
+**Matchers:**
+
+- `FunctionComplexityMatcher` — flags functions whose `metric` (lines/params/nesting/cyclomatic) exceeds `max_value`
+  - Tests: `tests/test_matchers/test_function_complexity.py`
+
 **Excludes:** enforcer/cli.py
 
 **Fix:** Extract branches into helper functions or use early returns.
@@ -110,6 +145,11 @@ Function '<matched_value>' at <file>:<line> missing docstring. Public functions 
 
 **Applies to:** enforcer/**/*.py
 
+**Matchers:**
+
+- `DocstringMatcher` — flags public functions (name not _-prefixed) whose body's first statement is not a string expression
+  - Tests: `tests/test_matchers/test_docstring.py`
+
 **Fix:** Add a docstring: """<one-line description>."""
 
 _Checked on changed lines only (`--staged`)._
@@ -123,6 +163,11 @@ Extractor <file> has no paired test. Create tests/test_extractors/test_<stem>*.p
 **Why:** Extractors are pure string transforms — trivial to test. Missing tests mean regressions in key extraction go unnoticed.
 
 **Applies to:** enforcer/extractors/*.py
+
+**Matchers:**
+
+- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+  - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/extractors/__init__.py
 
@@ -140,6 +185,11 @@ Function at <file>:<line> has <matched_value> lines (max 75). Split or extract.
 
 **Applies to:** enforcer/**/*.py
 
+**Matchers:**
+
+- `FunctionComplexityMatcher` — flags functions whose `metric` (lines/params/nesting/cyclomatic) exceeds `max_value`
+  - Tests: `tests/test_matchers/test_function_complexity.py`
+
 **Excludes:** enforcer/cli.py
 
 **Fix:** Extract sub-functions or move logic to a helper module.
@@ -155,6 +205,11 @@ Function at <file>:<line> has <matched_value> parameters (max 5). Group into a d
 **Why:** More than 5 params signals the function does too much; group into a dataclass to make the boundary explicit and the call site readable.
 
 **Applies to:** enforcer/**/*.py
+
+**Matchers:**
+
+- `FunctionComplexityMatcher` — flags functions whose `metric` (lines/params/nesting/cyclomatic) exceeds `max_value`
+  - Tests: `tests/test_matchers/test_function_complexity.py`
 
 **Excludes:** enforcer/cli.py
 
@@ -172,6 +227,11 @@ Function '<matched_value>' at <file>:<line> must be snake_case
 
 **Applies to:** enforcer/**/*.py
 
+**Matchers:**
+
+- `NamingConventionMatcher` — flags declaration names (functions/classes/variables per declaration_types) that don't match `pattern`
+  - Tests: `tests/test_matchers/test_naming_convention.py`
+
 **Fix:** Rename to snake_case.
 
 _Checked on changed lines only (`--staged`)._
@@ -185,6 +245,11 @@ No test file for matcher <file>. Every matcher needs paired tests.
 **Why:** Untested matchers ship false positives/negatives silently. Paired tests catch regressions before they reach users.
 
 **Applies to:** enforcer/matchers/*.py
+
+**Matchers:**
+
+- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+  - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/matchers/__init__.py
 
@@ -202,6 +267,11 @@ Bare except: at <file>:<line>. Use except Exception or more specific.
 
 **Applies to:** enforcer/**/*.py
 
+**Matchers:**
+
+- `RegexMatcher` — flags any line where `pattern` matches at least once
+  - Tests: `tests/test_matchers/test_regex_matcher.py`
+
 **Fix:** Change to `except Exception:` or a more specific exception.
 
 ---
@@ -214,6 +284,11 @@ print() found in library code at <file>:<line>. Use sys.stderr.write or structlo
 
 **Applies to:** enforcer/**/*.py
 
+**Matchers:**
+
+- `RegexMatcher` — flags any line where `pattern` matches at least once
+  - Tests: `tests/test_matchers/test_regex_matcher.py`
+
 **Fix:** Replace print() with sys.stderr.write(...).
 
 ---
@@ -225,6 +300,11 @@ Possible hardcoded secret at <file>:<line>. Use env var.
 **Why:** Hardcoded secrets ship to the repo and can't be rotated without a commit. Env vars separate config from code and keep secrets out of version control.
 
 **Applies to:** **/*.py
+
+**Matchers:**
+
+- `RegexMatcher` — flags any line where `pattern` matches at least once
+  - Tests: `tests/test_matchers/test_regex_matcher.py`
 
 **Excludes:** **/test*, **/*test*
 
@@ -240,6 +320,11 @@ Wildcard import at <file>:<line>. Use explicit imports.
 
 **Applies to:** enforcer/**/*.py
 
+**Matchers:**
+
+- `ImportMatcher` — flags import statements whose text matches any of `forbidden_patterns`
+  - Tests: `tests/test_matchers/test_import_matcher.py`
+
 **Fix:** Replace `from X import *` with explicit symbol imports.
 
 _Checked on changed lines only (`--staged`)._
@@ -253,6 +338,11 @@ No test file for predicate <file>. Every predicate needs paired tests.
 **Why:** Predicates filter matches; untested predicates can silently suppress real violations or let false ones through.
 
 **Applies to:** enforcer/predicates/*.py
+
+**Matchers:**
+
+- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+  - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/predicates/__init__.py
 
@@ -270,6 +360,11 @@ README.md has <matched_value> lines (max 300). LLM analyzed what doesn't belong.
 
 **Applies to:** README.md
 
+**Matchers:**
+
+- `LineCountMatcher` — flags any file whose line count exceeds `max_lines`
+  - Tests: `tests/test_matchers/test_line_count_matcher.py`
+
 **Fix:** Remove or trim the sections flagged by the LLM response below.
 
 **LLM check:** You are reviewing a README.md that exceeds 300 lines. Identify the specific sections that don't belong in a README and make it too long. For each section, explain why it should be removed or trimmed. Be concrete — reference section headings and line ranges. Common bloat: full install logs, API reference dumps, changelogs, verbose examples, duplicated content.
@@ -284,6 +379,11 @@ TODO/FIXME without owner at <file>:<line>. Use '# TODO(@name): …' or remove.
 **Why:** TODOs without owners never get done. An owner reference makes responsibility explicit and enables grepping for open work.
 
 **Applies to:** enforcer/**/*.py
+
+**Matchers:**
+
+- `RegexMatcher` — flags any line where `pattern` matches at least once
+  - Tests: `tests/test_matchers/test_regex_matcher.py`
 
 **Fix:** Add owner reference or delete the TODO and address now.
 
@@ -301,6 +401,10 @@ Commit message may not align with changes. LLM: <matched_value>
 
 **Applies to:** * (metadata rule, checked once per run)
 
+**Matchers:**
+
+- `LLMMatcher` — flags violations reported by the LLM (parsed from JSON `violations` array, or FAIL text fallback)
+
 **Fix:** Rewrite commit message to describe the actual changes.
 
 ---
@@ -312,6 +416,11 @@ Config loader changed in <file>. load_config executes enforcer_config.py as modu
 **Why:** config.py executes enforcer_config.py as a module. Changes here affect how every rule is loaded.
 
 **Applies to:** enforcer/config.py
+
+**Matchers:**
+
+- `AlwaysMatcher` — flags every file it runs on (always emits one Match with matched_value)
+  - Tests: `tests/test_matchers/test_always_matcher.py`
 
 **Fix:** Verify: RULES/WORKSPACE/SEVERITY_ACTIONS/LLM_CONFIG extracted correctly, defaults work.
 
@@ -327,6 +436,11 @@ FileContextBuilder changed in <file>. Parse-once cache drives all AST matchers. 
 
 **Applies to:** enforcer/context.py
 
+**Matchers:**
+
+- `AlwaysMatcher` — flags every file it runs on (always emits one Match with matched_value)
+  - Tests: `tests/test_matchers/test_always_matcher.py`
+
 **Fix:** Verify: AST populated lazily, cache hits don't reparse, needs_for_file aggregates correctly.
 
 _Checked on changed lines only (`--staged`)._
@@ -340,6 +454,11 @@ Parser changed in <file>. Tree-sitter parse affects all AST matchers. Run: pytes
 **Why:** The tree-sitter parser feeds all AST matchers. Changes here can silently break AST detection for Python, TS, or CSS.
 
 **Applies to:** enforcer/parsers/*.py
+
+**Matchers:**
+
+- `AlwaysMatcher` — flags every file it runs on (always emits one Match with matched_value)
+  - Tests: `tests/test_matchers/test_always_matcher.py`
 
 **Fix:** Verify: Python/TS/CSS ASTs parse correctly, language_for_path maps extensions right.
 
@@ -355,6 +474,11 @@ Rule/glob matching changed in <file>. _glob_match and Rule.check() affect every 
 
 **Applies to:** enforcer/rule.py
 
+**Matchers:**
+
+- `AlwaysMatcher` — flags every file it runs on (always emits one Match with matched_value)
+  - Tests: `tests/test_matchers/test_always_matcher.py`
+
 **Fix:** Verify: glob matching works for ** patterns, Rule.check() stamps metadata correctly.
 
 _Checked on changed lines only (`--staged`)._
@@ -369,6 +493,11 @@ Runner changed in <file>. Cross-file finalizers and severity filtering affect al
 
 **Applies to:** enforcer/runner.py
 
+**Matchers:**
+
+- `AlwaysMatcher` — flags every file it runs on (always emits one Match with matched_value)
+  - Tests: `tests/test_matchers/test_always_matcher.py`
+
 **Fix:** Verify: run_cross_file_finalizers works, severity filtering correct, LLM consequences fire.
 
 _Checked on changed lines only (`--staged`)._
@@ -382,6 +511,11 @@ Core types changed in <file>. Every matcher/predicate/combinator depends on thes
 **Why:** types.py is load-bearing — every matcher, predicate, and combinator depends on it. Changes here can break the entire rule engine silently.
 
 **Applies to:** enforcer/types.py
+
+**Matchers:**
+
+- `AlwaysMatcher` — flags every file it runs on (always emits one Match with matched_value)
+  - Tests: `tests/test_matchers/test_always_matcher.py`
 
 **Fix:** Verify: pytest passes, no matcher breaks on new types.py.
 
