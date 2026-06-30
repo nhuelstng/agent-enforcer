@@ -1,12 +1,19 @@
 """Tests for CommitMessageMatcher: enforces commit message format."""
-import os
 import subprocess
 import tempfile
 from pathlib import Path
+import pytest
 from enforcer.matchers.commit_message import CommitMessageMatcher
 from enforcer.types import FileContext
 
-def _init_git_with_commit_msg(tmpdir, msg, use_env_var=True):
+
+@pytest.fixture(autouse=True)
+def _clean_commit_msg_env(monkeypatch):
+    """Ensure ENFORCER_COMMIT_MSG_FILE does not leak across tests."""
+    monkeypatch.delenv("ENFORCER_COMMIT_MSG_FILE", raising=False)
+
+
+def _init_git_with_commit_msg(tmpdir, msg, monkeypatch, use_env_var=True):
     subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, capture_output=True)
     subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=tmpdir, capture_output=True)
     subprocess.run(["git", "config", "user.name", "T"], cwd=tmpdir, capture_output=True)
@@ -15,68 +22,69 @@ def _init_git_with_commit_msg(tmpdir, msg, use_env_var=True):
     if use_env_var:
         msg_file = Path(tmpdir, ".git", "ENFORCER_MSG_FILE")
         msg_file.write_text(msg)
-        os.environ["ENFORCER_COMMIT_MSG_FILE"] = str(msg_file)
+        monkeypatch.setenv("ENFORCER_COMMIT_MSG_FILE", str(msg_file))
     else:
         Path(tmpdir, ".git/COMMIT_EDITMSG").write_text(msg)
-        os.environ.pop("ENFORCER_COMMIT_MSG_FILE", None)
+        monkeypatch.delenv("ENFORCER_COMMIT_MSG_FILE", raising=False)
 
-def test_commit_message_matches_conventional_commits():
+
+def test_commit_message_matches_conventional_commits(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        _init_git_with_commit_msg(tmpdir, "feat: add login page\n\nCloses ABC-123")
+        _init_git_with_commit_msg(tmpdir, "feat: add login page\n\nCloses ABC-123", monkeypatch)
         matcher = CommitMessageMatcher(pattern=r"^(feat|fix|docs|refactor|test|chore|perf|ci|build|style|revert)(\(.+\))?:\s+.+", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
 
-def test_commit_message_does_not_match():
+def test_commit_message_does_not_match(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        _init_git_with_commit_msg(tmpdir, "updated stuff")
+        _init_git_with_commit_msg(tmpdir, "updated stuff", monkeypatch)
         matcher = CommitMessageMatcher(pattern=r"^(feat|fix|docs|refactor|test|chore):\s+.+", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         matches = matcher.find(ctx, {})
         assert len(matches) == 1
         assert "updated stuff" in matches[0].matched_value
 
-def test_commit_message_multiline():
+def test_commit_message_multiline(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        _init_git_with_commit_msg(tmpdir, "fix: handle null\n\nBody text here\nMore body")
+        _init_git_with_commit_msg(tmpdir, "fix: handle null\n\nBody text here\nMore body", monkeypatch)
         matcher = CommitMessageMatcher(pattern=r"^(feat|fix|docs|refactor|test|chore):\s+.+", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
 
-def test_commit_message_no_msg_file():
+def test_commit_message_no_msg_file(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-        os.environ.pop("ENFORCER_COMMIT_MSG_FILE", None)
+        monkeypatch.delenv("ENFORCER_COMMIT_MSG_FILE", raising=False)
         matcher = CommitMessageMatcher(pattern=r"^feat:", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
 
-def test_commit_message_custom_pattern():
+def test_commit_message_custom_pattern(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        _init_git_with_commit_msg(tmpdir, "ABC-123: add feature")
+        _init_git_with_commit_msg(tmpdir, "ABC-123: add feature", monkeypatch)
         matcher = CommitMessageMatcher(pattern=r"^\w+-\d+:\s+.+", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
 
-def test_commit_message_merge_commit_skipped():
+def test_commit_message_merge_commit_skipped(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        _init_git_with_commit_msg(tmpdir, "Merge branch 'feature' into main")
+        _init_git_with_commit_msg(tmpdir, "Merge branch 'feature' into main", monkeypatch)
         matcher = CommitMessageMatcher(pattern=r"^(feat|fix):\s+.+", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
 
-def test_commit_message_falls_back_to_commit_editmsg():
+def test_commit_message_falls_back_to_commit_editmsg(monkeypatch):
     """When ENFORCER_COMMIT_MSG_FILE is not set, fall back to COMMIT_EDITMSG."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        _init_git_with_commit_msg(tmpdir, "feat: from editmsg", use_env_var=False)
+        _init_git_with_commit_msg(tmpdir, "feat: from editmsg", monkeypatch, use_env_var=False)
         matcher = CommitMessageMatcher(pattern=r"^(feat|fix):\s+.+", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
 
-def test_commit_message_env_var_takes_priority():
+def test_commit_message_env_var_takes_priority(monkeypatch):
     """ENFORCER_COMMIT_MSG_FILE takes priority over stale COMMIT_EDITMSG."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        _init_git_with_commit_msg(tmpdir, "feat: current message", use_env_var=True)
+        _init_git_with_commit_msg(tmpdir, "feat: current message", monkeypatch, use_env_var=True)
         # Write stale message to COMMIT_EDITMSG (simulates -m commit during hook)
         Path(tmpdir, ".git/COMMIT_EDITMSG").write_text("old: stale message")
         matcher = CommitMessageMatcher(pattern=r"^(feat|fix):\s+.+", workspace=tmpdir)
