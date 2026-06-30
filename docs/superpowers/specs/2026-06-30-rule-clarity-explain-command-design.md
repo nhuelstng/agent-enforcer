@@ -108,7 +108,46 @@ Convention rules:
 - Test method names read as the assertion ("print_call_flagged", "secret_redacted").
 - First test in each class is the canonical example — the one `explain` will surface.
 
-Not enforced as a rule — documented in `AGENTS.md` matcher development contract. Existing test files get retrofit as they're touched (diff_only).
+**Positive + negative coverage (enforced).** Every matcher test file MUST contain both:
+
+- **Positive case** (rule fires when it should): test method named `test_*_fail` (or `test_*_flags` / `test_*_violation`), body uses `assert` on a non-empty match list (e.g. `assert len(matches) >= 1`). Parameterized with **≥3 examples** via `@pytest.mark.parametrize`.
+- **Negative case** (rule does NOT fire when it shouldn't): test method named `test_*_success` (or `test_*_clean` / `test_*_valid`), body uses `assert not` or `assert len(matches) == 0`. Parameterized with **≥3 examples**.
+
+Minimum: 2 parameterized methods × 3 examples = 6 cases per matcher. More scenarios welcome; the floor is positive + negative, each with 3 inputs.
+
+```python
+import pytest
+
+class TestRegexMatcherFlags:
+    """flags lines that match the configured pattern."""
+
+    @pytest.mark.parametrize("line", [
+        "print('hi')",           # bare print
+        "    print('indented')",  # indented
+        "\tprint('tabbed')",     # tab-indented
+    ])
+    def test_print_flagged(self, line):
+        ctx = make_ctx(line + "\n")
+        matches = RegexMatcher(r"^\s*print\s*\(").find(ctx)
+        assert len(matches) == 1
+
+class TestRegexMatcherClean:
+    """does not flag lines that don't match."""
+
+    @pytest.mark.parametrize("line", [
+        "x = 1",                  # no print
+        "sprint('hi')",          # word containing 'print' but not a call
+        "# print('commented')",  # commented out
+    ])
+    def test_no_match(self, line):
+        ctx = make_ctx(line + "\n")
+        matches = RegexMatcher(r"^\s*print\s*\(").find(ctx)
+        assert not matches
+```
+
+Enforced by new self-enforcement rule `matcher-test-positive-negative` (ERROR, diff_only) — see Part 5.
+
+Existing test files get retrofit as they're touched (diff_only).
 
 ### Part 3 — `enforcer explain <rule-id>` command
 
@@ -168,6 +207,22 @@ Matchers (1):
 
 No `examples` field, no inline code dumps — the docs link to tests, which are the source of truth.
 
+### Part 5 — Self-enforcement rules for test coverage
+
+Two new ERROR rules in `enforcer_config.py`, both `diff_only=True` so they fire only on changed matchers:
+
+**`matcher-test-positive-negative`** — flags a matcher test file missing positive or negative coverage. Logic:
+- Triggered when a matcher in `enforcer/matchers/*.py` is changed.
+- Locates paired test file via existing `PairedFileMatcher` convention (`tests/test_matchers/test_{stem}*.py`).
+- Parses the test file AST (tree-sitter Python).
+- Positive: ≥1 test method whose name matches `test_*(fail|flags|violation)` OR whose body contains `assert` (not `assert not`) on a match-list truthiness/length. Parameterized: the method must carry `@pytest.mark.parametrize` with ≥3 cases (count decorator args or the `parametrize` arg list length).
+- Negative: ≥1 test method whose name matches `test_*(success|clean|valid|passes)` OR whose body contains `assert not` / `assert len(...) == 0` on the match list. Same parameterization floor (≥3).
+- Violation message names which side is missing and the parameterization shortfall.
+
+**Implementation note:** detecting `assert` vs `assert not` reliably via AST: walk method body, find `assert` statements, inspect the test expression. `assert not X` or `assert len(X) == 0` = negative; `assert X` or `assert len(X) >= 1` = positive. Method-name heuristic is a fallback signal when AST inspection is ambiguous — flag if neither heuristic confirms coverage.
+
+This matcher is itself a new matcher — `TestCoverageMatcher` — and ships with its own positive/negative parameterized tests per the convention it enforces.
+
 ## Architecture
 
 New file: `enforcer/explain.py`
@@ -198,7 +253,9 @@ def explain(rule_id, config_path, fmt):
 
 ## Testing
 
-Paired test file: `tests/test_explain.py`. Covers:
+Paired test files:
+
+**`tests/test_explain.py`** — covers:
 - Happy path: `explain` finds rule, renders matcher docstrings, locates paired test.
 - Missing rule id: lists close matches (Levenshtein on rule ids).
 - Matcher with malformed docstring (missing `What:`): renders available sections, notes the gap.
@@ -207,14 +264,20 @@ Paired test file: `tests/test_explain.py`. Covers:
 - Combinator-based rules (e.g. `AllOf(...)` inside `matchers`): recurses into combinator's `.matchers`.
 - Worked example extraction: tree-sitter parse of a real test file returns the expected snippet.
 
-Self-enforcement: existing `core-test-paired` rule flags `explain.py` as needing `tests/test_explain.py`.
+**`tests/test_matchers/test_test_coverage.py`** — covers `TestCoverageMatcher` per the convention it enforces:
+- Positive (flags): ≥3 cases — test file missing positive method, missing negative method, parameterization with <3 cases.
+- Negative (clean): ≥3 cases — test file with both sides parameterized ≥3, file with extra scenarios beyond minimum, file using `assert not` variant naming.
+
+Self-enforcement: existing `core-test-paired` rule flags `explain.py` as needing `tests/test_explain.py`; `matcher-test-paired` flags `test_coverage.py` as needing `tests/test_matchers/test_test_coverage.py`.
 
 ## Migration
 
 - Retrofits matcher class docstrings to the four-section convention (20 existing matchers).
-- No `enforcer_config.py` changes required.
+- Retrofits existing matcher test files to positive/negative parameterized convention (≥3 cases each side). Done as files are touched (diff_only); bulk retrofit optional.
+- No `enforcer_config.py` changes required for docstring convention.
+- New self-enforcement rules added to `enforcer_config.py`: `matcher-docstring-structured`, `matcher-test-positive-negative`.
+- New matcher module: `enforcer/matchers/test_coverage.py` (`TestCoverageMatcher`) + paired tests.
 - No `Rule` dataclass changes.
-- New `matcher-docstring-structured` self-enforcement rule added to `enforcer_config.py`.
 
 ## Open Questions
 
@@ -223,3 +286,5 @@ Self-enforcement: existing `core-test-paired` rule flags `explain.py` as needing
 2. **`matcher-docstring-structured` enforcement strictness.** Requiring `What:` is the floor. Should it also require `Basis:`? Proposal: yes — `Basis:` tells the reader whether this is a regex or AST matcher in one word, high signal. Enforce both `What:` and `Basis:`.
 
 3. **Test file path discovery.** `RegexMatcher` → `test_regex.py` (current) vs `test_regex_matcher.py` (convention consistent with `test_<name>.py` where `<name>` is snake_case of class). Proposal: accept both, prefer the longer form in new tests, don't rename existing test files (renames break git history for no clarity gain).
+
+4. **`TestCoverageMatcher` detection signal.** AST inspect of `assert` vs `assert not` is the primary signal; method-name heuristic (`test_*_fail` / `test_*_success`) is fallback. If both signals are present but disagree (e.g. method named `test_foo_success` containing a positive `assert`), which wins? Proposal: AST wins — names drift, assertions are ground truth. Flag the naming as a separate advisory if they disagree (severity INFO).
