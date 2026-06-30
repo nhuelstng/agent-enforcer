@@ -24,6 +24,7 @@ An agent must use these terms correctly in code, commits, and discussion:
 - **LLMMatcher** — matcher that calls an LLM as the check itself. Returns `Match` objects from structured JSON verdicts. Composes via combinators like any matcher. Defined in `enforcer/matchers/llm_check.py`.
 - **ChangeContext** — carries change metadata (commit message, branch, created/modified/deleted/renamed file lists). Stored in `shared_ctx["__change__"]`. Read by METADATA-phase and finalizer matchers. Defined in `enforcer/types.py`.
 - **FileContext.status** — per-file event kind: `"added"`, `"modified"`, `"deleted"`, `"renamed"`. Populated from `git diff --name-status`. Default `"modified"`. Existing matchers ignore it; event-aware matchers check it.
+- **Extractor** — pure string→set transform (e.g. `EnvFileKeys`, `TerraformBlockKeys`). Used by `KeySetSyncMatcher` to compare key sets across files. Defined in `enforcer/extractors/core.py`.
 
 ## Branch Convention
 
@@ -133,9 +134,10 @@ enforcer/
   llm.py          — LLMExecutor: calls LLM provider on rule failure
   docs.py         — markdown rule documentation generator
   mcp_server.py   — MCP server interface
-  matchers/       — 18 matchers, each in own file
+  matchers/       — 20 matchers, each in own file (incl. KeySetSyncMatcher)
   predicates/     — post-match filters (AST, string, int, combinators)
-  combinators/    — matcher combiners (AllOf, AnyOf, Not, NoneOf, OneOf)
+  combinators/    — matcher combiners (AllOf, AnyOf, Not, NoneOf, OneOf, StatusGate)
+  extractors/     — key-set extractors (env, json, yaml, ini, terraform)
   parsers/         — tree-sitter parser + language detection
 tests/
   test_matchers/  — paired tests for each matcher

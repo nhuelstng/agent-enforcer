@@ -124,7 +124,7 @@ Extractor <file> has no paired test. Create tests/test_extractors/test_<stem>*.p
 
 **Applies to:** enforcer/extractors/*.py
 
-**Excludes:** enforcer/extractors/__init__.py, enforcer/extractors/core.py
+**Excludes:** enforcer/extractors/__init__.py
 
 **Fix:** Add a test file covering happy path, empty/malformed input, and format-specific edge cases.
 
