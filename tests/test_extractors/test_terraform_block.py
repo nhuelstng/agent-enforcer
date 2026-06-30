@@ -63,6 +63,41 @@ app_environment = {
     assert keys == {"BAR"}
 
 
+def test_tf_block_brace_inside_quoted_value():
+    """A } inside a quoted string value must not close the block."""
+    raw = '''app_environment = {
+  FOO = "1"
+  URL = "http://example.com/}"
+  BAR = "2"
+}
+'''
+    keys = TerraformBlockKeys(block_name="app_environment").extract(raw)
+    assert keys == {"FOO", "URL", "BAR"}
+
+
+def test_tf_block_brace_inside_comment():
+    """A } inside a comment must not close the block."""
+    raw = '''app_environment = {
+  # This } is in a comment
+  FOO = "1"
+  BAR = "2"
+}
+'''
+    keys = TerraformBlockKeys(block_name="app_environment").extract(raw)
+    assert keys == {"FOO", "BAR"}
+
+
+def test_tf_block_brace_inside_nested_string():
+    """Multiple braces inside strings should not affect depth."""
+    raw = '''app_environment = {
+  FOO = "}{}}{}"
+  BAR = "2"
+}
+'''
+    keys = TerraformBlockKeys(block_name="app_environment").extract(raw)
+    assert keys == {"FOO", "BAR"}
+
+
 def test_tf_block_skips_non_uppercase_keys():
     raw = '''
 app_environment = {

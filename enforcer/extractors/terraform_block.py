@@ -18,9 +18,40 @@ class TerraformBlockKeys:
         m = re.search(pattern, raw)
         if not m:
             return set()
+        # ponytail: heuristic scan, not a full HCL parser. Tracks string literals
+        # (double-quoted, backslash-escaped) and # comments so braces inside them
+        # don't affect depth. May still be fooled by heredocs or unusual escapes;
+        # upgrade path is a real tree-sitter HCL grammar.
         depth = 0
+        in_string = False
+        escaped = False
+        in_comment = False
         body_chars: list[str] = []
         for ch in raw[m.end() - 1:]:
+            if in_comment:
+                if ch == "\n":
+                    in_comment = False
+                    if depth == 1:
+                        body_chars.append(ch)
+                continue
+            if in_string:
+                if depth == 1:
+                    body_chars.append(ch)
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == "#":
+                in_comment = True
+                continue
+            if ch == '"':
+                in_string = True
+                if depth == 1:
+                    body_chars.append(ch)
+                continue
             if ch == "{":
                 depth += 1
             elif ch == "}":
