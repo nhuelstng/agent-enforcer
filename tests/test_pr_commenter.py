@@ -152,3 +152,62 @@ def test_upsert_summary_creates_new():
     url = upsert_summary(repo, pr, violations, sha="def456")
     issue.create_comment.assert_called_once()
     assert url == "https://github.com/owner/repo/issues/2#issuecomment-100"
+
+
+from scripts.pr_commenter import post_inline_comments
+
+
+def test_post_inline_comments_skips_duplicates():
+    c1 = MagicMock()
+    c1.body = "<!-- enforcer rule_id=no-print -->\nstuff"
+    c1.path = "src/app.py"
+    c1.line = 42
+    c1.user.login = "github-actions[bot]"
+
+    pr = MagicMock()
+    pr.get_review_comments.return_value = [c1]
+
+    violations = [
+        {"rule_id": "no-print", "file": "src/app.py", "line": 42,
+         "severity": "error", "message": "dup", "fix_instruction": "f"},
+        {"rule_id": "no-print", "file": "src/app.py", "line": 99,
+         "severity": "error", "message": "new", "fix_instruction": "f"},
+    ]
+    posted, skipped = post_inline_comments(pr, violations)
+    assert posted == 1
+    assert skipped == 1
+    # Verify create_review_comment called once with the new violation
+    pr.create_review_comment.assert_called_once()
+    call_kwargs = pr.create_review_comment.call_args
+    assert call_kwargs.kwargs["path"] == "src/app.py"
+    assert call_kwargs.kwargs["line"] == 99
+
+
+def test_post_inline_comments_skips_file_level():
+    pr = MagicMock()
+    pr.get_review_comments.return_value = []
+
+    violations = [
+        {"rule_id": "branch-name", "file": "", "line": 0,
+         "severity": "error", "message": "branch", "fix_instruction": "f"},
+        {"rule_id": "commit-msg", "file": None, "line": None,
+         "severity": "error", "message": "msg", "fix_instruction": "f"},
+    ]
+    posted, skipped = post_inline_comments(pr, violations)
+    assert posted == 0
+    assert skipped == 2
+    pr.create_review_comment.assert_not_called()
+
+
+def test_post_inline_comments_posts_new():
+    pr = MagicMock()
+    pr.get_review_comments.return_value = []
+
+    violations = [
+        {"rule_id": "no-print", "file": "src/app.py", "line": 42,
+         "severity": "error", "message": "m", "fix_instruction": "f"},
+    ]
+    posted, skipped = post_inline_comments(pr, violations)
+    assert posted == 1
+    assert skipped == 0
+    pr.create_review_comment.assert_called_once()
