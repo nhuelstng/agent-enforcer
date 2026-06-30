@@ -72,3 +72,15 @@ def existing_inline_keys(pr) -> set[tuple[str, int, str]]:
         if m:
             keys.add((c.path, c.line, m.group(1)))
     return keys
+
+
+def upsert_summary(repo, pr, violations: list[dict], sha: str) -> str:
+    """Find existing summary comment by marker and edit, or create new. Returns comment URL."""
+    body = summary_body(violations, sha)
+    issue = repo.get_issue(pr.number)
+    for comment in issue.get_comments():
+        if comment.body.startswith(SUMMARY_MARKER):
+            comment.edit(body)
+            return comment.html_url
+    comment = issue.create_comment(body)
+    return comment.html_url
