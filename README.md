@@ -70,7 +70,7 @@ Generate the natural-language conventions markdown from configured rules. Includ
 
 ### `enforcer install`
 
-Install the pre-commit hook into `.git/hooks/pre-commit`.
+Install the commit-msg hook into `.git/hooks/commit-msg`.
 
 | Flag | Description |
 |------|-------------|
@@ -202,7 +202,7 @@ Rule(
 
 When `diff_only=True`, the rule only fires on lines added/modified in the current staged diff. Pre-existing violations on unchanged lines are suppressed. File-level matchers (line 0) always pass through.
 
-Only works with `--staged` (pre-commit hook). When run with `--all` or `--paths`, `diff_only` rules are suppressed entirely — if there's no diff, "you touched this file" cannot be true.
+Only works with `--staged` (commit-msg hook). When run with `--all` or `--paths`, `diff_only` rules are suppressed entirely — if there's no diff, "you touched this file" cannot be true.
 
 ## Auto-fix
 

@@ -322,7 +322,7 @@ def sync_doc(config_path, output):
 @cli.command()
 @click.option("--force", is_flag=True, help="Overwrite existing hooks")
 def install(force):
-    """Install pre-commit and prepare-commit-msg hooks."""
+    """Install commit-msg hook."""
     import shutil
 
     hooks_dir = os.path.join(".git", "hooks")
