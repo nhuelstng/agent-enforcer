@@ -4,7 +4,7 @@
 # Runs `python -m enforcer.cli check --staged` against staged files.
 # Git passes the commit message file as $1; we export it via
 # ENFORCER_COMMIT_MSG_FILE so the enforcer reads the actual message
-# being committed (COMMIT_EDITMSG is stale during pre-commit for -m commits).
+# being committed (git may use a temp file for -m/-F, not COMMIT_EDITMSG).
 #
 # ENFORCER_CONFIG          Override path to the config module
 #                          (default: enforcer_config.py).

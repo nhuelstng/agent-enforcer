@@ -144,10 +144,10 @@ RULES = [
         matchers=[PairedFileMatcher(
             source_glob="enforcer/extractors/*.py",
             derived_glob="tests/test_extractors/test_{stem}*.py",
-            exclude_stems=["__init__", "core"],
+            exclude_stems=["__init__"],
         )],
         file_globs=["enforcer/extractors/*.py"],
-        exclude_globs=["enforcer/extractors/__init__.py", "enforcer/extractors/core.py"],
+        exclude_globs=["enforcer/extractors/__init__.py"],
         message="Extractor {file} has no paired test. Create tests/test_extractors/test_{stem}*.py",
         fix_instruction="Add a test file covering happy path, empty/malformed input, and format-specific edge cases.",
         diff_only=True,
