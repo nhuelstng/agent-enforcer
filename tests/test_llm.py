@@ -237,6 +237,42 @@ def test_call_llm_module_function_failure_returns_empty():
     assert result == ""
 
 
+def test_call_llm_strips_think_tags():
+    """Reasoning blocks like <think>...</think> must be stripped from response content."""
+    from enforcer.llm import call_llm
+    mock_response = Mock()
+    mock_response.json.return_value = {"choices": [{"message": {"content": "<think>let me analyze this</think>\n{\"pass\": true}"}}]}
+    with patch("httpx.post", return_value=mock_response):
+        result = call_llm("skainet", "test-model", "prompt", 30)
+    assert "<think>" not in result
+    assert "let me analyze this" not in result
+    assert '{"pass": true}' in result
+
+
+def test_call_llm_strips_multiline_think_tags():
+    """Multi-line reasoning blocks must be stripped entirely."""
+    from enforcer.llm import call_llm
+    reasoning = "<think>\nStep 1: check conventions\nStep 2: all good\n</think>\n"
+    verdict = '{"pass": true}'
+    mock_response = Mock()
+    mock_response.json.return_value = {"choices": [{"message": {"content": reasoning + verdict}}]}
+    with patch("httpx.post", return_value=mock_response):
+        result = call_llm("skainet", "test-model", "prompt", 30)
+    assert "Step 1" not in result
+    assert "Step 2" not in result
+    assert verdict in result
+
+
+def test_call_llm_no_think_tags_unchanged():
+    """Responses without think tags pass through unchanged."""
+    from enforcer.llm import call_llm
+    mock_response = Mock()
+    mock_response.json.return_value = {"choices": [{"message": {"content": '{"pass": true}'}}]}
+    with patch("httpx.post", return_value=mock_response):
+        result = call_llm("skainet", "test-model", "prompt", 30)
+    assert result == '{"pass": true}'
+
+
 def test_llm_executor_still_works_after_extraction():
     """LLMExecutor must still work after its internals are extracted to module functions."""
     mock_response = Mock()

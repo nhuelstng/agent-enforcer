@@ -2,8 +2,17 @@
 from __future__ import annotations
 import json
 import os
+import re
 import sys
 from enforcer.types import Match, FileContext, LLMConsequence, LLMConfig, ProviderConfig
+
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _strip_think_tags(text: str) -> str:
+    """Strip  tags from LLM response content. Handles multiline blocks."""
+    return _THINK_RE.sub("", text).strip()
 
 
 def escape_content(text: str) -> str:
@@ -113,7 +122,8 @@ def call_llm(provider: str | None, model: str | None, prompt: str, timeout: int,
         )
         resp.raise_for_status()
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
+        return _strip_think_tags(content)
     except Exception as e:
         sys.stderr.write(f"[enforcer] LLM call failed: {e}\n")
         return ""

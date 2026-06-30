@@ -166,3 +166,68 @@ def test_llm_matcher_metadata_phase_fail_returns_match():
     assert len(matches) == 1
     assert matches[0].line == 0
     assert "FAIL" in matches[0].matched_value
+
+
+def test_llm_matcher_strips_prose_around_json():
+    """LLM response with prose before/after JSON must still parse correctly."""
+    response_text = (
+        "Let me analyze this code.\n\n"
+        '{"violations": [{"file": "foo.py", "line": 3, "reason": "bad name"}]}\n\n'
+        "That's all I found."
+    )
+    response = _mock_httpx_response(response_text)
+    with patch("httpx.post", return_value=response):
+        m = LLMMatcher(prompt="Check conventions")
+        ctx = FileContext(path="foo.py", raw="x = 1\n")
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
+    assert len(matches) == 1
+    assert matches[0].file == "foo.py"
+    assert matches[0].line == 3
+    assert matches[0].matched_value == "bad name"
+
+
+def test_llm_matcher_strips_markdown_code_fences():
+    """JSON wrapped in markdown code fences must parse correctly."""
+    response_text = "```json\n{\"pass\": true}\n```"
+    response = _mock_httpx_response(response_text)
+    with patch("httpx.post", return_value=response):
+        m = LLMMatcher(prompt="x")
+        ctx = FileContext(path="foo.py", raw="x = 1\n")
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
+    assert matches == []
+
+
+def test_llm_matcher_strips_think_tags_from_response():
+    """Reasoning blocks 国小...</think> must be stripped before parsing."""
+    response_text = "国小Let me think about this.\nThe code looks fine.\n国B{\"pass\": true}"
+    response = _mock_httpx_response(response_text)
+    with patch("httpx.post", return_value=response):
+        m = LLMMatcher(prompt="x")
+        ctx = FileContext(path="foo.py", raw="x = 1\n")
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
+    assert matches == []
+
+
+def test_llm_matcher_malformed_json_repaired():
+    """Malformed JSON (missing quotes, trailing commas) should be repaired, not dumped as raw text."""
+    response_text = '{"violations": [{file: "foo.py", line: 3, reason: "bad",}]}'
+    response = _mock_httpx_response(response_text)
+    with patch("httpx.post", return_value=response):
+        m = LLMMatcher(prompt="Check conventions")
+        ctx = FileContext(path="foo.py", raw="x = 1\n")
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
+    assert len(matches) == 1
+    assert matches[0].file == "foo.py"
+    assert matches[0].line == 3
+    assert matches[0].matched_value == "bad"
+
+
+def test_llm_matcher_pure_prose_fail_open():
+    """Response with no JSON and no PASS/FAIL marker should fail-open (no matches), not dump reasoning."""
+    response_text = "I analyzed the code and it looks fine to me. No issues found."
+    response = _mock_httpx_response(response_text)
+    with patch("httpx.post", return_value=response):
+        m = LLMMatcher(prompt="x")
+        ctx = FileContext(path="foo.py", raw="x = 1\n")
+        matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
+    assert matches == []
