@@ -18,6 +18,7 @@ from enforcer.matchers.duplicate_code import DuplicateCodeMatcher
 from enforcer.matchers.docstring import DocstringMatcher
 from enforcer.matchers.llm_check import LLMMatcher
 from enforcer.matchers.doc_sync import DocSyncMatcher
+from enforcer.matchers.keyset_sync import KeySetSyncMatcher
 
 __all__ = [
     "RegexMatcher",
@@ -39,4 +40,5 @@ __all__ = [
     "DocstringMatcher",
     "LLMMatcher",
     "DocSyncMatcher",
+    "KeySetSyncMatcher",
 ]
