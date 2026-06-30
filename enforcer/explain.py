@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from enforcer.rule import Rule
+from enforcer.types import RuleType
+
 _SECTION_RE = re.compile(r'^\s*(What|Ignores|Basis|shared_ctx)\s*:\s*(.+)$', re.MULTILINE)
 
 
@@ -160,3 +163,71 @@ def _extract_worked_example(test_path: Path, matcher_class_name: str) -> WorkedE
     if example is not None:
         return example
     return _find_module_test_example(root, lines, test_path)
+
+
+def _render_rule_header(rule: Rule) -> list[str]:
+    """Render Rule/Severity/Applies to/Diff-only lines."""
+    lines: list[str] = []
+    lines.append(f"Rule: {rule.id}")
+    sev_label = rule.severity.value.upper()
+    action = "blocks" if rule.severity.value in ("error", "warn") else "advisory"
+    lines.append(f"Severity: {sev_label} ({action})")
+
+    globs = ", ".join(rule.file_globs) if rule.file_globs else "(none)"
+    suffix = " (metadata rule, checked once per run)" if rule.rule_type == RuleType.METADATA else " (content rule, per-file)"
+    lines.append(f"Applies to: {globs}{suffix}")
+    if rule.diff_only:
+        lines.append("Diff-only: yes (fires only on --staged changed lines)")
+    lines.append("")
+    return lines
+
+
+def _render_rule_message_fields(rule: Rule) -> list[str]:
+    """Render Message/Fix/Why lines if present."""
+    lines: list[str] = []
+    if rule.message:
+        msg = "(dynamic message)" if callable(rule.message) else rule.message
+        lines.append(f"Message: {msg}")
+    if rule.fix_instruction:
+        lines.append(f"Fix:     {rule.fix_instruction}")
+    if rule.rationale:
+        lines.append(f"Why:     {rule.rationale}")
+    lines.append("")
+    return lines
+
+
+def _render_matcher_block(matcher, index: int, workspace: str) -> list[str]:
+    """Render one matcher: class name, docstring sections, configured params, worked example."""
+    lines: list[str] = []
+    explainer = render_matcher_explainer(matcher)
+    lines.append(f"  {index}. {explainer.class_name}")
+    for label in ("What", "Ignores", "Basis", "shared_ctx"):
+        if label in explainer.docstring_sections:
+            lines.append(f"     {label + ':':12} {explainer.docstring_sections[label]}")
+    for param, value in explainer.configured_params.items():
+        lines.append(f"     {param}: {value!r}")
+
+    test_path = _find_paired_test(explainer.class_name, workspace)
+    if test_path:
+        example = _extract_worked_example(test_path, explainer.class_name)
+        if example:
+            lines.append("")
+            lines.append(f"     Worked example ({example.file_path}:{example.test_class_name}.{example.test_method_name}):")
+            for snippet_line in example.snippet.splitlines():
+                lines.append(f"         {snippet_line}")
+    lines.append("")
+    return lines
+
+
+def render_rule_explainer(rule: Rule, workspace: str = ".") -> str:
+    """Render a full text explainer for a rule: metadata + matcher details + worked example."""
+    lines: list[str] = []
+    lines.extend(_render_rule_header(rule))
+    lines.extend(_render_rule_message_fields(rule))
+
+    matchers = rule.matchers or []
+    lines.append(f"Matchers ({len(matchers)}):")
+    for i, matcher in enumerate(matchers, 1):
+        lines.extend(_render_matcher_block(matcher, i, workspace))
+
+    return "\n".join(lines)

@@ -3,11 +3,13 @@ import inspect
 from dataclasses import is_dataclass
 import pytest
 from pathlib import Path
+from enforcer import Rule, Severity
 from enforcer.matchers import RegexMatcher
 from enforcer.explain import (
     _parse_docstring_sections,
     MatcherExplainer,
     render_matcher_explainer,
+    render_rule_explainer,
     _find_paired_test,
     _extract_worked_example,
     WorkedExample,
@@ -161,3 +163,59 @@ class TestExtractWorkedExampleClean:
         test_file.write_text(content)
         result = _extract_worked_example(test_file, "FakeMatcher")
         assert result is None
+
+
+def _sample_rule() -> Rule:
+    return Rule(
+        id="no-print",
+        severity=Severity.ERROR,
+        matchers=[RegexMatcher(r"^\s*print\s*\(")],
+        file_globs=["enforcer/**/*.py"],
+        message="print() found in library code at {file}:{line}.",
+        fix_instruction="Replace print() with sys.stderr.write(...).",
+        rationale="print() writes to stdout.",
+        diff_only=True,
+    )
+
+
+class TestRenderRuleExplainerFound:
+    """renders the full rule explainer text for a real rule."""
+
+    @pytest.mark.parametrize("field", [
+        "Rule: no-print",
+        "Severity: ERROR",
+        "Applies to: enforcer/**/*.py",
+        "Matchers (1):",
+        "RegexMatcher",
+        # "What:",   # re-enable after Task 9 docstring retrofit
+        # "Basis:",  # re-enable after Task 9 docstring retrofit
+        "Worked example",
+    ])
+    def test_contains_field(self, field):
+        rule = _sample_rule()
+        text = render_rule_explainer(rule, workspace=str(Path(__file__).resolve().parent.parent))
+        assert field in text
+
+    def test_includes_diff_only_note(self):
+        rule = _sample_rule()
+        text = render_rule_explainer(rule, workspace=".")
+        assert "Diff-only" in text or "diff_only" in text.lower() or "changed lines" in text.lower()
+
+    def test_includes_message_and_fix(self):
+        rule = _sample_rule()
+        text = render_rule_explainer(rule, workspace=".")
+        assert "print() found" in text
+        assert "sys.stderr.write" in text
+
+
+class TestRenderRuleExplainerClean:
+    """handles rules with empty matchers or missing fields."""
+
+    @pytest.mark.parametrize("matchers", [
+        [],  # empty matchers list
+    ])
+    def test_no_crash_on_empty_matchers(self, matchers):
+        rule = Rule(id="empty", severity=Severity.INFO, matchers=matchers, file_globs=["*.py"], message="m")
+        text = render_rule_explainer(rule, workspace=".")
+        assert "Rule: empty" in text
+        assert "Matchers (0):" in text
