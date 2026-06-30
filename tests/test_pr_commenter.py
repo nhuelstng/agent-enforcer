@@ -335,3 +335,11 @@ def test_extract_checked_items_case_insensitive():
     keys = extract_checked_items(body)
     assert ("verify-types-changed", "enforcer/types.py", 15) in keys
     assert len(keys) == 1
+
+
+def test_summary_body_mode_in_header():
+    body = summary_body([], sha="abc123", mode="diff")
+    assert "(mode: diff)" in body
+
+    body_all = summary_body([], sha="abc123", mode="all")
+    assert "(mode: all)" in body_all
