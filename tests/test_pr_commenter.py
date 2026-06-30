@@ -303,3 +303,35 @@ def test_post_comments_zero_violations():
     assert skipped == 0
     issue.create_comment.assert_called_once()  # summary still posted
     pr.create_review_comment.assert_not_called()  # no inline
+
+
+from scripts.pr_commenter import extract_checked_items
+
+
+def test_extract_checked_items_finds_checked():
+    body = """<!-- enforcer-summary -->
+## Enforcer Scan Results
+
+## WARN Checklist
+
+- [x] `verify-types-changed` — `enforcer/types.py:15` — Core types changed
+- [ ] `verify-runner-changed` — `enforcer/runner.py:8` — Runner changed
+- [x] `verify-context-changed` — `enforcer/context.py:22` — Cache changed
+"""
+    keys = extract_checked_items(body)
+    assert ("verify-types-changed", "enforcer/types.py", 15) in keys
+    assert ("verify-context-changed", "enforcer/context.py", 22) in keys
+    assert ("verify-runner-changed", "enforcer/runner.py", 8) not in keys
+    assert len(keys) == 2
+
+
+def test_extract_checked_items_empty_body():
+    keys = extract_checked_items("no checkboxes here")
+    assert keys == set()
+
+
+def test_extract_checked_items_case_insensitive():
+    body = "- [X] `verify-types-changed` — `enforcer/types.py:15` — msg"
+    keys = extract_checked_items(body)
+    assert ("verify-types-changed", "enforcer/types.py", 15) in keys
+    assert len(keys) == 1

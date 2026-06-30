@@ -8,6 +8,19 @@ from datetime import datetime, timezone
 SUMMARY_MARKER = "<!-- enforcer-summary -->"
 RULE_MARKER_RE = re.compile(r"<!-- enforcer rule_id=(\S+) -->")
 
+CHECKED_RE = re.compile(
+    r"^- \[x\] `(\S+)` — `([^:]+):(\d+)`",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def extract_checked_items(body: str) -> set[tuple[str, str, int]]:
+    """Extract (rule_id, file, line) from checked checkboxes in summary body."""
+    keys = set()
+    for m in CHECKED_RE.finditer(body):
+        keys.add((m.group(1), m.group(2), int(m.group(3))))
+    return keys
+
 
 def summary_body(violations: list[dict], sha: str, now: datetime | None = None) -> str:
     """Render the summary comment body for a list of violations."""
