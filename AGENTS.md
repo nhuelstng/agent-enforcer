@@ -166,7 +166,7 @@ The config file is plain Python, not YAML/TOML. This allows full expressiveness 
 
 ## Self-Enforcement
 
-This repo enforces its own conventions. The pre-commit hook is installed at `.git/hooks/pre-commit` and runs `enforcer check --staged` on every commit.
+This repo enforces its own conventions. The commit-msg hook is installed at `.git/hooks/commit-msg` and runs `enforcer check --staged` on every commit.
 
 To install (one-time):
 ```bash
