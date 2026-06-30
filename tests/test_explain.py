@@ -4,7 +4,14 @@ from dataclasses import is_dataclass
 import pytest
 from pathlib import Path
 from enforcer.matchers import RegexMatcher
-from enforcer.explain import _parse_docstring_sections, MatcherExplainer, render_matcher_explainer, _find_paired_test
+from enforcer.explain import (
+    _parse_docstring_sections,
+    MatcherExplainer,
+    render_matcher_explainer,
+    _find_paired_test,
+    _extract_worked_example,
+    WorkedExample,
+)
 
 
 class TestParseDocstringSectionsFound:
@@ -117,4 +124,40 @@ class TestFindPairedTestClean:
     ])
     def test_returns_none_when_missing(self, class_name):
         result = _find_paired_test(class_name, str(Path(__file__).resolve().parent.parent))
+        assert result is None
+
+
+class TestExtractWorkedExampleFound:
+    """extracts a 4-line worked example from a paired test file."""
+
+    @pytest.mark.parametrize("matcher_class", [
+        "RegexMatcher",
+        "ImportMatcher",
+    ])
+    def test_returns_example_for_real_test_file(self, matcher_class):
+        workspace = str(Path(__file__).resolve().parent.parent)
+        test_path = _find_paired_test(matcher_class, workspace)
+        assert test_path is not None
+        example = _extract_worked_example(test_path, matcher_class)
+        assert example is not None
+        assert example.test_class_name  # non-empty
+        assert example.test_method_name  # non-empty
+        assert example.snippet  # non-empty source lines
+
+    def test_worked_example_is_dataclass(self):
+        assert is_dataclass(WorkedExample)
+
+
+class TestExtractWorkedExampleClean:
+    """returns None when test file can't be parsed or has no test classes."""
+
+    @pytest.mark.parametrize("content", [
+        "",                              # empty file
+        "no tests here",                 # no test class
+        "# just a comment",              # no test class
+    ])
+    def test_returns_none_on_no_tests(self, content, tmp_path):
+        test_file = tmp_path / "test_fake.py"
+        test_file.write_text(content)
+        result = _extract_worked_example(test_file, "FakeMatcher")
         assert result is None
