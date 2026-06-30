@@ -137,6 +137,23 @@ RULES = [
         rationale="Core modules (rule, runner, context, config) are load-bearing; untested core changes can break every rule.",
     ),
 
+    # ─── Test pairing: every extractor has a test ──────────────────────
+    Rule(
+        id="extractor-test-paired",
+        severity=Severity.ERROR,
+        matchers=[PairedFileMatcher(
+            source_glob="enforcer/extractors/*.py",
+            derived_glob="tests/test_extractors/test_{stem}*.py",
+            exclude_stems=["__init__", "core"],
+        )],
+        file_globs=["enforcer/extractors/*.py"],
+        exclude_globs=["enforcer/extractors/__init__.py", "enforcer/extractors/core.py"],
+        message="Extractor {file} has no paired test. Create tests/test_extractors/test_{stem}*.py",
+        fix_instruction="Add a test file covering happy path, empty/malformed input, and format-specific edge cases.",
+        diff_only=True,
+        rationale="Extractors are pure string transforms — trivial to test. Missing tests mean regressions in key extraction go unnoticed.",
+    ),
+
     # ─── Naming: functions must be snake_case ───────────────────────────
     Rule(
         id="function-snake-case",
