@@ -11,6 +11,14 @@ on:
         description: "PR number to post comments on"
         required: true
         type: string
+      scan_mode:
+        description: "Scan mode: 'all' (full repo, errors only) or 'diff' (PR diff, errors + warnings)"
+        required: false
+        type: choice
+        options:
+          - all
+          - diff
+        default: diff
 
 concurrency:
   group: enforcer-${{ github.ref }}
@@ -78,8 +86,14 @@ jobs:
         run: pip install dist/*.whl PyGithub
       - name: run-enforcer
         continue-on-error: true
+        env:
+          SCAN_MODE: ${{ github.event.inputs.scan_mode }}
         run: |
-          python -m enforcer.cli check --all --no-llm --format json --output violations.json
+          if [ "$SCAN_MODE" = "all" ]; then
+            python -m enforcer.cli check --all --no-llm --severity error --format json --output violations.json
+          else
+            python -m enforcer.cli check --base-ref origin/main --no-llm --severity warn --format json --output violations.json
+          fi
       - name: post-comments
         if: always()
         env:
@@ -87,10 +101,12 @@ jobs:
           PR_NUMBER: ${{ github.event.inputs.pr_number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
+          SCAN_MODE: ${{ github.event.inputs.scan_mode }}
           PYTHONPATH: "."
         run: |
           python scripts/post_pr_comments.py \
             --json violations.json \
             --pr "$PR_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --sha "$COMMIT_SHA"
+            --sha "$COMMIT_SHA" \
+            --mode "$SCAN_MODE"
