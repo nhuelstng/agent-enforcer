@@ -76,9 +76,11 @@ jobs:
       - name: install-deps
         run: pip install dist/*.whl PyGithub
       - name: run-enforcer
+        continue-on-error: true
         run: |
           python -m enforcer.cli check --all --no-llm --format json --output violations.json
       - name: post-comments
+        if: always()
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.inputs.pr_number }}
