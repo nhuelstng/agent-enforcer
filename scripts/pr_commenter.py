@@ -22,7 +22,13 @@ def extract_checked_items(body: str) -> set[tuple[str, str, int]]:
     return keys
 
 
-def summary_body(violations: list[dict], sha: str, now: datetime | None = None) -> str:
+def summary_body(
+    violations: list[dict],
+    sha: str,
+    mode: str = "diff",
+    now: datetime | None = None,
+    checked: set[tuple[str, str, int]] | None = None,
+) -> str:
     """Render the summary comment body for a list of violations."""
     if now is None:
         now = datetime.now(timezone.utc)
@@ -31,10 +37,9 @@ def summary_body(violations: list[dict], sha: str, now: datetime | None = None) 
         return (
             f"{SUMMARY_MARKER}\n"
             f"## Enforcer Scan Results\n\n"
-            f"Full scan of `{sha}` on {date_str}.\n\n"
+            f"Scan of `{sha}` on {date_str} (mode: {mode}).\n\n"
             f"No violations found. \u2705\n"
         )
-    # Non-empty case
     counts = {"error": 0, "warn": 0, "info": 0}
     for v in violations:
         sev = v.get("severity", "info").lower()
@@ -52,7 +57,7 @@ def summary_body(violations: list[dict], sha: str, now: datetime | None = None) 
     return (
         f"{SUMMARY_MARKER}\n"
         f"## Enforcer Scan Results\n\n"
-        f"Full scan of `{sha}` on {date_str}.\n\n"
+        f"Scan of `{sha}` on {date_str} (mode: {mode}).\n\n"
         f"**{counts['error']} ERROR** \u00b7 **{counts['warn']} WARN** \u00b7 **{counts['info']} INFO**\n\n"
         f"<details>\n"
         f"<summary>Violations</summary>\n\n"
