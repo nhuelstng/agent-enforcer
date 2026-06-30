@@ -105,3 +105,50 @@ def test_existing_inline_keys_extracts_triplets():
     assert ("src/app.py", 42, "no-print") in keys
     assert ("src/util.py", 10, "no-docstring") in keys
     assert len(keys) == 2  # c3 filtered (not bot), c4 filtered (no marker)
+
+
+from scripts.pr_commenter import upsert_summary
+
+
+def test_upsert_summary_edits_existing():
+    existing = MagicMock()
+    existing.body = "<!-- enforcer-summary -->\nold body"
+    existing.html_url = "https://github.com/owner/repo/issues/1#issuecomment-99"
+
+    issue = MagicMock()
+    issue.get_comments.return_value = [existing]
+
+    repo = MagicMock()
+    repo.get_issue.return_value = issue
+
+    pr = MagicMock()
+    pr.number = 1
+
+    violations = []
+    url = upsert_summary(repo, pr, violations, sha="abc123")
+    existing.edit.assert_called_once()
+    assert url == "https://github.com/owner/repo/issues/1#issuecomment-99"
+    repo.get_issue.assert_called_once_with(1)
+
+
+def test_upsert_summary_creates_new():
+    other_comment = MagicMock()
+    other_comment.body = "some unrelated comment"
+
+    new_comment = MagicMock()
+    new_comment.html_url = "https://github.com/owner/repo/issues/2#issuecomment-100"
+
+    issue = MagicMock()
+    issue.get_comments.return_value = [other_comment]
+    issue.create_comment.return_value = new_comment
+
+    repo = MagicMock()
+    repo.get_issue.return_value = issue
+
+    pr = MagicMock()
+    pr.number = 2
+
+    violations = [{"rule_id": "x", "severity": "error", "file": "a.py", "line": 1, "message": "m", "fix_instruction": "f"}]
+    url = upsert_summary(repo, pr, violations, sha="def456")
+    issue.create_comment.assert_called_once()
+    assert url == "https://github.com/owner/repo/issues/2#issuecomment-100"
