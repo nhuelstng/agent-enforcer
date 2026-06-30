@@ -7,7 +7,13 @@ from enforcer.types import Match, FileContext, Needs
 
 @dataclass
 class RegexMatcher:
-    """Matches lines against a regex pattern. Returns one Match per line that matches."""
+    """Matches lines against a regex pattern. Returns one Match per line that matches.
+
+    What:       flags any line where `pattern` matches at least once
+    Ignores:    multiline patterns (operates line-by-line); non-matching lines
+    Basis:      RAW (regex on raw file text, line-by-line)
+    shared_ctx: none (stateless, reads only file_ctx.raw)
+    """
     pattern: str | Pattern
     needs: Needs = Needs.RAW
     redact: bool = False

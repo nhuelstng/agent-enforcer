@@ -189,8 +189,8 @@ class TestRenderRuleExplainerFound:
         "Applies to: enforcer/**/*.py",
         "Matchers (1):",
         "RegexMatcher",
-        # "What:",   # re-enable after Task 9 docstring retrofit
-        # "Basis:",  # re-enable after Task 9 docstring retrofit
+        "What:",
+        "Basis:",
         "Worked example",
     ])
     def test_contains_field(self, field):
