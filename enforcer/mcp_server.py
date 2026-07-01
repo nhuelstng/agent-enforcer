@@ -37,7 +37,7 @@ def check_conventions(paths: list[str] | None = None, format: str = "json", no_l
 
     runner = RuleRunner(config.rules, workspace=ws, no_llm=no_llm, llm_config=config.llm_config)
     builder = FileContextBuilder(config.rules, workspace=ws)
-    shared_ctx = _build_shared_ctx(config, builder, ws)
+    shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=file_list)
 
     change_ctx = _build_change_context(ws, status_map)
     shared_ctx["__change__"] = change_ctx
@@ -72,7 +72,7 @@ def verify_fix(path: str, rule_id: str, format: str = "json", no_llm: bool = Fal
 
     runner = RuleRunner(config.rules, workspace=ws, no_llm=no_llm, llm_config=config.llm_config)
     builder = FileContextBuilder(config.rules, workspace=ws)
-    shared_ctx = _build_shared_ctx(config, builder, ws)
+    shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=[path] if path else None)
 
     # ponytail: honor file_globs/exclude_globs before check() — mirrors RuleRunner._file_matches
     if not runner._file_matches(path, rule):

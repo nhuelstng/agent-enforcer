@@ -15,6 +15,22 @@ def _glob_any_match(name: str, patterns) -> bool:
     return any(fnmatch.fnmatch(name, p) for p in patterns)
 
 
+def _has_architecture_matcher(rules: list) -> bool:
+    """Return True if any rule contains an ArchitectureMatcher in its matcher tree."""
+    stack: list = []
+    for rule in rules:
+        stack.extend(rule.matchers)
+    while stack:
+        m = stack.pop()
+        if hasattr(m, "layers"):
+            return True
+        if hasattr(m, "matchers") and isinstance(m.matchers, list):
+            stack.extend(m.matchers)
+        elif hasattr(m, "matcher") and m.matcher is not None:
+            stack.append(m.matcher)
+    return False
+
+
 def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = None) -> set[int] | None:
     """Parse git diff -U0 for a file, return set of changed (added) line numbers.
     ref=None uses --cached (staged). ref set uses <ref>...HEAD.
@@ -140,7 +156,7 @@ def collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_ref
     return list(paths), {}
 
 
-def build_shared_ctx(config, builder, ws: str) -> dict:
+def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = None) -> dict:
     """Build shared context dict from rule read_targets. Caches FileContext per matched path (not per glob string)."""
     shared_ctx: dict = {}
     shared_ctx["__rules__"] = config.rules
@@ -152,6 +168,10 @@ def build_shared_ctx(config, builder, ws: str) -> dict:
                 rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
                 if rel not in shared_ctx:
                     shared_ctx[rel] = builder.build(rel)
+    if staged_files and _has_architecture_matcher(config.rules):
+        from enforcer.import_graph import ImportGraphBuilder
+        graph_builder = ImportGraphBuilder(builder=builder, workspace=ws)
+        shared_ctx["__import_graph__"] = graph_builder.build(staged_files)
     return shared_ctx
 
 

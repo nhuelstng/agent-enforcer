@@ -85,7 +85,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     )
 
     builder = FileContextBuilder(config.rules, workspace=ws)
-    shared_ctx = _build_shared_ctx(config, builder, ws)
+    shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=file_list)
 
     change_ctx = _build_change_context(ws, status_map)
     shared_ctx["__change__"] = change_ctx
