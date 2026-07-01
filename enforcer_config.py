@@ -45,6 +45,8 @@ from enforcer.matchers import (
     ConstantNamingMatcher,
     MagicNumberMatcher,
     ArchitectureMatcher,
+    FacadeExistsMatcher,
+    FacadeExposesInterfaceMatcher,
 )
 
 WORKSPACE = "."
@@ -680,6 +682,35 @@ RULES = [
         message="Commit message may not align with changes. LLM: {matched_value}",
         fix_instruction="Rewrite commit message to describe the actual changes.",
         rationale="A commit message that doesn't describe the actual changes misleads future archaeologists using git log/blame. The LLM sanity check catches gross mismatches.",
+    ),
+
+    # ─── Facade pattern: every submodule has a facade (__init__.py) ──────
+    Rule(
+        id="facade-exists",
+        severity=Severity.WARN,
+        matchers=[FacadeExistsMatcher(
+            source_glob="enforcer/*",
+            facade="__init__.py",
+            workspace=".",
+        )],
+        file_globs=["enforcer/**/*.py"],
+        exclude_globs=["enforcer/__init__.py"],
+        diff_only=False,
+        message="Submodule {file} has no facade (__init__.py)",
+        fix_instruction="Create enforcer/{file}/__init__.py re-exporting the public API.",
+        rationale="Every submodule should have a facade (__init__.py) that re-exports its public API. This enables clean imports and hides internal structure.",
+    ),
+
+    # ─── Facade pattern: facades expose an interface (Protocol/ABC or __all__) ──
+    Rule(
+        id="facade-exposes-interface",
+        severity=Severity.WARN,
+        matchers=[FacadeExposesInterfaceMatcher()],
+        file_globs=["enforcer/*/__init__.py"],
+        diff_only=False,
+        message="Facade {file} exposes no interface (Protocol/ABC or __all__)",
+        fix_instruction="Add a Protocol/ABC class or __all__ re-export to the facade.",
+        rationale="Facades should expose a public interface (Protocol/ABC) or at minimum an __all__ re-export. This documents the contract and enables dependency injection.",
     ),
 
     # ════════════════════════════════════════════════════════════════════
