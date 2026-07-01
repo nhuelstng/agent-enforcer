@@ -27,11 +27,13 @@ from enforcer.matchers.all_sorted import AllSortedMatcher
 from enforcer.matchers.no_module_side_effects import NoModuleSideEffectsMatcher
 from enforcer.matchers.constant_naming import ConstantNamingMatcher
 from enforcer.matchers.magic_number import MagicNumberMatcher
+from enforcer.matchers.architecture import ArchitectureMatcher
 
 __all__ = [
     "AllSortedMatcher",
     "AllowlistMatcher",
     "AlwaysMatcher",
+    "ArchitectureMatcher",
     "AstNodeMatcher",
     "BranchNameMatcher",
     "CharCountMatcher",
