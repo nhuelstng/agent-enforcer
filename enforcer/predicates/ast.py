@@ -50,21 +50,27 @@ class HasDecoratorPredicate:
         if not node:
             return False
         # ponytail: decorators are siblings BEFORE the decorated node in tree-sitter
-        # check previous children of parent
         parent = node.parent
         if not parent:
             return False
         idx = parent.children.index(node)
+        return self._scan_decorators(parent.children, idx)
+
+    def _scan_decorators(self, siblings: list, idx: int) -> bool:
+        """Scan siblings before idx for matching decorators."""
         for i in range(idx - 1, -1, -1):
-            sibling = parent.children[i]
-            if sibling.type == "decorator":
-                raw = sibling.text
-                text = raw.decode() if hasattr(raw, "decode") else str(raw)
-                if not self.pattern or self._compiled.search(text):
-                    return True
-            elif sibling.type not in ("decorator", "comment", "newline"):
+            sibling = siblings[i]
+            if sibling.type == "decorator" and self._matches_decorator(sibling):
+                return True
+            if sibling.type not in ("decorator", "comment", "newline"):
                 break
         return False
+
+    def _matches_decorator(self, sibling) -> bool:
+        """Return True if the decorator sibling matches the pattern (or no pattern set)."""
+        raw = sibling.text
+        text = raw.decode() if hasattr(raw, "decode") else str(raw)
+        return not self.pattern or self._compiled.search(text)
 
 @dataclass
 class NodeNamePredicate:

@@ -7,7 +7,12 @@ from enforcer.config import load_config
 from enforcer.context import FileContextBuilder
 from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
-from enforcer.cli import _collect_files, _build_shared_ctx, _run_checks, _build_change_context
+from enforcer.check_runner import (
+    collect_files as _collect_files,
+    build_shared_ctx as _build_shared_ctx,
+    run_checks as _run_checks,
+    build_change_context as _build_change_context,
+)
 from enforcer.ignore import load_enforcerignore, is_ignored
 
 
@@ -173,33 +178,49 @@ def _handle_tool_call(params: dict, msg_id) -> str | None:
     return None
 
 
+def _dispatch_method(msg: dict) -> None:
+    """Dispatch a single MCP method call. Sends response or error."""
+    method = msg.get("method")
+    msg_id = msg.get("id")
+    if method == "initialize":
+        _send_response(msg_id, {
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {"name": "enforcer", "version": "1.0.0"},
+            "capabilities": {"tools": {}},
+        })
+    elif method == "tools/list":
+        _send_response(msg_id, {"tools": _tool_definitions()})
+    elif method == "tools/call":
+        result = _handle_tool_call(msg.get("params", {}), msg_id)
+        if result is not None:
+            _send_response(msg_id, {"content": [{"type": "text", "text": result}]})
+    elif method == "notifications/initialized":
+        pass
+    else:
+        _send_error(msg_id, -32601, f"Method not found: {method}")
+
+
+def _handle_mcp_error(msg, e):
+    """Log MCP error and send error response."""
+    sys.stderr.write(f"[enforcer] MCP error: {e}\n")
+    _send_error(msg.get("id") if msg else None, -32603, "Internal error")
+
+
+def _process_mcp_line(line: str) -> dict | None:
+    """Parse and dispatch a single MCP line. Returns the msg or None."""
+    msg = None
+    try:
+        msg = json.loads(line)
+        _dispatch_method(msg)
+    except Exception as e:
+        _handle_mcp_error(msg, e)
+    return msg
+
+
 def run_mcp_server():
     """Minimal stdio JSON-RPC server for MCP protocol."""
     for line in sys.stdin:
-        msg = None
-        try:
-            msg = json.loads(line)
-            method = msg.get("method")
-            msg_id = msg.get("id")
-            if method == "initialize":
-                _send_response(msg_id, {
-                    "protocolVersion": "2024-11-05",
-                    "serverInfo": {"name": "enforcer", "version": "1.0.0"},
-                    "capabilities": {"tools": {}},
-                })
-            elif method == "tools/list":
-                _send_response(msg_id, {"tools": _tool_definitions()})
-            elif method == "tools/call":
-                result = _handle_tool_call(msg.get("params", {}), msg_id)
-                if result is not None:
-                    _send_response(msg_id, {"content": [{"type": "text", "text": result}]})
-            elif method == "notifications/initialized":
-                pass
-            else:
-                _send_error(msg_id, -32601, f"Method not found: {method}")
-        except Exception as e:
-            sys.stderr.write(f"[enforcer] MCP error: {e}\n")
-            _send_error(msg.get("id") if msg else None, -32603, "Internal error")
+        _process_mcp_line(line)
 
 if __name__ == "__main__":
     run_mcp_server()

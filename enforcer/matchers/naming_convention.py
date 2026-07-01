@@ -40,15 +40,16 @@ class NamingConventionMatcher:
         matches: list[Match] = []
         root = file_ctx.ast.root_node
         for node in self._walk(root):
-            if node.type in self.declaration_types and node.type in _DECL_NODE_TYPES:
-                name = self._extract_name(node)
-                if name and not self._compiled.search(name):
-                    matches.append(Match(
-                        file=file_ctx.path,
-                        line=node.start_point[0] + 1,
-                        column=node.start_point[1] + 1,
-                        matched_value=name,
-                    ))
+            if node.type not in self.declaration_types or node.type not in _DECL_NODE_TYPES:
+                continue
+            name = self._extract_name(node)
+            if name and not self._compiled.search(name):
+                matches.append(Match(
+                    file=file_ctx.path,
+                    line=node.start_point[0] + 1,
+                    column=node.start_point[1] + 1,
+                    matched_value=name,
+                ))
         return matches
 
     def _extract_name(self, node) -> str:

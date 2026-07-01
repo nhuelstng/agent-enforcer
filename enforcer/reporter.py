@@ -1,11 +1,20 @@
 """Output formatter: text, JSON, and SARIF. Computes exit code from matches and severity actions."""
 from __future__ import annotations
 import json
+from typing import Protocol, runtime_checkable
 from enforcer.types import Match, Severity
 
 _SEVERITY_ORDER = {Severity.ERROR: 0, Severity.WARN: 1, Severity.INFO: 2}
 
-class Reporter:
+
+@runtime_checkable
+class ReporterProtocol(Protocol):
+    """Public contract for output formatters: render matches + compute exit code."""
+    def render(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> str: ...
+    def exit_code(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> int: ...
+
+
+class Reporter(ReporterProtocol):
     """Renders match results in text, JSON, or SARIF format. Computes exit code based on severity actions."""
     def __init__(self, format: str = "text"):
         self.format = format

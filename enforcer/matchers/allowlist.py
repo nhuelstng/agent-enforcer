@@ -23,25 +23,25 @@ class AllowlistMatcher:
         """Flag file content entries not present in the allowlist. Returns list of Match."""
         from enforcer.rule import _glob_match
         shared_ctx = shared_ctx or {}
-        target_ctxs: list[FileContext] = []
-        if self.read_target in shared_ctx:
-            target_ctxs.append(shared_ctx[self.read_target])
-        else:
-            for key, ctx in shared_ctx.items():
-                if _glob_match(key, self.read_target):
-                    target_ctxs.append(ctx)
-        if not target_ctxs:
-            return []
-        if file_ctx.raw is None:
+        target_ctxs = self._resolve_targets(shared_ctx)
+        if not target_ctxs or file_ctx.raw is None:
             return []
         allowed: set[str] = set()
         for target_ctx in target_ctxs:
-            if target_ctx.raw is None:
-                continue
-            allowed |= self.extractor(target_ctx.raw)
+            if target_ctx.raw is not None:
+                allowed |= self.extractor(target_ctx.raw)
         used = self.consumer(file_ctx.raw)
-        undefined = used - allowed
         return [
             Match(file=file_ctx.path, line=0, matched_value=item)
-            for item in undefined
+            for item in used - allowed
+        ]
+
+    def _resolve_targets(self, shared_ctx: dict) -> list[FileContext]:
+        """Resolve target FileContexts by exact key or glob match."""
+        from enforcer.rule import _glob_match
+        if self.read_target in shared_ctx:
+            return [shared_ctx[self.read_target]]
+        return [
+            ctx for key, ctx in shared_ctx.items()
+            if _glob_match(key, self.read_target)
         ]
