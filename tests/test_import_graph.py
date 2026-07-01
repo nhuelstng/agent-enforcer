@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 from enforcer.import_graph import ImportGraphBuilder
 from enforcer.context import FileContextBuilder
+from enforcer.matchers.architecture import ArchitectureMatcher
+from enforcer.types import FileContext
 
 
 def _write(tmp_path: Path, rel: str, content: str) -> None:
@@ -128,3 +130,51 @@ def test_aliased_and_multimodule_imports(tmp_path: Path, source, expected):
     graph = graph_builder.build(staged_files=["pkg/a.py"])
 
     assert graph["pkg/a.py"] == expected
+
+
+@pytest.mark.parametrize("source,expected", [
+    ("from enforcer.types import Needs\n", {"enforcer/types.py"}),
+    ("from enforcer.matchers import RegexMatcher\n", {"enforcer/matchers/__init__.py"}),
+    ("from enforcer.parsers.ast_utils import walk_ast\n", {"enforcer/parsers/ast_utils.py"}),
+])
+def test_from_import_symbol_falls_back_to_package(tmp_path: Path, source, expected):
+    """from X.Y import Z where Z is a symbol (not submodule) resolves to X.Y's file."""
+    for rel in [
+        "enforcer/__init__.py", "enforcer/types.py",
+        "enforcer/matchers/__init__.py",
+        "enforcer/parsers/__init__.py", "enforcer/parsers/ast_utils.py",
+    ]:
+        _write(tmp_path, rel, "x = 1\n")
+    _write(tmp_path, "enforcer/runner.py", source)
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = graph_builder.build(staged_files=["enforcer/runner.py"])
+
+    assert graph["enforcer/runner.py"] == expected
+
+
+def test_end_to_end_architecture_violation(tmp_path: Path):
+    """from X import Y must resolve to X's file, and ArchitectureMatcher flags the edge."""
+    _write(tmp_path, "pkg/__init__.py", "")
+    _write(tmp_path, "pkg/a.py", "from pkg import b\n")
+    _write(tmp_path, "pkg/b.py", "x = 1\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = graph_builder.build(staged_files=["pkg/a.py"])
+
+    assert graph["pkg/a.py"] == {"pkg/b.py"}
+
+    matcher = ArchitectureMatcher(
+        layers={
+            "a_layer": ["pkg/a.py"],
+            "b_layer": ["pkg/b.py"],
+        },
+        forbidden_edges=[("a_layer", "b_layer")],
+        forbid_implicit=False,
+    )
+    ctx = FileContext(path="pkg/a.py", raw="from pkg import b\n")
+    matches = matcher.find(ctx, {"__import_graph__": graph})
+    assert len(matches) == 1
+    assert matches[0].matched_value == "a_layer -> b_layer"

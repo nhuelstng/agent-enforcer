@@ -2,23 +2,15 @@
 from __future__ import annotations
 import os
 import sys
+from abc import ABC
 from collections import deque
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from enforcer.context import FileContextBuilder
 
 
-@runtime_checkable
-class ImportGraphBuilderProtocol(Protocol):
-    """Public contract for import-graph builders: build graph, resolve modules."""
-
-    def build(self, staged_files: list[str]) -> dict[str, set[str]]:
-        """Return import graph for staged files plus transitive closure."""
-        ...
-
-
-class ImportGraphBuilder(ImportGraphBuilderProtocol):
+class ImportGraphBuilder(ABC):
     """Builds {source_path: set[target_path]} from staged files + transitive closure.
 
     What:       resolves Python imports (import X.Y, from X.Y import Z) to on-disk paths.
@@ -88,10 +80,11 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
         return resolved
 
     def _extract_imports(self, path: str) -> set[str]:
-        """Parse file's imports, return set of module-path strings. Cached.
+        """Parse file's imports, return set of dotted module-path strings. Cached.
 
-        For 'from X import Y' where Y resolves as submodule X.Y, emits 'X.Y'.
-        Falls back to package 'X' when X.Y has no on-disk target.
+        Emits 'X.Y.Z' for 'from X.Y import Z' (Z may be symbol or submodule).
+        _resolve_import handles the symbol-vs-submodule distinction by falling
+        back to the parent package file when Z is not a submodule on disk.
         """
         if path in self._imports_cache:
             return self._imports_cache[path]
@@ -165,6 +158,9 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
         """Resolve a dotted module string to on-disk paths relative to workspace.
 
         'pkg.sub' -> ['pkg/sub/__init__.py', 'pkg/sub.py'] (whichever exists).
+        For from-imports, the final component may be a symbol (not a submodule);
+        fall back to the parent package's file when the full dotted path has no
+        on-disk target. Example: 'enforcer.types.Needs' -> 'enforcer/types.py'.
         Relative imports (module starts with '.') deferred.
         """
         if not module or module.startswith("."):
@@ -175,7 +171,17 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
             os.path.join(*parts, "__init__.py"),
             os.path.join(*parts[:-1], parts[-1] + ".py"),
         ]
-        return self._existing(candidates)
+        resolved = self._existing(candidates)
+        if not resolved and len(parts) >= 2:
+            # ponytail: final component is a symbol, not a submodule; fall back to
+            # the parent package (its __init__ or .py file).
+            parent = parts[:-1]
+            parent_candidates: list[str] = [
+                os.path.join(*parent, "__init__.py"),
+                os.path.join(*parent[:-1], parent[-1] + ".py"),
+            ]
+            resolved = self._existing(parent_candidates)
+        return resolved
 
     def _existing(self, candidates: list[str]) -> list[str]:
         """Filter candidate paths to those existing on disk, normalized to /."""
