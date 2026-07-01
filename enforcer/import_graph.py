@@ -143,7 +143,6 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
             return
         for name_node in imported_names:
             modules.add(f"{pkg}.{node_text(name_node)}")
-        modules.add(pkg)
 
     def _resolve_import(self, source_path: str, module: str) -> list[str]:
         """Resolve a dotted module string to on-disk paths relative to workspace.
