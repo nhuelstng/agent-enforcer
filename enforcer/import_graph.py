@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os
 import sys
+from collections import deque
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -38,33 +39,37 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
     def build(self, staged_files: list[str]) -> dict[str, set[str]]:
         """Build import graph from staged files + transitive closure. Returns graph dict."""
         graph: dict[str, set[str]] = {}
-        queue: list[str] = list(staged_files)
+        queue: deque[str] = deque(staged_files)
         seen: set[str] = set()
+        queued: set[str] = set(staged_files)
 
-        self._process_queue(queue, seen, graph)
+        self._process_queue(queue, seen, queued, graph)
         self._warn_if_capped(seen)
         return graph
 
-    def _process_queue(self, queue: list[str], seen: set[str],
-                       graph: dict[str, set[str]]) -> None:
+    def _process_queue(self, queue: deque[str], seen: set[str],
+                       queued: set[str], graph: dict[str, set[str]]) -> None:
         """Drain queue, populating graph. Stops at max_files cap."""
         while queue and len(seen) < self.max_files:
-            path = queue.pop(0)
+            path = queue.popleft()
+            queued.discard(path)
             if path in seen or not path.endswith(".py"):
                 continue
             if not os.path.isfile(os.path.join(self.workspace, path)):
                 continue
             seen.add(path)
             resolved = self._resolve_for_path(path)
-            self._enqueue_new(resolved, seen, queue)
+            self._enqueue_new(resolved, seen, queued, queue)
             graph[path] = resolved
 
     @staticmethod
-    def _enqueue_new(resolved: set[str], seen: set[str], queue: list[str]) -> None:
+    def _enqueue_new(resolved: set[str], seen: set[str],
+                     queued: set[str], queue: deque[str]) -> None:
         """Queue resolved targets not already seen or queued."""
         for r in resolved:
-            if r not in seen and r not in queue:
+            if r not in seen and r not in queued:
                 queue.append(r)
+                queued.add(r)
 
     def _warn_if_capped(self, seen: set[str]) -> None:
         """Emit stderr warning when max_files cap was reached."""
@@ -79,7 +84,7 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
         resolved: set[str] = set()
         targets = self._extract_imports(path)
         for tgt in targets:
-            resolved.update(self._resolve_import(path, tgt))
+            resolved.update(self._resolve_import(tgt))
         return resolved
 
     def _extract_imports(self, path: str) -> set[str]:
@@ -117,21 +122,26 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
 
     @staticmethod
     def _collect_plain_import(node, node_text, modules: set[str]) -> None:
-        """Extract module from 'import X.Y [as z]'."""
-        dotted = [c for c in node.children if c.type == "dotted_name"]
-        if dotted:
-            modules.add(node_text(dotted[0]))
-            return
-        aliased = next((c for c in node.children if c.type == "aliased_import"), None)
-        if aliased is None:
-            return
-        sub = [cc for cc in aliased.children if cc.type == "dotted_name"]
-        if sub:
-            modules.add(node_text(sub[0]))
+        """Extract modules from 'import X.Y [as z], A.B [as w], ...'.
+
+        One import_statement holds comma-separated modules; each is either a
+        bare dotted_name or an aliased_import wrapping a dotted_name.
+        """
+        for child in node.children:
+            if child.type == "dotted_name":
+                modules.add(node_text(child))
+            elif child.type == "aliased_import":
+                sub = next((cc for cc in child.children if cc.type == "dotted_name"), None)
+                if sub is not None:
+                    modules.add(node_text(sub))
 
     @staticmethod
     def _collect_from_import(node, node_text, modules: set[str]) -> None:
-        """Extract modules from 'from X import Y[, Z]'."""
+        """Extract modules from 'from X import Y[, Z]'.
+
+        Y/Z may be bare dotted_names or aliased_imports (Y as foo); descend
+        into aliased_import children to recover the real imported name.
+        """
         children = node.children
         dotted_names = [c for c in children if c.type == "dotted_name"]
         relative = [c for c in children if c.type == "relative_import"]
@@ -139,30 +149,32 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
             # ponytail: relative import support deferred -- add when repo needs it
             return
         pkg = node_text(dotted_names[0])
-        imported_names = dotted_names[1:]
-        if not imported_names:
+        imported = dotted_names[1:] + [c for c in children if c.type == "aliased_import"]
+        if not imported:
             modules.add(pkg)
             return
-        for name_node in imported_names:
+        for name_node in imported:
+            if name_node.type == "aliased_import":
+                sub = next((cc for cc in name_node.children if cc.type == "dotted_name"), None)
+                if sub is None:
+                    continue
+                name_node = sub
             modules.add(f"{pkg}.{node_text(name_node)}")
 
-    def _resolve_import(self, source_path: str, module: str) -> list[str]:
+    def _resolve_import(self, module: str) -> list[str]:
         """Resolve a dotted module string to on-disk paths relative to workspace.
 
         'pkg.sub' -> ['pkg/sub/__init__.py', 'pkg/sub.py'] (whichever exists).
-        Relative imports (module starts with '.') resolved against source package.
+        Relative imports (module starts with '.') deferred.
         """
         if not module or module.startswith("."):
             # ponytail: relative import support deferred -- add when a repo needs it
             return []
         parts = module.split(".")
-        candidates: list[str] = []
-        candidates.append(os.path.join(*parts, "__init__.py"))
-        py_path = os.path.join(*parts[:-1], parts[-1] + ".py") if parts else ""
-        if py_path:
-            candidates.append(py_path)
-        if len(parts) == 1:
-            candidates.append(parts[0] + ".py")
+        candidates: list[str] = [
+            os.path.join(*parts, "__init__.py"),
+            os.path.join(*parts[:-1], parts[-1] + ".py"),
+        ]
         return self._existing(candidates)
 
     def _existing(self, candidates: list[str]) -> list[str]:

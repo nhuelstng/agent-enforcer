@@ -107,3 +107,24 @@ def test_resolves_nothing_clean(tmp_path: Path, source):
     graph = graph_builder.build(staged_files=["pkg/a.py"])
 
     assert graph["pkg/a.py"] == set()
+
+
+@pytest.mark.parametrize("source,expected", [
+    ("from pkg import b as foo\n", {"pkg/b.py"}),
+    ("from pkg import b as foo, c\n", {"pkg/b.py", "pkg/c.py"}),
+    ("import pkg.b, pkg.c\n", {"pkg/b.py", "pkg/c.py"}),
+    ("import os as o, sys as s\n", set()),
+    ("from pkg import b as foo\nfrom pkg import c as bar\n", {"pkg/b.py", "pkg/c.py"}),
+])
+def test_aliased_and_multimodule_imports(tmp_path: Path, source, expected):
+    """Aliased from-imports and multi-module plain imports resolve correctly."""
+    _write(tmp_path, "pkg/a.py", source)
+    _write(tmp_path, "pkg/__init__.py", "")
+    _write(tmp_path, "pkg/b.py", "x = 1\n")
+    _write(tmp_path, "pkg/c.py", "x = 1\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = graph_builder.build(staged_files=["pkg/a.py"])
+
+    assert graph["pkg/a.py"] == expected
