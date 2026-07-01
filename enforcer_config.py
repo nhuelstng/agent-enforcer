@@ -44,6 +44,7 @@ from enforcer.matchers import (
     NoModuleSideEffectsMatcher,
     ConstantNamingMatcher,
     MagicNumberMatcher,
+    ArchitectureMatcher,
 )
 
 WORKSPACE = "."
@@ -290,6 +291,58 @@ RULES = [
         fix_instruction="Add a base class (Protocol, ABC, or domain base) to the class definition.",
         diff_only=True,
         rationale="Classes with many methods and no interface are hard to mock, test in isolation, and substitute. An interface enables polymorphism and dependency injection.",
+    ),
+
+    # ─── Architecture: layer dependency direction ──────────────────────
+    Rule(
+        id="arch-layer-deps",
+        severity=Severity.ERROR,
+        matchers=[ArchitectureMatcher(
+            layers={
+                "types":      ["enforcer/types.py"],
+                "rule":       ["enforcer/rule.py"],
+                "core":       ["enforcer/runner.py", "enforcer/context.py",
+                               "enforcer/config.py", "enforcer/check_runner.py"],
+                "matchers":   ["enforcer/matchers/**/*.py"],
+                "predicates": ["enforcer/predicates/**/*.py"],
+                "combinators":["enforcer/combinators/**/*.py"],
+                "extractors": ["enforcer/extractors/**/*.py"],
+                "parsers":    ["enforcer/parsers/**/*.py"],
+                "io":         ["enforcer/cli.py", "enforcer/mcp_server.py",
+                               "enforcer/reporter.py", "enforcer/docs.py",
+                               "enforcer/explain.py", "enforcer/fix.py",
+                               "enforcer/ignore.py", "enforcer/llm.py"],
+            },
+            allowed_edges=[
+                ("matchers", "types"),
+                ("matchers", "parsers"),
+                ("predicates", "types"),
+                ("combinators", "types"),
+                ("combinators", "matchers"),
+                ("extractors", "types"),
+                ("core", "types"),
+                ("core", "rule"),
+                ("core", "parsers"),
+                ("core", "matchers"),
+                ("core", "combinators"),
+                ("core", "extractors"),
+                ("io", "types"),
+                ("io", "rule"),
+                ("io", "core"),
+                ("io", "parsers"),
+                ("io", "matchers"),
+                ("io", "combinators"),
+                ("io", "extractors"),
+                ("parsers", "types"),
+            ],
+            forbid_implicit=True,
+        )],
+        file_globs=["enforcer/**/*.py"],
+        exclude_globs=["enforcer/__init__.py"],
+        diff_only=False,
+        message="Layer violation: {matched_value} at {file}:{line}",
+        fix_instruction="Move shared logic down to a lower layer, or add the edge to allowed_edges if intentional.",
+        rationale="Importing upward creates circular deps and prevents isolated testing. Layers: types < rule/parsers/matchers/predicates/combinators/extractors < core < io.",
     ),
 
     # ─── Architecture: no private cross-module imports ─────────────────
