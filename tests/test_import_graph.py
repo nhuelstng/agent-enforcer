@@ -23,3 +23,20 @@ def test_single_file_imports_sibling(tmp_path: Path):
 
     assert "pkg/a.py" in graph
     assert "pkg/b.py" in graph["pkg/a.py"]
+
+
+def test_transitive_closure(tmp_path: Path):
+    """a imports b, b imports c -> graph has a->b, b->c, and a is expanded."""
+    _write(tmp_path, "pkg/a.py", "from pkg import b\n")
+    _write(tmp_path, "pkg/b.py", "from pkg import c\n")
+    _write(tmp_path, "pkg/c.py", "x = 1\n")
+    _write(tmp_path, "pkg/__init__.py", "")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = graph_builder.build(staged_files=["pkg/a.py"])
+
+    assert graph["pkg/a.py"] == {"pkg/b.py"}
+    assert graph["pkg/b.py"] == {"pkg/c.py"}
+    assert "pkg/c.py" in graph
+    assert graph["pkg/c.py"] == set()
