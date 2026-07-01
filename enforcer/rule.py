@@ -1,29 +1,16 @@
 """Rule dataclass: composes matchers, predicates, combinators into a checkable rule with message templating and severity."""
 from __future__ import annotations
-import fnmatch
-import re
 from dataclasses import dataclass, field
 from typing import Callable
 from enforcer.types import Severity, Match, FileContext, LLMConsequence, RuleType
 from enforcer.combinators.core import AllOf
+from enforcer.glob_util import glob_match as _glob_match  # ponytail: alias preserves call sites
 
 def _is_combinator(obj) -> bool:
     return (hasattr(obj, "matchers") or hasattr(obj, "matcher")) and hasattr(obj, "find")
 
 def _run_matcher(matcher, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
     return matcher.find(file_ctx, shared_ctx)
-
-def _glob_match(path: str, pattern: str) -> bool:
-    """Match path against glob pattern, supporting ** recursive globs (fnmatch does not handle **).
-    ** matches zero or more path segments — 'dir/**/x' matches both 'dir/x' and 'dir/a/b/x'."""
-    candidates = {pattern}
-    candidates.add(re.sub(r"/\*\*", "", pattern))   # dir/**/x -> dir/x      (zero segments)
-    candidates.add(re.sub(r"\*\*/", "", pattern))    # **/x -> x             (leading zero segments)
-    candidates.add(pattern.replace("**", "*"))       # ** -> *               (single-seg wildcard)
-    for c in candidates:
-        if fnmatch.fnmatch(path, c):
-            return True
-    return False
 
 @dataclass
 class Rule:

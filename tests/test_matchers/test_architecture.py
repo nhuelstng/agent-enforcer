@@ -109,3 +109,26 @@ class TestArchitectureMatcherClean:
 
     def test_needs_ast_py(self):
         assert ArchitectureMatcher(layers={}).needs == Needs.AST_PY
+
+
+class TestImportLineFor:
+    """_import_line_for walks AST and returns the line of the importing statement."""
+
+    @pytest.mark.parametrize("source,target,expected_line", [
+        ("from enforcer.types import Match\n", "enforcer/types.py", 1),
+        ("x = 1\nimport enforcer.types\n", "enforcer/types.py", 2),
+        ("from enforcer.types_utils import X\n", "enforcer/types.py", 0),
+    ])
+    def test_import_line_for_ast(self, source, target, expected_line):
+        try:
+            import tree_sitter
+            import tree_sitter_python
+        except ImportError:
+            pytest.skip("tree-sitter not installed")
+        from enforcer.parsers.tree_sitter import parse
+        tree = parse(source, Needs.AST_PY)
+        if tree is None:
+            pytest.skip("tree-sitter PY grammar not available")
+        ctx = FileContext(path="src.py", raw=source, ast=tree)
+        matcher = ArchitectureMatcher(layers=_LAYERS, allowed_edges=_ALLOWED)
+        assert matcher._import_line_for(ctx, target) == expected_line
