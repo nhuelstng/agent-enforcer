@@ -52,6 +52,8 @@ class ImportGraphBuilder(ImportGraphBuilderProtocol):
             path = queue.pop(0)
             if path in seen or not path.endswith(".py"):
                 continue
+            if not os.path.isfile(os.path.join(self.workspace, path)):
+                continue
             seen.add(path)
             resolved = self._resolve_for_path(path)
             self._enqueue_new(resolved, seen, queue)
