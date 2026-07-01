@@ -28,6 +28,8 @@ from enforcer.matchers.no_module_side_effects import NoModuleSideEffectsMatcher
 from enforcer.matchers.constant_naming import ConstantNamingMatcher
 from enforcer.matchers.magic_number import MagicNumberMatcher
 from enforcer.matchers.architecture import ArchitectureMatcher
+from enforcer.matchers.facade_exists import FacadeExistsMatcher
+from enforcer.matchers.facade_exposes_interface import FacadeExposesInterfaceMatcher
 
 __all__ = [
     "AllSortedMatcher",
@@ -44,6 +46,8 @@ __all__ = [
     "DocstringMatcher",
     "DuplicateCodeMatcher",
     "DuplicateRuleIdMatcher",
+    "FacadeExposesInterfaceMatcher",
+    "FacadeExistsMatcher",
     "FileExistsMatcher",
     "FunctionComplexityMatcher",
     "ImportMatcher",
