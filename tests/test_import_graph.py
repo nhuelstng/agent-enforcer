@@ -70,3 +70,40 @@ def test_max_files_cap(tmp_path: Path, capsys):
     assert len(graph) <= 3
     captured = capsys.readouterr()
     assert "cap" in captured.err
+
+
+@pytest.mark.parametrize("staged", [
+    [],
+    ["nonexistent.py"],
+    ["pkg/empty.py"],
+])
+def test_no_imports_clean(tmp_path: Path, staged):
+    """Empty staged list, missing files, or files with no imports -> empty/trivial graph."""
+    _write(tmp_path, "pkg/__init__.py", "")
+    _write(tmp_path, "pkg/empty.py", "x = 1\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = graph_builder.build(staged_files=staged)
+
+    if not staged or staged == ["nonexistent.py"]:
+        assert graph == {}
+    else:
+        assert graph.get("pkg/empty.py", set()) == set()
+
+
+@pytest.mark.parametrize("source", [
+    "x = 1\n",                           # no imports
+    "import os\nimport sys\n",           # only stdlib
+    "from pathlib import Path\n",        # only stdlib
+])
+def test_resolves_nothing_clean(tmp_path: Path, source):
+    """Files with no resolvable imports produce empty target set."""
+    _write(tmp_path, "pkg/a.py", source)
+    _write(tmp_path, "pkg/__init__.py", "")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = graph_builder.build(staged_files=["pkg/a.py"])
+
+    assert graph["pkg/a.py"] == set()
