@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from enforcer.rule import Rule
+
+_INDENT_PAD = 13
+_SNIPPET_PAD = 17
 from enforcer.types import RuleType
 
 _SECTION_RE = re.compile(r'^\s*(What|Ignores|Basis|shared_ctx)\s*:\s*(.+)$', re.MULTILINE)
@@ -109,6 +112,18 @@ def _snippet_for(node, lines: list[str], test_path: Path, class_name: str = "", 
     )
 
 
+def _find_first_method_in_class(node, lines, test_path, class_name):
+    """Find the first method within a class, returning a WorkedExample or None."""
+    from enforcer.parsers.ast_utils import walk_ast
+    for inner in walk_ast(node):
+        if inner.type != "function_definition":
+            continue
+        if inner.start_point[0] <= node.start_point[0] or inner.end_point[0] > node.end_point[0]:
+            continue
+        return _snippet_for(inner, lines, test_path, class_name, _name_of(inner))
+    return None
+
+
 def _find_test_class_example(root, lines: list[str], test_path: Path) -> WorkedExample | None:
     """Find first Test* class with its first method; return snippet or None."""
     from enforcer.parsers.ast_utils import walk_ast
@@ -118,9 +133,9 @@ def _find_test_class_example(root, lines: list[str], test_path: Path) -> WorkedE
         class_name = _name_of(node)
         if not class_name.startswith("Test"):
             continue
-        for inner in walk_ast(node):
-            if inner.type == "function_definition" and inner.start_point[0] > node.start_point[0] and inner.end_point[0] <= node.end_point[0]:
-                return _snippet_for(inner, lines, test_path, class_name, _name_of(inner))
+        method_example = _find_first_method_in_class(node, lines, test_path, class_name)
+        if method_example:
+            return method_example
         return _snippet_for(node, lines, test_path, class_name)
     return None
 
@@ -218,6 +233,38 @@ def _flatten_matchers(matchers: list) -> list[tuple[int, object]]:
     return flat
 
 
+def _render_worked_example(class_name: str, workspace: str, indent: str) -> list[str]:
+    """Render worked example block for a matcher, or empty list."""
+    test_path = _find_paired_test(class_name, workspace)
+    if not test_path:
+        return []
+    example = _extract_worked_example(test_path, class_name)
+    if not example:
+        return []
+    lines = [""]
+    lines.append(f"{indent}{' ' * _INDENT_PAD}Worked example ({example.file_path}:{example.test_class_name}.{example.test_method_name}):")
+    for snippet_line in example.snippet.splitlines():
+        lines.append(f"{indent}{' ' * _SNIPPET_PAD}{snippet_line}")
+    return lines
+
+
+def _render_matcher_block(depth: int, index: int, matcher, workspace: str) -> list[str]:
+    """Render a single matcher entry (header + docstring sections + params + worked example)."""
+    explainer = render_matcher_explainer(matcher)
+    indent = "  " * (depth + 1)
+    prefix = f"{index}." if depth == 0 else "-"
+    lines: list[str] = [f"{indent}{prefix} {explainer.class_name}"]
+    for label in ("What", "Ignores", "Basis", "shared_ctx"):
+        if label in explainer.docstring_sections:
+            lines.append(f"{indent}{' ' * _INDENT_PAD}{label + ':':12} {explainer.docstring_sections[label]}")
+    for param, value in explainer.configured_params.items():
+        lines.append(f"{indent}{' ' * _INDENT_PAD}{param}: {value!r}")
+    if depth == 0:
+        lines.extend(_render_worked_example(explainer.class_name, workspace, indent))
+    lines.append("")
+    return lines
+
+
 def render_rule_explainer(rule: Rule, workspace: str = ".") -> str:
     """Render a full text explainer for a rule: metadata + matcher details + worked example."""
     lines: list[str] = []
@@ -231,26 +278,7 @@ def render_rule_explainer(rule: Rule, workspace: str = ".") -> str:
     for depth, matcher in flat:
         if depth == 0:
             index += 1
-        explainer = render_matcher_explainer(matcher)
-        indent = "  " * (depth + 1)
-        prefix = f"{index}." if depth == 0 else "-"
-        lines.append(f"{indent}{prefix} {explainer.class_name}")
-        for label in ("What", "Ignores", "Basis", "shared_ctx"):
-            if label in explainer.docstring_sections:
-                lines.append(f"{indent}{' ' * 13}{label + ':':12} {explainer.docstring_sections[label]}")
-        for param, value in explainer.configured_params.items():
-            lines.append(f"{indent}{' ' * 13}{param}: {value!r}")
-
-        if depth == 0:
-            test_path = _find_paired_test(explainer.class_name, workspace)
-            if test_path:
-                example = _extract_worked_example(test_path, explainer.class_name)
-                if example:
-                    lines.append("")
-                    lines.append(f"{indent}{' ' * 13}Worked example ({example.file_path}:{example.test_class_name}.{example.test_method_name}):")
-                    for snippet_line in example.snippet.splitlines():
-                        lines.append(f"{indent}{' ' * 17}{snippet_line}")
-        lines.append("")
+        lines.extend(_render_matcher_block(depth, index, matcher, workspace))
 
     return "\n".join(lines)
 

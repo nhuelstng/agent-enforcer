@@ -20,27 +20,47 @@ from enforcer.matchers.llm_check import LLMMatcher
 from enforcer.matchers.doc_sync import DocSyncMatcher
 from enforcer.matchers.keyset_sync import KeySetSyncMatcher
 from enforcer.matchers.test_coverage import TestCoverageMatcher
+from enforcer.matchers.interface_check import InterfaceMatcher
+from enforcer.matchers.duplicate_rule_id import DuplicateRuleIdMatcher
+from enforcer.matchers.type_hint import TypeHintMatcher
+from enforcer.matchers.all_sorted import AllSortedMatcher
+from enforcer.matchers.no_module_side_effects import NoModuleSideEffectsMatcher
+from enforcer.matchers.constant_naming import ConstantNamingMatcher
+from enforcer.matchers.magic_number import MagicNumberMatcher
+from enforcer.matchers.architecture import ArchitectureMatcher
+from enforcer.matchers.facade_exists import FacadeExistsMatcher
+from enforcer.matchers.facade_exposes_interface import FacadeExposesInterfaceMatcher
 
 __all__ = [
-    "RegexMatcher",
-    "LineCountMatcher",
-    "CharCountMatcher",
-    "PathNotMatchingMatcher",
+    "AllSortedMatcher",
     "AllowlistMatcher",
-    "AstNodeMatcher",
-    "CommentPerFunctionMatcher",
     "AlwaysMatcher",
-    "FileExistsMatcher",
-    "ImportMatcher",
-    "FunctionComplexityMatcher",
-    "PairedFileMatcher",
+    "ArchitectureMatcher",
+    "AstNodeMatcher",
     "BranchNameMatcher",
+    "CharCountMatcher",
+    "CommentPerFunctionMatcher",
     "CommitMessageMatcher",
-    "NamingConventionMatcher",
-    "DuplicateCodeMatcher",
-    "DocstringMatcher",
-    "LLMMatcher",
+    "ConstantNamingMatcher",
     "DocSyncMatcher",
+    "DocstringMatcher",
+    "DuplicateCodeMatcher",
+    "DuplicateRuleIdMatcher",
+    "FacadeExposesInterfaceMatcher",
+    "FacadeExistsMatcher",
+    "FileExistsMatcher",
+    "FunctionComplexityMatcher",
+    "ImportMatcher",
+    "InterfaceMatcher",
     "KeySetSyncMatcher",
+    "LLMMatcher",
+    "LineCountMatcher",
+    "MagicNumberMatcher",
+    "NamingConventionMatcher",
+    "NoModuleSideEffectsMatcher",
+    "PairedFileMatcher",
+    "PathNotMatchingMatcher",
+    "RegexMatcher",
     "TestCoverageMatcher",
+    "TypeHintMatcher",
 ]

@@ -120,8 +120,7 @@ class NoneOf:
 class StatusGate:
     """Runs inner matcher only when file_ctx.status is in allowed_statuses.
     Returns [] otherwise. Composes any matcher — PairedFileMatcher, KeySetSyncMatcher,
-    RegexMatcher, anything. Replaces hand-rolled NewFilePairedFileMatcher wrapper
-    in example-repo."""
+    RegexMatcher, anything. Replaces hand-rolled NewFilePairedFileMatcher wrapper."""
     matcher: object
     allowed_statuses: set[str] = field(default_factory=lambda: {"added"})
     needs: Needs = Needs.RAW

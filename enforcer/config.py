@@ -27,7 +27,7 @@ def _coerce_llm_config(raw: Any) -> LLMConfig:
             for name, cfg in providers_raw.items()
         }
         return LLMConfig(
-            default_provider=raw.get("default_provider", "custom"),
+            default_provider=raw.get("default_provider", ""),
             default_model=raw.get("default_model", ""),
             concurrency=raw.get("concurrency", 5),
             timeout=raw.get("timeout", 30),

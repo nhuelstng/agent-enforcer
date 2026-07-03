@@ -60,14 +60,18 @@ class DocstringMatcher:
         return ""
 
     def _has_docstring(self, func_node) -> bool:
+        """Check if function body's first statement is a docstring string."""
         for child in func_node.children:
-            if child.type == "block":
-                if not child.children:
-                    return False
-                first = child.children[0]
-                if first.type == "expression_statement":
-                    for gc in first.children:
-                        if gc.type == "string":
-                            return True
+            if child.type != "block":
+                continue
+            if not child.children:
                 return False
+            return self._first_stmt_is_string(child.children[0])
         return False
+
+    @staticmethod
+    def _first_stmt_is_string(first_stmt) -> bool:
+        """Return True if the expression_statement contains a string node."""
+        if first_stmt.type != "expression_statement":
+            return False
+        return any(gc.type == "string" for gc in first_stmt.children)

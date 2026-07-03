@@ -32,15 +32,25 @@ class KeySetSyncMatcher:
         if not file_ctx.raw:
             return []
         used = self.source_extractor.extract(file_ctx.raw) - self.exclude_keys
-        allowed: set[str] = set()
-        for glob in self.target_globs:
-            for path, ctx in self._matching_targets(glob, shared_ctx, file_ctx.path):
-                if ctx.raw:
-                    allowed |= self.target_extractor.extract(ctx.raw)
+        allowed = self._collect_target_keys(shared_ctx, file_ctx.path)
         return [
             Match(file=file_ctx.path, line=0, matched_value=key)
             for key in sorted(used - allowed)
         ]
+
+    def _collect_target_keys(self, shared_ctx: dict, source_path: str) -> set[str]:
+        """Collect the union of keys extracted from all matching target files."""
+        allowed: set[str] = set()
+        for glob in self.target_globs:
+            for _, ctx in self._matching_targets(glob, shared_ctx, source_path):
+                allowed |= self._extract_if_raw(ctx)
+        return allowed
+
+    def _extract_if_raw(self, ctx) -> set[str]:
+        """Extract keys from ctx if it has raw text, else empty set."""
+        if not ctx.raw:
+            return set()
+        return self.target_extractor.extract(ctx.raw)
 
     def _matching_targets(self, glob, shared_ctx, source_path):
         """Yield (path, ctx) pairs from shared_ctx matching the glob, skipping __-prefixed keys and the source file itself."""

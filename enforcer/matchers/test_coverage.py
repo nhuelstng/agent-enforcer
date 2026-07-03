@@ -103,10 +103,19 @@ class TestCoverageMatcher:
             dec_text = node_text(inner)
             if "parametrize" not in dec_text:
                 continue
-            for sub in walk_ast(inner):
-                if sub.type != "list":
-                    continue
-                return sum(1 for c in sub.children if c.type in _LIST_ELEM_TYPES)
+            count = self._count_list_elements(inner)
+            if count:
+                return count
+        return 0
+
+    @staticmethod
+    def _count_list_elements(decorator_node) -> int:
+        """Count elements in the first list node within a decorator."""
+        from enforcer.parsers.ast_utils import walk_ast
+        for sub in walk_ast(decorator_node):
+            if sub.type != "list":
+                continue
+            return sum(1 for c in sub.children if c.type in _LIST_ELEM_TYPES)
         return 0
 
     def _detect_assert_type(self, method_node) -> tuple[bool, bool]:

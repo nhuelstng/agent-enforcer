@@ -39,12 +39,10 @@ def is_ignored(path: str, patterns: list[str]) -> bool:
 
     ignored = False
     for pat in patterns:
-        if pat.startswith("!"):
-            if _match_pattern(normalized, basename, parts, pat[1:]):
-                ignored = False
-            continue
-        if _match_pattern(normalized, basename, parts, pat):
-            ignored = True
+        is_negation = pat.startswith("!")
+        match_pat = pat[1:] if is_negation else pat
+        if _match_pattern(normalized, basename, parts, match_pat):
+            ignored = not is_negation
 
     return ignored
 
@@ -63,14 +61,7 @@ def _match_pattern(path: str, basename: str, parts: list[str], pat: str) -> bool
 
     # ** recursive glob: **/foo or dir/**/foo
     if "**" in pat:
-        candidates = {pat}
-        candidates.add(re.sub(r"/\*\*", "", pat))
-        candidates.add(re.sub(r"\*\*/", "", pat))
-        candidates.add(pat.replace("**", "*"))
-        for c in candidates:
-            if fnmatch.fnmatch(path, c):
-                return True
-        return False
+        return _match_recursive_glob(path, pat)
 
     # Basename match or full path match
     if fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(basename, pat):
@@ -78,3 +69,12 @@ def _match_pattern(path: str, basename: str, parts: list[str], pat: str) -> bool
 
     # Match against any path segment
     return any(fnmatch.fnmatch(seg, pat) for seg in parts)
+
+
+def _match_recursive_glob(path: str, pat: str) -> bool:
+    """Match ** recursive glob patterns by expanding to candidate forms."""
+    candidates = {pat}
+    candidates.add(re.sub(r"/\*\*", "", pat))
+    candidates.add(re.sub(r"\*\*/", "", pat))
+    candidates.add(pat.replace("**", "*"))
+    return any(fnmatch.fnmatch(path, c) for c in candidates)

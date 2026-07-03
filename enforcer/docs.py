@@ -97,31 +97,41 @@ def _render_rule_doc(rule: Rule) -> list[str]:
     return out
 
 
+def _extract_what_line(matcher) -> str:
+    """Extract the 'What:' line from a matcher's docstring, or empty string."""
+    doc = inspect.getdoc(matcher) or ""
+    for line in doc.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("What:"):
+            return stripped[len("What:"):].strip()
+    return ""
+
+
+def _render_matcher_doc_line(matcher) -> str:
+    """Render a single matcher as a markdown bullet with class name + What + test link."""
+    cls_name = type(matcher).__name__
+    what_line = _extract_what_line(matcher)
+    if what_line:
+        out = [f"- `{cls_name}` — {what_line}"]
+    else:
+        out = [f"- `{cls_name}`"]
+    try:
+        from enforcer.explain import _find_paired_test
+        test_path = _find_paired_test(cls_name, ".")
+        if test_path:
+            out.append(f"  - Tests: `{test_path}`")
+    except Exception:
+        pass  # ponytail: best-effort test link, don't crash docs generation
+    return "\n".join(out)
+
+
 def _render_matchers_doc(rule: Rule) -> list[str]:
     """Render matchers as a markdown block: class name + What: line + paired test link."""
     if not rule.matchers:
         return []
     out: list[str] = ["**Matchers:**", ""]
     for matcher in rule.matchers:
-        cls_name = type(matcher).__name__
-        doc = inspect.getdoc(matcher) or ""
-        what_line = ""
-        for line in doc.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("What:"):
-                what_line = stripped[len("What:"):].strip()
-                break
-        if what_line:
-            out.append(f"- `{cls_name}` — {what_line}")
-        else:
-            out.append(f"- `{cls_name}`")
-        try:
-            from enforcer.explain import _find_paired_test
-            test_path = _find_paired_test(cls_name, ".")
-            if test_path:
-                out.append(f"  - Tests: `{test_path}`")
-        except Exception:
-            pass  # ponytail: best-effort test link, don't crash docs generation
+        out.append(_render_matcher_doc_line(matcher))
     out.append("")
     return out
 

@@ -6,13 +6,13 @@ from enforcer.predicates.combinators import All, Any, NotP
 from enforcer.predicates.ast import HasDecoratorPredicate, NodeNamePredicate
 
 __all__ = [
+    "All",
+    "Any",
+    "HasDecoratorPredicate",
     "IntPredicate",
+    "NodeNamePredicate",
+    "NotP",
     "StringLengthPredicate",
     "StringMatchesPredicate",
     "StringNotMatchesPredicate",
-    "All",
-    "Any",
-    "NotP",
-    "HasDecoratorPredicate",
-    "NodeNamePredicate",
 ]

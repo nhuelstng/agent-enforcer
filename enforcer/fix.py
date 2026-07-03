@@ -14,6 +14,32 @@ class FixResult:
     new_content: str
 
 
+def _apply_fixes_for_file(file_path: str, file_matches: list[Match], workspace: str,
+                          fix_providers: dict[str, Callable[[FileContext, Match], str]]) -> FixResult | None:
+    """Apply all fixes for one file. Returns FixResult if any applied, else None."""
+    full_path = Path(workspace, file_path)
+    if not full_path.exists():
+        return None
+    raw = full_path.read_text(encoding="utf-8", errors="replace")
+    ctx = FileContext(path=file_path, raw=raw)
+    content = raw
+    applied = 0
+    for m in file_matches:
+        fn = fix_providers.get(m.rule_id)
+        if not fn:
+            continue
+        new_content = fn(ctx, m)
+        if new_content != content:
+            content = new_content
+            ctx.raw = content
+            m.fix_applied = "applied"
+            applied += 1
+    if applied == 0:
+        return None
+    full_path.write_text(content, encoding="utf-8")
+    return FixResult(path=file_path, fixes_applied=applied, new_content=content)
+
+
 def apply_fixes(
     matches: list[Match],
     workspace: str,
@@ -31,26 +57,7 @@ def apply_fixes(
 
     results: list[FixResult] = []
     for file_path, file_matches in by_file.items():
-        full_path = Path(workspace, file_path)
-        if not full_path.exists():
-            continue
-        raw = full_path.read_text(encoding="utf-8", errors="replace")
-        ctx = FileContext(path=file_path, raw=raw)
-        content = raw
-        applied = 0
-        for m in file_matches:
-            fn = fix_providers.get(m.rule_id)
-            if not fn:
-                continue
-            new_content = fn(ctx, m)
-            if new_content != content:
-                content = new_content
-                ctx.raw = content
-                m.fix_applied = "applied"
-                applied += 1
-        if applied > 0:
-            full_path.write_text(content, encoding="utf-8")
-            results.append(
-                FixResult(path=file_path, fixes_applied=applied, new_content=content)
-            )
+        result = _apply_fixes_for_file(file_path, file_matches, workspace, fix_providers)
+        if result:
+            results.append(result)
     return results

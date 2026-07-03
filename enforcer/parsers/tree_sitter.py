@@ -2,7 +2,7 @@
 from __future__ import annotations
 from enforcer.types import Needs
 
-def parse(source: str, needs: Needs):
+def parse(source: str, needs: Needs) -> object | None:
     """Parse source text into a tree-sitter AST for the given language Needs."""
     try:
         import tree_sitter as ts

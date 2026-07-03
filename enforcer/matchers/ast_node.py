@@ -35,15 +35,15 @@ class AstNodeMatcher:
         return matches
 
     def _walk(self, node, scope=None):
+        """Walk AST nodes, optionally scoped to class/function/module bodies."""
+        if not scope:
+            return self._walk_all(node)
         result = []
-        if scope:
-            for child in node.children:
-                if self._is_scope_node(child, scope):
-                    result.extend(self._walk_all(child))
-                else:
-                    result.extend(self._walk(child, scope=scope))
-        else:
-            result.extend(self._walk_all(node))
+        for child in node.children:
+            if self._is_scope_node(child, scope):
+                result.extend(self._walk_all(child))
+            else:
+                result.extend(self._walk(child, scope=scope))
         return result
 
     def _is_scope_node(self, node, scope: str) -> bool:

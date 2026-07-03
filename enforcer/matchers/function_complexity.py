@@ -112,13 +112,11 @@ class FunctionComplexityMatcher:
             node, depth = stack.pop()
             if depth > max_d:
                 max_d = depth
-            for child in reversed(node.children):
-                if child.type in _FUNC_NODE_TYPES:
-                    continue  # skip nested functions
-                if child.type in _NESTING_NODE_TYPES:
-                    stack.append((child, depth + 1))
-                else:
-                    stack.append((child, depth))
+            stack.extend(
+                (child, depth + 1 if child.type in _NESTING_NODE_TYPES else depth)
+                for child in reversed(node.children)
+                if child.type not in _FUNC_NODE_TYPES
+            )
         return max_d
 
     def _cyclomatic(self, func_node) -> int:
@@ -127,13 +125,14 @@ class FunctionComplexityMatcher:
         for node in self._walk_iterative(func_node):
             if node.type in _DECISION_NODE_TYPES:
                 count += 1
-            # ponytail: TS &&/|| are binary_expression — only count logical operators
-            elif node.type == "binary_expression":
-                for child in node.children:
-                    if child.type in _TS_LOGICAL_OPS:
-                        count += 1
-                        break
+            elif node.type == "binary_expression" and self._has_ts_logical_op(node):
+                count += 1
         return count
+
+    @staticmethod
+    def _has_ts_logical_op(node) -> bool:
+        """Return True if a binary_expression node contains a TS && or || operator."""
+        return any(child.type in _TS_LOGICAL_OPS for child in node.children)
 
     def _walk_iterative(self, root):
         # ponytail: iterative DFS — avoids RecursionError, skips nested functions (they get their own analysis)

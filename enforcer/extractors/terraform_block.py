@@ -18,54 +18,82 @@ class TerraformBlockKeys:
         m = re.search(pattern, raw)
         if not m:
             return set()
-        # ponytail: heuristic scan, not a full HCL parser. Tracks string literals
-        # (double-quoted, backslash-escaped) and # comments so braces inside them
-        # don't affect depth. May still be fooled by heredocs or unusual escapes;
-        # upgrade path is a real tree-sitter HCL grammar.
-        depth = 0
-        in_string = False
-        escaped = False
-        in_comment = False
-        body_chars: list[str] = []
-        for ch in raw[m.end() - 1:]:
-            if in_comment:
-                if ch == "\n":
-                    in_comment = False
-                    if depth == 1:
-                        body_chars.append(ch)
-                continue
-            if in_string:
-                if depth == 1:
-                    body_chars.append(ch)
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    in_string = False
-                continue
-            if ch == "#":
-                in_comment = True
-                continue
-            if ch == '"':
-                in_string = True
-                if depth == 1:
-                    body_chars.append(ch)
-                continue
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    break
-            if depth == 1:
-                body_chars.append(ch)
-        keys: set[str] = set()
-        for line in "".join(body_chars).splitlines():
-            s = line.strip()
-            if not s or s.startswith("#"):
-                continue
-            km = re.match(r'"?([A-Z][A-Z0-9_]*)"?\s*=', s)
-            if km:
-                keys.add(km.group(1))
-        return keys
+        body = _extract_block_body(raw[m.end() - 1:])
+        return _parse_block_keys(body)
+
+
+def _extract_block_body(source: str) -> str:
+    """Extract the body of a brace-delimited block, tracking string/comment state."""
+    # ponytail: heuristic scan, not a full HCL parser. Tracks string literals
+    # (double-quoted, backslash-escaped) and # comments so braces inside them
+    # don't affect depth. May still be fooled by heredocs or unusual escapes;
+    # upgrade path is a real tree-sitter HCL grammar.
+    depth = 0
+    in_string = False
+    escaped = False
+    in_comment = False
+    body_chars: list[str] = []
+    for ch in source:
+        if in_comment:
+            in_comment = _handle_comment_char(ch, depth, body_chars)
+            continue
+        if in_string:
+            in_string, escaped = _handle_string_char(ch, depth, body_chars, escaped)
+            continue
+        depth, in_string, in_comment, done = _handle_plain_char(
+            ch, depth, body_chars)
+        if done:
+            break
+    return "".join(body_chars)
+
+
+def _handle_comment_char(ch: str, depth: int, body_chars: list[str]) -> bool:
+    """Process a character inside a comment. Returns False (not in comment) on newline."""
+    if ch == "\n" and depth == 1:
+        body_chars.append(ch)
+    return ch != "\n"
+
+
+def _handle_string_char(ch: str, depth: int, body_chars: list[str], escaped: bool) -> tuple[bool, bool]:
+    """Process a character inside a string literal. Returns (in_string, escaped)."""
+    if depth == 1:
+        body_chars.append(ch)
+    if escaped:
+        return False, False
+    if ch == "\\":
+        return True, True
+    if ch == '"':
+        return False, False
+    return True, False
+
+
+def _handle_plain_char(ch: str, depth: int, body_chars: list[str]) -> tuple[int, bool, bool, bool]:
+    """Process a character outside string/comment. Returns (depth, in_string, in_comment, done)."""
+    if ch == "#":
+        return depth, False, True, False
+    if ch == '"':
+        if depth == 1:
+            body_chars.append(ch)
+        return depth, True, False, False
+    if ch == "{":
+        return depth + 1, False, False, False
+    if ch == "}":
+        if depth == 1:
+            return 0, False, False, True
+        return depth - 1, False, False, False
+    if depth == 1:
+        body_chars.append(ch)
+    return depth, False, False, False
+
+
+def _parse_block_keys(body: str) -> set[str]:
+    """Parse KEY = or "KEY" = assignments from a block body."""
+    keys: set[str] = set()
+    for line in body.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        km = re.match(r'"?([A-Z][A-Z0-9_]*)"?\s*=', s)
+        if km:
+            keys.add(km.group(1))
+    return keys

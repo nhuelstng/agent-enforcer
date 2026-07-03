@@ -92,38 +92,49 @@ class DuplicateCodeMatcher:
             return []
 
         idx["finalized"] = True
-        matches: list[Match] = []
+        pair_overlaps = self._compute_pair_overlaps(idx)
+        return self._emit_overlap_matches(pair_overlaps, idx)
 
+    @staticmethod
+    def _compute_pair_overlaps(idx: dict) -> Counter:
+        """Count n-gram overlaps for all file pairs sharing >=2 paths."""
         pair_overlaps: Counter = Counter()
-        for gram, paths in idx["ngram_files"].items():
-            if len(paths) < 2:
-                continue
-            path_list = sorted(paths)
-            for i in range(len(path_list)):
-                for j in range(i + 1, len(path_list)):
-                    pair_overlaps[(path_list[i], path_list[j])] += 1
+        multi_path_grams = {
+            gram: sorted(paths)
+            for gram, paths in idx["ngram_files"].items()
+            if len(paths) >= 2
+        }
+        for path_list in multi_path_grams.values():
+            pair_overlaps.update(
+                (path_a, path_b)
+                for i, path_a in enumerate(path_list)
+                for path_b in path_list[i + 1:]
+            )
+        return pair_overlaps
 
+    def _emit_overlap_matches(self, pair_overlaps: Counter, idx: dict) -> list[Match]:
+        """Emit Match pairs for file pairs above overlap threshold."""
         files = idx["files"]
         file_lines = idx["file_lines"]
+        matches: list[Match] = []
         for (path_a, path_b), overlap_count in pair_overlaps.items():
             grams_a = files.get(path_a, set())
             grams_b = files.get(path_b, set())
             if not grams_a or not grams_b:
                 continue
             ratio = overlap_count / min(len(grams_a), len(grams_b))
-            if ratio >= self.min_overlap:
-                line_a = self._first_overlap_line(file_lines.get(path_a, {}), files.get(path_b, set()))
-                line_b = self._first_overlap_line(file_lines.get(path_b, {}), files.get(path_a, set()))
-                matches.append(Match(
-                    file=path_a,
-                    line=line_a,
-                    matched_value=f"{path_b} ({ratio:.0%} overlap, {overlap_count} blocks)",
-                ))
-                matches.append(Match(
-                    file=path_b,
-                    line=line_b,
-                    matched_value=f"{path_a} ({ratio:.0%} overlap, {overlap_count} blocks)",
-                ))
+            if ratio < self.min_overlap:
+                continue
+            line_a = self._first_overlap_line(file_lines.get(path_a, {}), files.get(path_b, set()))
+            line_b = self._first_overlap_line(file_lines.get(path_b, {}), files.get(path_a, set()))
+            matches.append(Match(
+                file=path_a, line=line_a,
+                matched_value=f"{path_b} ({ratio:.0%} overlap, {overlap_count} blocks)",
+            ))
+            matches.append(Match(
+                file=path_b, line=line_b,
+                matched_value=f"{path_a} ({ratio:.0%} overlap, {overlap_count} blocks)",
+            ))
         return matches
 
     def _first_overlap_line(self, gram_lines: dict, other_grams: set) -> int:

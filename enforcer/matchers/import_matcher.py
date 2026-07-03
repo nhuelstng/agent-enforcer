@@ -35,18 +35,22 @@ class ImportMatcher:
         matches: list[Match] = []
         root = file_ctx.ast.root_node
         for node in self._walk_iterative(root):
-            if node.type in _IMPORT_NODE_TYPES:
-                text = node.text.decode() if isinstance(node.text, bytes) else str(node.text)
-                for pattern in self._compiled:
-                    if pattern.search(text):
-                        matches.append(Match(
-                            file=file_ctx.path,
-                            line=node.start_point[0] + 1,
-                            column=node.start_point[1] + 1,
-                            matched_value=text.strip(),
-                        ))
-                        break
+            if node.type not in _IMPORT_NODE_TYPES:
+                continue
+            text = node.text.decode() if isinstance(node.text, bytes) else str(node.text)
+            match = self._match_first_pattern(text)
+            if match:
+                matches.append(Match(
+                    file=file_ctx.path,
+                    line=node.start_point[0] + 1,
+                    column=node.start_point[1] + 1,
+                    matched_value=text.strip(),
+                ))
         return matches
+
+    def _match_first_pattern(self, text: str) -> bool:
+        """Return True if text matches any compiled forbidden pattern."""
+        return any(pattern.search(text) for pattern in self._compiled)
 
     def _walk_iterative(self, root):
         # ponytail: iterative DFS — avoids RecursionError on deeply nested AST (minified/generated code)

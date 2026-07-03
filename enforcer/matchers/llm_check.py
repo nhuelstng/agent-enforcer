@@ -12,6 +12,14 @@ _JSON_PREAMBLE = (
 )
 
 
+def _safe_int(value) -> int:
+    """Parse int from value, returning 0 on failure."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 @dataclass
 class LLMMatcher:
     """Matcher that calls an LLM and parses the verdict into Match objects.
@@ -22,7 +30,7 @@ class LLMMatcher:
     Override per-matcher when a specific model is needed.
 
     What:       flags violations reported by the LLM (parsed from JSON `violations` array, or FAIL text fallback)
-    Ignores:    LLM-disabled runs (`__llm_enabled__ is False`); metadata mode with no change_ctx; empty/error responses (fail-open); PASS verdicts
+    Ignores:    LLM-disabled runs (`__llm_enabled__ is False`); metadata mode with no change_ctx; merge commits (commit_msg starts with "Merge"); empty/error responses (fail-open); PASS verdicts
     Basis:      RAW (sends file_ctx.raw or change context to LLM; cross-file via shared_ctx change metadata)
     shared_ctx: reads `__llm_enabled__`, `__change__` (ChangeContext), `__llm_config__`
     """
@@ -41,6 +49,9 @@ class LLMMatcher:
         is_metadata = file_ctx.raw == "__enforcer_sentinel__"
         change_ctx: ChangeContext | None = shared_ctx.get("__change__")
         if is_metadata and not change_ctx:
+            return []
+        # ponytail: skip merge commits — LLM commit-message checks fire false positives on "Merge ..." messages
+        if change_ctx and change_ctx.commit_msg.startswith("Merge"):
             return []
 
         prompt = self._build_prompt(file_ctx, shared_ctx, is_metadata, change_ctx)
@@ -88,22 +99,22 @@ class LLMMatcher:
                 return self._text_fallback(response, file_ctx)
             if data.get("pass") is True:
                 return []
-            violations = data.get("violations", [])
-            matches = []
-            for v in violations:
-                try:
-                    line = int(v.get("line", 0))
-                except (TypeError, ValueError):
-                    line = 0
-                matches.append(Match(
-                    file=v.get("file") or file_ctx.path,
-                    line=line,
-                    matched_value=v.get("reason", ""),
-                    message=v.get("reason", ""),
-                ))
-            return matches
+            return self._parse_violations(data.get("violations", []), file_ctx)
         except (json.JSONDecodeError, TypeError, ValueError):
             return self._text_fallback(response, file_ctx)
+
+    @staticmethod
+    def _parse_violations(violations: list, file_ctx: FileContext) -> list[Match]:
+        """Parse a list of violation dicts into Match objects."""
+        return [
+            Match(
+                file=v.get("file") or file_ctx.path,
+                line=_safe_int(v.get("line", 0)),
+                matched_value=v.get("reason", ""),
+                message=v.get("reason", ""),
+            )
+            for v in violations
+        ]
 
     def _text_fallback(self, response: str, file_ctx: FileContext) -> list[Match]:
         """PASS/FAIL text scan fallback. Pure prose (no PASS/FAIL marker) fails open."""
