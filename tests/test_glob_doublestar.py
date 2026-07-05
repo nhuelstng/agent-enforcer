@@ -1,6 +1,6 @@
 """Tests for ** recursive glob matching — bug: fnmatch * does not cross /."""
 import pytest
-from enforcer.rule import _glob_match
+from enforcer.glob_util import glob_match as _glob_match
 from enforcer.ignore import is_ignored
 
 
