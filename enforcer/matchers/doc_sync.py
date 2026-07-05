@@ -9,30 +9,22 @@ from enforcer.types import Match, FileContext, Needs
 class DocSyncMatcher:
     """Flags if the on-disk generated doc differs from a fresh render.
 
-    Reads config rules from shared_ctx["__rules__"] (set by the CLI runner),
-    falling back to load_config(self.config_path) when called standalone.
-    Reads the doc file from self.doc_path on disk.
+    Reads the freshly rendered doc from shared_ctx["__rendered_doc__"]
+    (populated by the runner via render_rules_doc). Reads the on-disk doc
+    from self.doc_path. No imports from io or core layers — the matcher
+    is pure: read file, compare to string.
 
-    What:       flags when the on-disk doc at `doc_path` differs from a fresh render of the current rules
+    What:       flags when the on-disk doc at `doc_path` differs from `shared_ctx["__rendered_doc__"]`
     Ignores:    matching renders (no diff); unreadable/missing doc files (treated as empty, will flag if render is non-empty)
-    Basis:      RAW (renders rules to markdown, compares to on-disk file text)
-    shared_ctx: reads `__rules__`, `__workspace__`
+    Basis:      RAW (compares on-disk file text to shared_ctx string)
+    shared_ctx: reads `__rendered_doc__`
     """
-    config_path: str
     doc_path: str
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         shared_ctx = shared_ctx or {}
-        rules = shared_ctx.get("__rules__")
-        workspace = shared_ctx.get("__workspace__", ".")
-        if rules is None:
-            from enforcer.config import load_config
-            config = load_config(self.config_path)
-            rules = config.rules
-            workspace = config.workspace or "."
-        from enforcer.docs import render_rules_doc
-        fresh = render_rules_doc(rules, workspace=workspace)
+        fresh = shared_ctx.get("__rendered_doc__", "")
         try:
             on_disk = Path(self.doc_path).read_text(encoding="utf-8") if Path(self.doc_path).exists() else ""
         except OSError:

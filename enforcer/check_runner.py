@@ -156,11 +156,13 @@ def collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_ref
     return list(paths), {}
 
 
-def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = None) -> dict:
+def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = None,
+                     rendered_doc: str | None = None) -> dict:
     """Build shared context dict from rule read_targets. Caches FileContext per matched path (not per glob string)."""
     shared_ctx: dict = {}
     shared_ctx["__rules__"] = config.rules
     shared_ctx["__workspace__"] = config.workspace or ws
+    shared_ctx["__rendered_doc__"] = rendered_doc or ""
     for rule in config.rules:
         for target in getattr(rule, "read_targets", []):
             root = Path(ws)

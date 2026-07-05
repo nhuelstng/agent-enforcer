@@ -209,7 +209,7 @@ CONVENTIONS.md is stale or missing. Regenerate after changing rules.
 
 **Matchers:**
 
-- `DocSyncMatcher` — flags when the on-disk doc at `doc_path` differs from a fresh render of the current rules
+- `DocSyncMatcher` — flags when the on-disk doc at `doc_path` differs from `shared_ctx["__rendered_doc__"]`
   - Tests: `tests/test_matchers/test_doc_sync.py`
 
 **Fix:** Run: enforcer sync-doc

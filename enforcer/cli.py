@@ -85,7 +85,9 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     )
 
     builder = FileContextBuilder(config.rules, workspace=ws)
-    shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=file_list)
+    from enforcer.docs import render_rules_doc
+    rendered_doc = render_rules_doc(config.rules, workspace=config.workspace or ws)
+    shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=file_list, rendered_doc=rendered_doc)
 
     change_ctx = _build_change_context(ws, status_map)
     shared_ctx["__change__"] = change_ctx

@@ -798,7 +798,7 @@ RULES = [
     Rule(
         id="conventions-md-stale",
         severity=Severity.ERROR,
-        matchers=[DocSyncMatcher(config_path="enforcer_config.py", doc_path="CONVENTIONS.md")],
+        matchers=[DocSyncMatcher(doc_path="CONVENTIONS.md")],
         file_globs=["*"],
         rule_type=RuleType.METADATA,
         message="CONVENTIONS.md is stale or missing. Regenerate after changing rules.",
