@@ -9,7 +9,7 @@ class CanonicalImportMatcher:
     """Enforces that symbols are imported from their canonical module, not re-exporting modules.
 
     What:       flags `from <module> import <symbol>` when <symbol> is in the canonical map
-                and <module> is not the canonical source
+                and <module> is not the canonical source; emits one Match per non-canonical symbol
     Ignores:    imports from the canonical module itself; symbols not in the canonical map;
                 `import X` (non-from) statements; files with no AST; relative imports
     Basis:      AST_PY (walks import_from_statement nodes, extracts module + imported names)
@@ -32,29 +32,27 @@ class CanonicalImportMatcher:
             module, names = self._extract_module_and_names(node, node_text)
             if module is None or not names:
                 continue
-            if self._has_non_canonical(module, names):
-                matches.append(self._build_match(file_ctx.path, node, node_text))
+            for name in self._non_canonical_names(module, names):
+                matches.append(self._build_match(file_ctx.path, node, name, module))
         return matches
 
-    def _has_non_canonical(self, module: str, names: list[str]) -> bool:
-        """Return True if any imported name comes from a non-canonical module."""
+    def _non_canonical_names(self, module: str, names: list[str]) -> list[str]:
+        """Return names imported from a non-canonical module."""
+        result: list[str] = []
         for name in names:
             canonical_module = self.canonical.get(name)
             if canonical_module is not None and module != canonical_module:
-                return True
-        return False
+                result.append(name)
+        return result
 
-    @staticmethod
-    def _build_match(file_path: str, node, node_text) -> Match:
-        """Build a Match for a non-canonical import node."""
-        text = node_text(node)
-        if isinstance(text, bytes):
-            text = text.decode()
+    def _build_match(self, file_path: str, node, name: str, module: str) -> Match:
+        """Build a Match for a non-canonical import symbol."""
+        canonical_module = self.canonical.get(name, "")
         return Match(
             file=file_path,
             line=node.start_point[0] + 1,
             column=node.start_point[1] + 1,
-            matched_value=text.strip(),
+            matched_value=f"{name} (from {module}, should be from {canonical_module})",
         )
 
     @staticmethod
