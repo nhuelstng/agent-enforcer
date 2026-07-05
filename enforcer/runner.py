@@ -2,7 +2,8 @@
 from __future__ import annotations
 from typing import Protocol, runtime_checkable
 from enforcer.types import Severity, Match, FileContext, RuleType, SEVERITY_RANK, LLMConfig
-from enforcer.rule import Rule, _glob_match
+from enforcer.rule import Rule
+from enforcer.glob_util import glob_match as _glob_match
 from enforcer.llm import LLMExecutor
 
 
