@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from dataclasses import dataclass, field
 from enforcer.types import Match, FileContext, Needs
+from enforcer.glob_util import glob_match
 
 
 @dataclass
@@ -38,8 +39,7 @@ class PairedFileMatcher:
             return []
 
         # ponytail: skip if the source path doesn't match the source_glob
-        from enforcer.rule import _glob_match
-        if not _glob_match(path, self.source_glob):
+        if not glob_match(path, self.source_glob):
             return []
 
         # Build the derived path by substituting {stem} and {dir}

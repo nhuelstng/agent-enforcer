@@ -5,6 +5,7 @@ from typing import Protocol, runtime_checkable
 from enforcer.types import FileContext, Needs
 from enforcer.parsers.language import language_for_path
 from enforcer.parsers.tree_sitter import parse as ts_parse
+from enforcer.glob_util import glob_match as _glob_match
 
 
 def _collect_needs(matcher, needs: set[Needs]) -> None:
@@ -76,7 +77,6 @@ class FileContextBuilder(ContextBuilderProtocol):
 
     def needs_for_file(self, path: str, rules: list) -> set[Needs]:
         """Aggregate all Needs from rules whose file_globs match this path."""
-        from enforcer.rule import _glob_match
         needs: set[Needs] = set()
         for rule in rules:
             if not any(_glob_match(path, glob) for glob in rule.file_globs):

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enforcer.extractors.core import Extractor
 from enforcer.types import Match, FileContext, Needs
+from enforcer.glob_util import glob_match
 
 
 @dataclass
@@ -54,13 +55,12 @@ class KeySetSyncMatcher:
 
     def _matching_targets(self, glob, shared_ctx, source_path):
         """Yield (path, ctx) pairs from shared_ctx matching the glob, skipping __-prefixed keys and the source file itself."""
-        from enforcer.rule import _glob_match
         for key, ctx in shared_ctx.items():
             if key.startswith("__"):
                 continue
             if key == source_path:
                 continue
-            if _glob_match(key, glob):
+            if glob_match(key, glob):
                 yield key, ctx
 
     def __post_init__(self):
