@@ -98,7 +98,6 @@ RULES = []
 def test_load_config_from_package(tmp_path):
     """load_config should handle package directories, not just .py files."""
     import sys
-    import importlib
     pkg_dir = tmp_path / "my_config_pkg"
     pkg_dir.mkdir()
     (pkg_dir / "__init__.py").write_text(

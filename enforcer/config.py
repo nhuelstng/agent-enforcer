@@ -1,4 +1,4 @@
-"""Config loading: executes enforcer_config.py as a module, extracts RULES, WORKSPACE, SEVERITY_ACTIONS, LLM_CONFIG."""
+"""Config loading: loads from .py file or package, extracts RULES, WORKSPACE, SEVERITY_ACTIONS, LLM_CONFIG."""
 from __future__ import annotations
 import importlib
 import importlib.util
