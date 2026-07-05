@@ -34,9 +34,13 @@ obsolete after the split. Fix the Phase 2 reviewer finding on
 ### Section 1: Config split — package structure
 
 Replace `enforcer_config.py` (single file) with `enforcer_config/` (package).
-Python's import system resolves `enforcer_config/__init__.py` automatically
-when `import enforcer_config` is called — no changes to `config.py`'s
-`load_config()`.
+`load_config()` in `config.py` must be updated: current implementation uses
+`importlib.util.spec_from_file_location("enforcer_config", config_path)` which
+only works for file paths (`.py`), not package directories. After the split,
+`config_path` is `"enforcer_config"` (a package name). Fix: if `config_path`
+ends in `.py`, use `spec_from_file_location` (backward compat for file-based
+configs); otherwise use `importlib.import_module(config_path)` (package support).
+CLI and MCP server defaults: `"enforcer_config.py"` → `"enforcer_config"`.
 
 ```
 enforcer_config/
