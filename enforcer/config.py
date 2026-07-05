@@ -1,5 +1,6 @@
 """Config loading: executes enforcer_config.py as a module, extracts RULES, WORKSPACE, SEVERITY_ACTIONS, LLM_CONFIG."""
 from __future__ import annotations
+import importlib
 import importlib.util
 import os
 from dataclasses import dataclass, field
@@ -36,13 +37,20 @@ def _coerce_llm_config(raw: Any) -> LLMConfig:
     return LLMConfig()
 
 def load_config(config_path: str) -> Config:
-    """Load enforcer_config.py by executing it as a module. Extracts RULES, WORKSPACE, SEVERITY_ACTIONS, LLM_CONFIG attributes."""
-    spec = importlib.util.spec_from_file_location("enforcer_config", config_path)
-    if not spec or not spec.loader:
-        raise ImportError(f"Cannot load config from {config_path}")
+    """Load config from a .py file path or a package name. Extracts RULES, WORKSPACE, SEVERITY_ACTIONS, LLM_CONFIG.
 
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    If config_path ends in .py or contains a path separator, treat it as a file path
+    (spec_from_file_location). Otherwise, treat it as an importable package/module name
+    (importlib.import_module).
+    """
+    if config_path.endswith(".py") or "/" in config_path or os.sep in config_path:
+        spec = importlib.util.spec_from_file_location("enforcer_config", config_path)
+        if not spec or not spec.loader:
+            raise ImportError(f"Cannot load config from {config_path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    else:
+        module = importlib.import_module(config_path)
 
     return Config(
         rules=getattr(module, "RULES", []),
