@@ -42,7 +42,7 @@ def _assert_output_contained(output: str, ws: str) -> None:
 @click.option("--all", "all_files", is_flag=True, help="Check entire repo")
 @click.option("--paths", multiple=True, help="Check specific files")
 @click.option("--format", "fmt", default="text", type=click.Choice(["json", "text", "sarif"]), help="Output format: text, json, or sarif")
-@click.option("--config", "config_path", default="enforcer_config.py", help="Path to enforcer_config.py (default: enforcer_config.py)")
+@click.option("--config", "config_path", default="enforcer_config", help="Path to enforcer config (file or package)")
 @click.option("--workspace", default=None, help="Global workspace root")
 @click.option("--severity", default="info", type=click.Choice(["error", "warn", "info"]), help="Minimum severity to report (error, warn, info)")
 @click.option("--no-llm", is_flag=True, help="Skip LLM consequences")
@@ -122,7 +122,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
     sys.exit(reporter.exit_code(all_matches, severity_actions=config.severity_actions, confirm_warnings=confirm_read_warnings))
 
 @cli.command()
-@click.option("--config", "config_path", default="enforcer_config.py")
+@click.option("--config", "config_path", default="enforcer_config")
 @click.option("--output", "-o", default=None, help="Output file (default: stdout)")
 def docs(config_path, output):
     """Generate markdown documentation of all configured rules."""
@@ -142,7 +142,7 @@ def docs(config_path, output):
         click.echo(md)
 
 @cli.command(name="sync-doc")
-@click.option("--config", "config_path", default="enforcer_config.py")
+@click.option("--config", "config_path", default="enforcer_config")
 @click.option("--output", "-o", default="CONVENTIONS.md")
 def sync_doc(config_path, output):
     """Regenerate the natural-language conventions doc from configured rules."""
@@ -182,7 +182,7 @@ def install(force):
 
 @cli.command()
 @click.argument("rule_id")
-@click.option("--config", "config_path", default="enforcer_config.py")
+@click.option("--config", "config_path", default="enforcer_config")
 @click.option("--format", "fmt", default="text", type=click.Choice(["text", "json"]))
 def explain(rule_id, config_path, fmt):
     """Explain what a rule matches, what it ignores, and show a worked example."""

@@ -357,7 +357,7 @@ class TestMatcherDocstringStructuredRule:
 
     def test_rule_exists_in_config(self):
         from enforcer.config import load_config
-        config = load_config("enforcer_config.py")
+        config = load_config("enforcer_config")
         rule_ids = [r.id for r in config.rules]
         assert "matcher-docstring-structured" in rule_ids
 
@@ -367,6 +367,6 @@ class TestMatcherTestPositiveNegativeRule:
 
     def test_rule_exists_in_config(self):
         from enforcer.config import load_config
-        config = load_config("enforcer_config.py")
+        config = load_config("enforcer_config")
         rule_ids = [r.id for r in config.rules]
         assert "matcher-test-positive-negative" in rule_ids

@@ -7,7 +7,7 @@
 # being committed (git may use a temp file for -m/-F, not COMMIT_EDITMSG).
 #
 # ENFORCER_CONFIG          Override path to the config module
-#                          (default: enforcer_config.py).
+#                          (default: enforcer_config).
 #
 # Two-phase commit flow:
 #   1. First attempt runs the hook. WARN-severity rules block unless
@@ -18,7 +18,7 @@
 # Blocks on errors. Blocks on warnings unless ENFORCER_CONFIRM_WARNINGS=1 is set.
 set -euo pipefail
 
-CONFIG_PATH="${ENFORCER_CONFIG:-enforcer_config.py}"
+CONFIG_PATH="${ENFORCER_CONFIG:-enforcer_config}"
 
 if [ "${ENFORCER_CONFIRM_WARNINGS:-0}" = "1" ]; then
   CONFIRM_FLAG="--confirm-read-warnings"

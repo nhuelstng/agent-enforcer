@@ -63,7 +63,7 @@ def test_check_output_writes_file(tmp_path):
     with runner.isolated_filesystem(temp_dir=tmp_path):
         Path("enforcer_config.py").write_text("from enforcer import Rule, Severity\nRULES = []\nWORKSPACE = '.'\n")
         outfile = "results.txt"
-        result = runner.invoke(cli, ["check", "--paths", "nonexistent.py", "--output", outfile])
+        result = runner.invoke(cli, ["check", "--paths", "nonexistent.py", "--output", outfile, "--config", "enforcer_config.py"])
         assert result.exit_code == 0
         assert Path(outfile).exists()
         assert "No issues found" in Path(outfile).read_text()

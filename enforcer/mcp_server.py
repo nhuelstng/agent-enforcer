@@ -17,7 +17,7 @@ from enforcer.ignore import load_enforcerignore, is_ignored
 
 
 def _config_path() -> str:
-    return os.environ.get("ENFORCER_CONFIG", "enforcer_config.py")
+    return os.environ.get("ENFORCER_CONFIG", "enforcer_config")
 
 def check_conventions(paths: list[str] | None = None, format: str = "json", no_llm: bool = False) -> str:
     """Run convention checks. Returns formatted output."""
