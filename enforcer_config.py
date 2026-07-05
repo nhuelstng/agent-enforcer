@@ -45,6 +45,7 @@ from enforcer.matchers import (
     ConstantNamingMatcher,
     MagicNumberMatcher,
     ArchitectureMatcher,
+    CanonicalImportMatcher,
     FacadeExistsMatcher,
     FacadeExposesInterfaceMatcher,
 )
@@ -362,6 +363,21 @@ RULES = [
         rationale="Importing private symbols creates hidden coupling. If a module needs a _-prefixed name, it either belongs in a shared module or should be made public.",
     ),
 
+    # ─── Architecture: canonical import source ─────────────────────────
+    Rule(
+        id="canonical-import-source",
+        severity=Severity.ERROR,
+        matchers=[CanonicalImportMatcher(canonical={
+            "glob_match": "enforcer.glob_util",
+            "_glob_match": "enforcer.glob_util",
+        })],
+        file_globs=["enforcer/**/*.py"],
+        diff_only=False,
+        message="Import {matched_value} from canonical module, not from a re-exporting module.",
+        fix_instruction="Import from the canonical source module listed in the canonical map.",
+        rationale="Re-exports create hidden coupling. Importing from the canonical low-level module keeps dependencies explicit and prevents arch-layer-deps violations.",
+    ),
+
     # ─── Architecture: import layer direction (matchers must not import up) ──
     Rule(
         id="matchers-no-import-runner-cli",
@@ -580,6 +596,30 @@ RULES = [
         fix_instruction="Extract cohesive functionality into a new module or sub-package.",
         diff_only=True,
         rationale="Files over 400 lines do too much and are hard to navigate. Splitting into focused modules improves readability and testability.",
+    ),
+
+    # ─── Config size: warn when approaching complexity limit ───────────
+    Rule(
+        id="config-size-cap",
+        severity=Severity.WARN,
+        matchers=[LineCountMatcher(max_lines=900)],
+        file_globs=["enforcer_config.py"],
+        diff_only=False,
+        message="enforcer_config.py is {matched_value} lines — approaching complexity limit (900).",
+        fix_instruction="Split rules into separate config modules or reduce rule count.",
+        rationale="A monolithic config file is hard to review and maintain. WARN to allow growth, signal when splitting is needed.",
+    ),
+
+    # ─── Repo hygiene: no scratch files at root ────────────────────────
+    Rule(
+        id="no-scratch-files",
+        severity=Severity.ERROR,
+        matchers=[AlwaysMatcher(matched_value="scratch file at repo root")],
+        file_globs=["scratch_*.py"],
+        diff_only=False,
+        message="Scratch/debug file at repo root: {matched_value}. Delete it.",
+        fix_instruction="Delete the file. Use /tmp or a git-ignored directory for scratch work.",
+        rationale="Committed scratch files trigger style violations and clutter the repo root.",
     ),
 
     # ─── Function complexity: max lines ──────────────────────────────────

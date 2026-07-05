@@ -30,6 +30,6 @@ class DocSyncMatcher:
         except OSError:
             on_disk = ""
         if on_disk != fresh:
-            return [Match(file=file_ctx.path, line=0, rule_id="conventions-md-stale",
+            return [Match(file=file_ctx.path, line=0,
                           message="CONVENTIONS.md is stale or missing.", matched_value=self.doc_path)]
         return []
