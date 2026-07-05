@@ -1147,7 +1147,7 @@ Setup (one-time):
   enforcer install --force
   export ENFORCER_CONFIG=enforcer_config
 """
-from enforcer import LLMConfig
+from enforcer import LLMConfig, Severity
 from enforcer_config.git_rules import GIT_RULES
 from enforcer_config.test_rules import TEST_RULES
 from enforcer_config.arch_rules import ARCH_RULES
@@ -1167,9 +1167,9 @@ RULES = [
 ]
 
 SEVERITY_ACTIONS = {
-    "ERROR": "block",
-    "WARN": "block_warn",
-    "INFO": "hint",
+    Severity.ERROR: "block",
+    Severity.WARN: "block_warn",
+    Severity.INFO: "hint",
 }
 
 LLM_CONFIG = LLMConfig(
