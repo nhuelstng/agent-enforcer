@@ -1,7 +1,25 @@
 """Concept graph: data model + builder + renderers. Code-as-ontology layer."""
 from __future__ import annotations
 import json
+import re
 from dataclasses import dataclass, field
+
+from enforcer.types import Needs
+from enforcer.parsers.ast_utils import walk_ast, node_text
+from enforcer.glob_util import glob_match
+
+
+_WHAT_RE = re.compile(r"^\s*What:\s*(.+)$", re.MULTILINE)
+_INIT_SUFFIX_LEN = len(".__init__")
+
+
+@dataclass
+class NodeCtx:
+    """Per-file context for concept extraction: path, dotted module, layer, __all__ set."""
+    file: str
+    module_dotted: str
+    layer: str
+    all_set: set[str]
 
 
 @dataclass
@@ -87,3 +105,195 @@ def render_ontology_json(graph: ConceptGraph) -> str:
         "layers": dict(sorted(graph.layers.items())),
     }
     return json.dumps(data, indent=2, ensure_ascii=False)
+
+
+@dataclass
+class ConceptGraphBuilder:
+    """Builds ConceptGraph from repo source: symbols, What: docstrings, layers, import edges.
+
+    Mirrors ImportGraphBuilder.build shape. Reuses ImportGraphBuilder for the
+    path-level import graph (no duplicate AST walking for imports).
+
+    What:       extracts public class/function symbols + their 'What:' docstring section + layer + import edges
+    Ignores:    private (_-prefixed) symbols; non-.py files; files with no parseable AST
+    Basis:      AST_PY via FileContextBuilder parse-once cache
+    shared_ctx: none (standalone builder; consumers may stash result under __rendered_ontology__).
+    """
+    builder: object
+    workspace: str = "."
+    layers: dict[str, list[str]] = field(default_factory=dict)
+    max_files: int = 500
+
+    def build(self, staged_files: list[str]) -> ConceptGraph:
+        """Build ConceptGraph from staged files + transitive closure. Returns graph."""
+        from enforcer.import_graph import ImportGraphBuilder
+        import_graph_builder = ImportGraphBuilder(builder=self.builder, workspace=self.workspace, max_files=self.max_files)
+        path_imports: dict[str, set[str]] = import_graph_builder.build(staged_files)
+
+        symbols: dict[str, Concept] = {}
+        layer_map: dict[str, str] = {}
+
+        all_paths = set(staged_files) | set(path_imports.keys()) | {t for s in path_imports.values() for t in s}
+        for path in sorted(all_paths):
+            self._process_path(path, symbols, layer_map)
+
+        self._resolve_concept_imports(symbols, path_imports)
+
+        return ConceptGraph(symbols=symbols, imports=path_imports, layers=layer_map)
+
+    def _process_path(self, path: str, symbols: dict[str, Concept], layer_map: dict[str, str]) -> None:
+        """Extract symbols from one path, populating symbols and layer_map."""
+        if not path.endswith(".py"):
+            return
+        layer = self._layer_for_path(path)
+        if layer is not None:
+            layer_map[path] = layer
+        ctx = self.builder.build(path, force_needs={Needs.AST_PY})
+        if not ctx or not ctx.ast:
+            return
+        module_dotted = path[:-3].replace("/", ".")
+        if module_dotted.endswith(".__init__"):
+            module_dotted = module_dotted[:-_INIT_SUFFIX_LEN]
+        all_set = self._extract_all(ctx.ast.root_node)
+        node_ctx = NodeCtx(file=path, module_dotted=module_dotted, layer=layer or "", all_set=all_set)
+        for concept in self._extract_concepts(ctx.ast.root_node, node_ctx):
+            symbols[concept.name] = concept
+
+    @staticmethod
+    def _resolve_concept_imports(symbols: dict[str, Concept], path_imports: dict[str, set[str]]) -> None:
+        """Map path-level import edges to concept-level imports on each source concept."""
+        for src_path, tgt_paths in path_imports.items():
+            src_concepts = [c for c in symbols.values() if c.file == src_path]
+            ConceptGraphBuilder._add_target_imports(src_concepts, tgt_paths, symbols)
+
+    @staticmethod
+    def _add_target_imports(src_concepts: list[Concept], tgt_paths: set[str], symbols: dict[str, Concept]) -> None:
+        """For each target path, add its concept names as imports on each source concept."""
+        for tgt_path in tgt_paths:
+            tgt_names = {tc.name for tc in symbols.values() if tc.file == tgt_path}
+            for sc in src_concepts:
+                sc.imports.update(tgt_names)
+
+    def _layer_for_path(self, path: str) -> str | None:
+        """Return layer name whose globs match path, or None."""
+        for layer_name, globs in self.layers.items():
+            if any(glob_match(path, g) for g in globs):
+                return layer_name
+        return None
+
+    @staticmethod
+    def _extract_all(root) -> set[str]:
+        """Extract __all__ list/tuple of string literals from module-level AST."""
+        result: set[str] = set()
+        for node in walk_ast(root):
+            if node.type != "expression_statement":
+                continue
+            ConceptGraphBuilder._collect_all_from_stmt(node, result)
+        return result
+
+    @staticmethod
+    def _collect_all_from_stmt(stmt, result: set[str]) -> None:
+        """Scan one expression_statement's children for __all__ assignment."""
+        for child in stmt.children:
+            if child.type != "assignment":
+                continue
+            left = child.children[0] if child.children else None
+            if not left or node_text(left) != "__all__":
+                continue
+            right = child.children[1] if len(child.children) > 1 else None
+            if not right or right.type not in ("list", "tuple"):
+                continue
+            ConceptGraphBuilder._collect_all_strings(right, result)
+
+    @staticmethod
+    def _collect_all_strings(node, result: set[str]) -> None:
+        """Add stripped string-literal children of node to result."""
+        for item in node.children:
+            if item.type == "string":
+                result.add(node_text(item).strip("'\""))
+
+    @staticmethod
+    def _extract_concepts(root, nctx: NodeCtx) -> list[Concept]:
+        """Walk AST for class/function definitions, return Concept records."""
+        concepts: list[Concept] = []
+        for node in walk_ast(root):
+            concept = ConceptGraphBuilder._concept_for_node(node, nctx)
+            if concept is not None:
+                concepts.append(concept)
+        return concepts
+
+    @staticmethod
+    def _concept_for_node(node, nctx: NodeCtx) -> Concept | None:
+        """Build a Concept for a class/function node, or None if it should be skipped."""
+        if node.type not in ("class_definition", "function_definition"):
+            return None
+        name = ConceptGraphBuilder._node_name(node)
+        if not name:
+            return None
+        if name.startswith("_") and name not in nctx.all_set:
+            return None
+        kind = ConceptGraphBuilder._kind_for(node, node.type)
+        what = ConceptGraphBuilder._extract_what(node)
+        public = (not name.startswith("_")) or (name in nctx.all_set)
+        return Concept(
+            name=f"{nctx.module_dotted}.{name}",
+            kind=kind, file=nctx.file, line=node.start_point[0] + 1,
+            layer=nctx.layer, what=what, public=public,
+        )
+
+    @staticmethod
+    def _kind_for(node, node_type: str) -> str:
+        """Resolve Concept kind: dataclass/class for classes, function otherwise."""
+        if node_type != "class_definition":
+            return "function"
+        return "dataclass" if ConceptGraphBuilder._is_dataclass(node) else "class"
+
+    @staticmethod
+    def _node_name(node) -> str:
+        """Extract identifier name from a class/function definition node."""
+        for child in node.children:
+            if child.type == "identifier":
+                return node_text(child)
+        return ""
+
+    @staticmethod
+    def _is_dataclass(node) -> bool:
+        """Check if class has @dataclass decorator (on parent decorated_definition)."""
+        parent = node.parent
+        if not parent or parent.type != "decorated_definition":
+            return False
+        return any(
+            child.type == "decorator" and "dataclass" in node_text(child)
+            for child in parent.children
+        )
+
+    @staticmethod
+    def _extract_what(node) -> str:
+        """Extract the 'What:' line from the node's docstring, or empty string."""
+        docstring = ConceptGraphBuilder._docstring_for(node)
+        if not docstring:
+            return ""
+        match = _WHAT_RE.search(docstring)
+        return match.group(1).strip() if match else ""
+
+    @staticmethod
+    def _docstring_for(node) -> str:
+        """Extract the first string expression_statement in the node's block, or empty string."""
+        for child in node.children:
+            if child.type != "block":
+                continue
+            if not child.children:
+                return ""
+            first = child.children[0]
+            if first.type != "expression_statement":
+                return ""
+            return ConceptGraphBuilder._first_string(first)
+        return ""
+
+    @staticmethod
+    def _first_string(expr_stmt) -> str:
+        """Return stripped text of first string child of expr_stmt, or empty string."""
+        for gc in expr_stmt.children:
+            if gc.type == "string":
+                return node_text(gc).strip("'\"")
+        return ""

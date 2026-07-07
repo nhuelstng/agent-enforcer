@@ -100,3 +100,66 @@ class TestRenderEmpty:
         import json
         data = json.loads(render_ontology_json(ConceptGraph(symbols={}, imports={}, layers={})))
         assert data["symbols"] == {}
+
+
+class TestConceptGraphBuilder:
+    """ConceptGraphBuilder extracts symbols, What: docstrings, layers, edges."""
+
+    def _build(self, tmp_path, files: dict[str, str], layers: dict[str, list[str]] | None = None):
+        from enforcer.context import FileContextBuilder
+        from enforcer.rule import Rule
+        from enforcer.concept_graph import ConceptGraphBuilder
+        for path, content in files.items():
+            full = tmp_path / path
+            full.parent.mkdir(parents=True, exist_ok=True)
+            full.write_text(content)
+        rules = [Rule(id="_", severity=__import__("enforcer").Severity.ERROR,
+                      matchers=[], file_globs=["**/*.py"], message="x")]
+        builder = FileContextBuilder(rules, workspace=str(tmp_path))
+        staged = list(files.keys())
+        graph_builder = ConceptGraphBuilder(
+            builder=builder, workspace=str(tmp_path),
+            layers=layers or {"core": ["enforcer/**/*.py"]},
+        )
+        return graph_builder.build(staged)
+
+    def test_extracts_public_class(self, tmp_path):
+        graph = self._build(tmp_path, {
+            "enforcer/types.py": 'class Match:\n    """A match.\n\n    What: A rule violation.\n    """\n    pass\n',
+        })
+        assert "Match" in graph.symbols or any("Match" in n for n in graph.symbols)
+
+    def test_extracts_what_docstring(self, tmp_path):
+        graph = self._build(tmp_path, {
+            "enforcer/types.py": 'class Match:\n    """A match.\n\n    What: A rule violation.\n    """\n    pass\n',
+        })
+        concepts = list(graph.symbols.values())
+        assert any(c.what == "A rule violation." for c in concepts)
+
+    def test_skips_private_symbol(self, tmp_path):
+        graph = self._build(tmp_path, {
+            "enforcer/types.py": 'def _private():\n    """What: helper."""\n    pass\n',
+        })
+        assert all(not c.name.endswith("_private") for c in graph.symbols.values())
+
+    def test_dataclass_detection(self, tmp_path):
+        graph = self._build(tmp_path, {
+            "enforcer/types.py": 'from dataclasses import dataclass\n\n@dataclass\nclass Match:\n    """What: a match."""\n    file: str\n',
+        })
+        concepts = list(graph.symbols.values())
+        assert any(c.kind == "dataclass" for c in concepts)
+
+    def test_layer_assignment(self, tmp_path):
+        graph = self._build(tmp_path, {
+            "enforcer/types.py": 'class Match:\n    """What: m."""\n    pass\n',
+        }, layers={"types": ["enforcer/types.py"]})
+        concepts = list(graph.symbols.values())
+        assert any(c.layer == "types" for c in concepts)
+
+    def test_import_edge(self, tmp_path):
+        graph = self._build(tmp_path, {
+            "enforcer/types.py": 'class Match:\n    """What: m."""\n    pass\n',
+            "enforcer/rule.py": 'from enforcer.types import Match\n\nclass Rule:\n    """What: a rule."""\n    pass\n',
+        })
+        assert "enforcer/rule.py" in graph.imports
+        assert "enforcer/types.py" in graph.imports["enforcer/rule.py"]
