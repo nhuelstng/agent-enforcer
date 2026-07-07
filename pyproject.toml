@@ -43,6 +43,10 @@ mcp = ["mcp>=0.1"]
 [project.scripts]
 enforcer = "enforcer.cli:cli"
 
+[tool.setuptools.packages.find]
+include = ["enforcer*"]
+exclude = ["enforcer_config*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
