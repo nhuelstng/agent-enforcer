@@ -32,6 +32,9 @@ from enforcer.matchers.architecture import ArchitectureMatcher
 from enforcer.matchers.facade_exists import FacadeExistsMatcher
 from enforcer.matchers.facade_exposes_interface import FacadeExposesInterfaceMatcher
 from enforcer.matchers.ontology_sync import OntologySyncMatcher
+from enforcer.matchers.concept_docstring import ConceptDocstringMatcher
+from enforcer.matchers.shared_ctx_allowlist import SharedCtxKeyAllowlistMatcher
+from enforcer.matchers.graph_coverage import GraphCoverageMatcher
 
 __all__ = [
     "AllSortedMatcher",
@@ -44,6 +47,7 @@ __all__ = [
     "CharCountMatcher",
     "CommentPerFunctionMatcher",
     "CommitMessageMatcher",
+    "ConceptDocstringMatcher",
     "ConstantNamingMatcher",
     "DocSyncMatcher",
     "DocstringMatcher",
@@ -53,6 +57,7 @@ __all__ = [
     "FacadeExistsMatcher",
     "FileExistsMatcher",
     "FunctionComplexityMatcher",
+    "GraphCoverageMatcher",
     "ImportMatcher",
     "InterfaceMatcher",
     "KeySetSyncMatcher",
@@ -65,6 +70,7 @@ __all__ = [
     "PairedFileMatcher",
     "PathNotMatchingMatcher",
     "RegexMatcher",
+    "SharedCtxKeyAllowlistMatcher",
     "TestCoverageMatcher",
     "TypeHintMatcher",
 ]
