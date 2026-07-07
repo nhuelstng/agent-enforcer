@@ -165,7 +165,9 @@ def install(force):
     import shutil
 
     hooks_dir = os.path.join(".git", "hooks")
-    scripts_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "scripts"))
+    # Hooks ship as package data under enforcer/hooks/ so the install
+    # command works for pip/wheel installs, not just editable checkouts.
+    hooks_src_dir = os.path.join(os.path.dirname(__file__), "hooks")
 
     hooks = [
         ("commit-msg", "commit-msg-hook"),
@@ -175,7 +177,10 @@ def install(force):
         if os.path.exists(hook_path) and not force:
             click.echo(f"Hook already exists at {hook_path}. Use --force to overwrite.")
             sys.exit(1)
-        hook_source = os.path.join(scripts_dir, script_name)
+        hook_source = os.path.join(hooks_src_dir, script_name)
+        if not os.path.exists(hook_source):
+            click.echo(f"Hook source not found at {hook_source}. The wheel may be missing package data.", err=True)
+            sys.exit(1)
         shutil.copy(hook_source, hook_path)
         os.chmod(hook_path, 0o755)
         click.echo(f"Installed {hook_name} hook to {hook_path}")

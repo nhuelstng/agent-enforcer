@@ -5,6 +5,9 @@ inputs:
   install-method:
     description: How to install enforcer. skip | pip | wheel
     default: pip
+  version:
+    description: Enforcer version (git ref) to install. Ignored when install-method=wheel.
+    default: "0.2.0"
   base-ref:
     description: Git ref to diff against. Empty = full scan (--all)
     default: ""
@@ -12,7 +15,7 @@ inputs:
     description: Minimum severity to report
     default: error
   token:
-    description: GitHub token for private repo checkout (cross-org)
+    description: GitHub token for private repo checkout (cross-org). Only needed for private forks of the enforcer repo.
     default: ${{ github.token }}
 
 runs:
@@ -23,15 +26,22 @@ runs:
       env:
         INSTALL_METHOD: ${{ inputs.install-method }}
         GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        SHA: ${{ github.sha }}
+        VERSION: ${{ inputs.version }}
       run: |
         case "$INSTALL_METHOD" in
           skip) echo "skip install" ;;
           wheel)
+            if ! ls dist/*.whl >/dev/null 2>&1; then
+              echo "::error::install-method=wheel but no dist/*.whl found. Build the wheel first." >&2
+              exit 1
+            fi
             pip install dist/*.whl ;;
           pip)
-            pip install "git+https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git@${SHA}" ;;
+            if [ -n "$GH_TOKEN" ] && [ "$GH_TOKEN" != "${{ github.token }}" ]; then
+              pip install "git+https://x-access-token:${GH_TOKEN}@github.com/nhuelstng/agent-enforcer.git@${VERSION}"
+            else
+              pip install "git+https://github.com/nhuelstng/agent-enforcer.git@${VERSION}"
+            fi ;;
         esac
 
     - name: run-enforcer

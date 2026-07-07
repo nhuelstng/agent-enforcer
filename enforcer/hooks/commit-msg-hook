@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# pre-commit-agent-enforcer commit-msg hook
+#
+# Runs `python -m enforcer.cli check --staged` against staged files.
+# Git passes the commit message file as $1; we export it via
+# ENFORCER_COMMIT_MSG_FILE so the enforcer reads the actual message
+# being committed (git may use a temp file for -m/-F, not COMMIT_EDITMSG).
+#
+# ENFORCER_CONFIG          Override path to the config module
+#                          (default: enforcer_config).
+#
+# Two-phase commit flow:
+#   1. First attempt runs the hook. WARN-severity rules block unless
+#      ENFORCER_CONFIRM_WARNINGS=1 is set (agent/human acknowledges).
+#   2. Retry the commit with ENFORCER_CONFIRM_WARNINGS=1 to pass WARN rules;
+#      ERROR rules always block regardless.
+#
+# Blocks on errors. Blocks on warnings unless ENFORCER_CONFIRM_WARNINGS=1 is set.
+set -euo pipefail
+
+CONFIG_PATH="${ENFORCER_CONFIG:-enforcer_config}"
+
+if [ "${ENFORCER_CONFIRM_WARNINGS:-0}" = "1" ]; then
+  CONFIRM_FLAG="--confirm-read-warnings"
+else
+  CONFIRM_FLAG=""
+fi
+
+export ENFORCER_COMMIT_MSG_FILE="$1"
+python -m enforcer.cli check --staged --config "$CONFIG_PATH" $CONFIRM_FLAG

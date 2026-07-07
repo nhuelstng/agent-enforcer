@@ -47,6 +47,9 @@ enforcer = "enforcer.cli:cli"
 include = ["enforcer*"]
 exclude = ["enforcer_config*"]
 
+[tool.setuptools.package-data]
+"enforcer" = ["hooks/commit-msg-hook"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
