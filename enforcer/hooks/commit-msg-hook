@@ -20,6 +20,13 @@ set -euo pipefail
 
 CONFIG_PATH="${ENFORCER_CONFIG:-enforcer_config}"
 
+# Consumer repos with a local enforcer_config/ package need the repo root
+# on sys.path so `importlib.import_module("enforcer_config")` resolves.
+# Prepend "." (preserves any caller-set PYTHONPATH) — editable installs and
+# config-file styles (no local package) are unaffected.
+PYTHONPATH=".${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
+
 if [ "${ENFORCER_CONFIRM_WARNINGS:-0}" = "1" ]; then
   CONFIRM_FLAG="--confirm-read-warnings"
 else
