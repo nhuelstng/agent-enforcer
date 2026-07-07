@@ -142,6 +142,15 @@ class TestConceptGraphBuilder:
         })
         assert all(not c.name.endswith("_private") for c in graph.symbols.values())
 
+    def test_all_exported_private_included(self, tmp_path):
+        """Private symbol listed in __all__ should be included as public."""
+        graph = self._build(tmp_path, {
+            "enforcer/types.py": '__all__ = ["_private"]\n\ndef _private():\n    """What: helper."""\n    pass\n',
+        })
+        assert any(c.name.endswith("_private") for c in graph.symbols.values())
+        private_concepts = [c for c in graph.symbols.values() if c.name.endswith("_private")]
+        assert all(c.public for c in private_concepts)
+
     def test_dataclass_detection(self, tmp_path):
         graph = self._build(tmp_path, {
             "enforcer/types.py": 'from dataclasses import dataclass\n\n@dataclass\nclass Match:\n    """What: a match."""\n    file: str\n',

@@ -200,8 +200,8 @@ class ConceptGraphBuilder:
             left = child.children[0] if child.children else None
             if not left or node_text(left) != "__all__":
                 continue
-            right = child.children[1] if len(child.children) > 1 else None
-            if not right or right.type not in ("list", "tuple"):
+            right = next((c for c in child.children if c.type in ("list", "tuple")), None)
+            if not right:
                 continue
             ConceptGraphBuilder._collect_all_strings(right, result)
 
