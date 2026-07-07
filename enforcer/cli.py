@@ -159,6 +159,103 @@ def sync_doc(config_path, output):
     click.echo(f"Wrote {output}")
 
 @cli.command()
+@click.option("--config", "config_path", default="enforcer_config")
+@click.option("--output", "-o", default=None, help="Output file (default: stdout)")
+@click.option("--format", "fmt", type=click.Choice(["markdown", "json"]), default="markdown")
+def graph(config_path, output, fmt):
+    """Generate the ontology graph from code."""
+    from enforcer.concept_graph import ConceptGraphBuilder, render_ontology_markdown, render_ontology_json
+
+    config = load_config(config_path)
+    ws = config.workspace
+    if not ws or ws == ".":
+        ws = str(Path(config_path).resolve().parent)
+
+    from enforcer.context import FileContextBuilder
+    builder = FileContextBuilder(config.rules, workspace=ws)
+
+    import os
+    all_files: list[str] = []
+    for root, dirs, files in os.walk(ws):
+        dirs[:] = [d for d in dirs if d not in _JUNK_DIRS]
+        for f in files:
+            if f.endswith(".py"):
+                rel = os.path.relpath(os.path.join(root, f), ws)
+                all_files.append(rel)
+
+    graph_builder = ConceptGraphBuilder(
+        builder=builder, workspace=ws,
+        layers=_extract_layers_from_rules(config.rules),
+    )
+    graph = graph_builder.build(all_files)
+
+    if fmt == "json":
+        out = render_ontology_json(graph)
+    else:
+        out = render_ontology_markdown(graph)
+
+    if output:
+        _assert_output_contained(output, ws)
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(out)
+        click.echo(f"Ontology graph written to {output}")
+    else:
+        click.echo(out)
+
+
+@cli.command(name="sync-graph")
+@click.option("--config", "config_path", default="enforcer_config")
+@click.option("--output", "-o", default="ONTOLOGY.md")
+def sync_graph(config_path, output):
+    """Regenerate ONTOLOGY.md from code."""
+    from enforcer.concept_graph import ConceptGraphBuilder, render_ontology_markdown
+
+    config = load_config(config_path)
+    ws = config.workspace
+    if not ws or ws == ".":
+        ws = str(Path(config_path).resolve().parent)
+
+    from enforcer.context import FileContextBuilder
+    builder = FileContextBuilder(config.rules, workspace=ws)
+
+    import os
+    all_files: list[str] = []
+    for root, dirs, files in os.walk(ws):
+        dirs[:] = [d for d in dirs if d not in _JUNK_DIRS]
+        for f in files:
+            if f.endswith(".py"):
+                rel = os.path.relpath(os.path.join(root, f), ws)
+                all_files.append(rel)
+
+    graph_builder = ConceptGraphBuilder(
+        builder=builder, workspace=ws,
+        layers=_extract_layers_from_rules(config.rules),
+    )
+    graph = graph_builder.build(all_files)
+    fresh = render_ontology_markdown(graph)
+
+    _assert_output_contained(output, ws)
+    Path(output).write_text(fresh, encoding="utf-8")
+    click.echo(f"Wrote {output}")
+
+
+def _extract_layers_from_rules(rules: list) -> dict[str, list[str]]:
+    """Extract layer map from the first ArchitectureMatcher found in rules. Returns empty dict if none."""
+    stack: list = []
+    for rule in rules:
+        stack.extend(rule.matchers)
+    while stack:
+        m = stack.pop()
+        if hasattr(m, "layers") and isinstance(m.layers, dict):
+            return dict(m.layers)
+        if hasattr(m, "matchers") and isinstance(m.matchers, list):
+            stack.extend(m.matchers)
+        elif hasattr(m, "matcher") and m.matcher is not None:
+            stack.append(m.matcher)
+    return {}
+
+
+@cli.command()
 @click.option("--force", is_flag=True, help="Overwrite existing hooks")
 def install(force):
     """Install commit-msg hook."""
