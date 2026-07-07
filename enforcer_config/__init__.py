@@ -20,6 +20,7 @@ from enforcer_config.arch_rules import ARCH_RULES
 from enforcer_config.style_rules import STYLE_RULES
 from enforcer_config.hygiene_rules import HYGIENE_RULES
 from enforcer_config.self_enforce import SELF_ENFORCE_RULES
+from enforcer_config.ontology_rules import ONTOLOGY_RULES
 
 WORKSPACE = "."
 
@@ -30,6 +31,7 @@ RULES = [
     *STYLE_RULES,
     *HYGIENE_RULES,
     *SELF_ENFORCE_RULES,
+    *ONTOLOGY_RULES,
 ]
 
 SEVERITY_ACTIONS = {
