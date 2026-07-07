@@ -31,6 +31,23 @@ def _has_architecture_matcher(rules: list) -> bool:
     return False
 
 
+def _has_ontology_matcher(rules: list) -> bool:
+    """Return True if any rule contains an OntologySyncMatcher or GraphCoverageMatcher in its matcher tree."""
+    stack: list = []
+    for rule in rules:
+        stack.extend(rule.matchers)
+    while stack:
+        m = stack.pop()
+        cls_name = type(m).__name__
+        if cls_name in ("OntologySyncMatcher", "GraphCoverageMatcher"):
+            return True
+        if hasattr(m, "matchers") and isinstance(m.matchers, list):
+            stack.extend(m.matchers)
+        elif hasattr(m, "matcher") and m.matcher is not None:
+            stack.append(m.matcher)
+    return False
+
+
 def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = None) -> set[int] | None:
     """Parse git diff -U0 for a file, return set of changed (added) line numbers.
     ref=None uses --cached (staged). ref set uses <ref>...HEAD.
@@ -174,7 +191,39 @@ def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = 
         from enforcer.import_graph import ImportGraphBuilder
         graph_builder = ImportGraphBuilder(builder=builder, workspace=ws)
         shared_ctx["__import_graph__"] = graph_builder.build(staged_files)
+    if _has_ontology_matcher(config.rules):
+        from enforcer.concept_graph import ConceptGraphBuilder, render_ontology_markdown
+        layers = _extract_layers_from_rules_runner(config.rules)
+        graph_builder = ConceptGraphBuilder(
+            builder=builder, workspace=ws, layers=layers,
+        )
+        all_files: list[str] = []
+        for root, dirs, files in os.walk(ws):
+            dirs[:] = [d for d in dirs if not _glob_any_match(d, _JUNK_DIRS)]
+            for f in files:
+                if f.endswith(".py"):
+                    rel = os.path.relpath(os.path.join(root, f), ws)
+                    all_files.append(rel)
+        graph = graph_builder.build(all_files)
+        shared_ctx["__rendered_ontology__"] = render_ontology_markdown(graph)
+        shared_ctx["__public_symbols__"] = set(graph.symbols.keys())
     return shared_ctx
+
+
+def _extract_layers_from_rules_runner(rules: list) -> dict[str, list[str]]:
+    """Extract layer map from the first ArchitectureMatcher found in rules. Returns empty dict if none."""
+    stack: list = []
+    for rule in rules:
+        stack.extend(rule.matchers)
+    while stack:
+        m = stack.pop()
+        if hasattr(m, "layers") and isinstance(m.layers, dict):
+            return dict(m.layers)
+        if hasattr(m, "matchers") and isinstance(m.matchers, list):
+            stack.extend(m.matchers)
+        elif hasattr(m, "matcher") and m.matcher is not None:
+            stack.append(m.matcher)
+    return {}
 
 
 def run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool,
