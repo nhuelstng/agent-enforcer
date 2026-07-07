@@ -31,6 +31,7 @@ from enforcer.matchers.magic_number import MagicNumberMatcher
 from enforcer.matchers.architecture import ArchitectureMatcher
 from enforcer.matchers.facade_exists import FacadeExistsMatcher
 from enforcer.matchers.facade_exposes_interface import FacadeExposesInterfaceMatcher
+from enforcer.matchers.ontology_sync import OntologySyncMatcher
 
 __all__ = [
     "AllSortedMatcher",
@@ -60,6 +61,7 @@ __all__ = [
     "MagicNumberMatcher",
     "NamingConventionMatcher",
     "NoModuleSideEffectsMatcher",
+    "OntologySyncMatcher",
     "PairedFileMatcher",
     "PathNotMatchingMatcher",
     "RegexMatcher",
