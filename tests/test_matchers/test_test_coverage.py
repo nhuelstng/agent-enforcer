@@ -90,11 +90,33 @@ class TestTestCoverageMatcherFlags:
         assert expected_substring.lower() in matches[0].matched_value.lower() or expected_substring.lower() in matches[0].message.lower()
 
 
+# Multi-argument parametrize whose cases are tuples — the count must be 3
+# (the number of tuples), not 0. Regression: only scalar element types were
+# counted, so tuple-valued parametrize was wrongly seen as under-parameterized.
+_GOOD_TEST_TUPLE_PARAMS = '''\
+import pytest
+from enforcer.matchers.regex import RegexMatcher
+
+class TestRegexMatcherFlags:
+    @pytest.mark.parametrize("pattern,line", [("x", "x"), ("y", "y"), ("z", "z")])
+    def test_flagged(self, pattern, line):
+        matches = RegexMatcher(pattern).find(FileContext(path="x", raw=line))
+        assert len(matches) == 1
+
+class TestRegexMatcherClean:
+    @pytest.mark.parametrize("pattern,line", [("x", "a"), ("y", "b"), ("z", "c")])
+    def test_no_match(self, pattern, line):
+        matches = RegexMatcher(pattern).find(FileContext(path="x", raw=line))
+        assert not matches
+'''
+
+
 class TestTestCoverageMatcherClean:
     """does not flag test files with both positive and negative, each parameterized >=3."""
 
     @pytest.mark.parametrize("source", [
         _GOOD_TEST,
+        _GOOD_TEST_TUPLE_PARAMS,
     ])
     def test_no_match_on_good_file(self, source):
         ctx = _make_ctx(source)
