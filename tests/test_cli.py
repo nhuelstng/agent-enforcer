@@ -182,6 +182,52 @@ WORKSPACE = "."
         os.chdir(cwd)
 
 
+def test_rule_id_does_not_trip_conventions_md_stale(runner, tmp_path):
+    """--rule-id must render the doc-staleness check against the FULL rule set.
+
+    Regression: filtering config.rules before rendering the doc made the
+    conventions-md-stale check compare the on-disk (full) doc against a doc
+    rendered from a single rule → always stale. The on-disk doc is current
+    here, so `--rule-id conventions-md-stale` must pass (exit 0).
+    """
+    config = '''
+from enforcer import Rule, Severity, RuleType
+from enforcer.matchers import RegexMatcher
+from enforcer.matchers.doc_sync import DocSyncMatcher
+RULES = [
+    Rule(id="no-print", severity=Severity.ERROR, matchers=[RegexMatcher(r"print")],
+         file_globs=["*.py"], message="No print.", fix_instruction="Remove it.", rationale="Print is bad."),
+    Rule(id="no-todo", severity=Severity.ERROR, matchers=[RegexMatcher(r"TODO")],
+         file_globs=["*.py"], message="No TODO.", fix_instruction="Do it.", rationale="TODOs rot."),
+    Rule(id="conventions-md-stale", severity=Severity.ERROR,
+         matchers=[DocSyncMatcher(doc_path="CONVENTIONS.md")], file_globs=["*"],
+         rule_type=RuleType.METADATA, message="stale", fix_instruction="Run: enforcer sync-doc",
+         rationale="Keep the doc fresh."),
+]
+WORKSPACE = "."
+'''
+    config_file = tmp_path / "enforcer_config.py"
+    config_file.write_text(config)
+
+    cwd = os.getcwd()
+    os.chdir(str(tmp_path))
+    try:
+        # Generate the on-disk doc from the FULL rule set.
+        sync = runner.invoke(cli, ["sync-doc", "--config", str(config_file)])
+        assert sync.exit_code == 0, sync.output
+        assert (tmp_path / "CONVENTIONS.md").exists()
+
+        # Narrowing to just the doc rule must still see the full doc as current.
+        with patch("enforcer.cli._collect_files", return_value=([], {})):
+            result = runner.invoke(cli, [
+                "check", "--all", "--no-llm", "--config", str(config_file),
+                "--rule-id", "conventions-md-stale",
+            ])
+        assert result.exit_code == 0, result.output
+    finally:
+        os.chdir(cwd)
+
+
 def test_build_shared_ctx_stashes_rules():
     """_build_shared_ctx must stash __rules__ and __workspace__."""
     from enforcer.cli import _build_shared_ctx

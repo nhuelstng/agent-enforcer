@@ -3,9 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
 
-# ponytail: tree-sitter list element node types for counting parametrize cases
-_LIST_ELEM_TYPES = {"string", "identifier", "integer", "true", "false", "none"}
-
 # ponytail: method-name keywords signaling test intent when assert text is ambiguous
 _POSITIVE_NAME_KEYWORDS = ("fail", "flag", "violation")
 _NEGATIVE_NAME_KEYWORDS = ("success", "clean", "valid", "passes")
@@ -110,12 +107,21 @@ class TestCoverageMatcher:
 
     @staticmethod
     def _count_list_elements(decorator_node) -> int:
-        """Count elements in the first list node within a decorator."""
+        """Count top-level value elements in the first list node within a decorator.
+
+        Counts every element regardless of type — scalars (string/int/bool/None),
+        identifiers, calls, and tuples/lists for multi-argument
+        `@pytest.mark.parametrize("a,b", [(1, 2), (3, 4), (5, 6)])`. Element
+        nodes are the list's *named* children; anonymous punctuation (`[`, `]`,
+        `,`) is skipped, as are comments. Previously only a fixed set of scalar
+        types was counted, so tuple-valued (multi-arg) parametrize lists scored 0
+        and were wrongly reported under-parameterized.
+        """
         from enforcer.parsers.ast_utils import walk_ast
         for sub in walk_ast(decorator_node):
             if sub.type != "list":
                 continue
-            return sum(1 for c in sub.children if c.type in _LIST_ELEM_TYPES)
+            return sum(1 for c in sub.children if c.is_named and c.type != "comment")
         return 0
 
     def _detect_assert_type(self, method_node) -> tuple[bool, bool]:

@@ -1,6 +1,7 @@
 """Tests for PairedFileMatcher: cross-file paired file existence checks."""
 import tempfile
 from pathlib import Path
+import pytest
 from enforcer.matchers.paired_file import PairedFileMatcher
 from enforcer.types import FileContext
 
@@ -83,6 +84,54 @@ def test_paired_file_typescript_spec_exists():
         ctx = FileContext(path="frontend/src/app/components/foo/foo.component.ts", raw="x = 1")
         matches = matcher.find(ctx, shared_ctx={})
         assert matches == []
+
+# Directory depths below the `**` prefix; the 2- and 3-level cases regressed
+# when glob.glob ran without recursive=True. Inlined in each decorator (the
+# coverage self-check counts inline list literals, not variable references).
+@pytest.mark.parametrize("nested_dir", ["foo", "components/foo", "components/ui/foo"])
+def test_paired_file_doublestar_colocated_spec_clean(nested_dir):
+    """`**` in derived_glob must find a co-located pair nested any depth deep.
+
+    Regression: glob.glob without recursive=True collapses `**` to a single `*`,
+    so specs nested >1 level below the prefix were reported missing (false positive).
+    """
+    segments = nested_dir.split("/")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        comp_dir = Path(tmpdir, "frontend", "src", "app", *segments)
+        comp_dir.mkdir(parents=True)
+        (comp_dir / "widget.component.ts").write_text("x = 1")
+        (comp_dir / "widget.component.spec.ts").write_text("x = 1")
+
+        rel = "/".join(("frontend", "src", "app", *segments, "widget.component.ts"))
+        matcher = PairedFileMatcher(
+            source_glob="frontend/src/app/**/*.component.ts",
+            derived_glob="frontend/src/app/**/{stem}.spec.ts",
+            workspace=tmpdir,
+        )
+        ctx = FileContext(path=rel, raw="x = 1")
+        assert not matcher.find(ctx, shared_ctx={})
+
+
+@pytest.mark.parametrize("nested_dir", ["foo", "components/foo", "components/ui/foo"])
+def test_paired_file_doublestar_missing_spec_flags(nested_dir):
+    """`**` derived_glob still flags a genuinely missing co-located spec at any depth."""
+    segments = nested_dir.split("/")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        comp_dir = Path(tmpdir, "frontend", "src", "app", *segments)
+        comp_dir.mkdir(parents=True)
+        (comp_dir / "widget.component.ts").write_text("x = 1")  # no spec
+
+        rel = "/".join(("frontend", "src", "app", *segments, "widget.component.ts"))
+        matcher = PairedFileMatcher(
+            source_glob="frontend/src/app/**/*.component.ts",
+            derived_glob="frontend/src/app/**/{stem}.spec.ts",
+            workspace=tmpdir,
+        )
+        ctx = FileContext(path=rel, raw="x = 1")
+        matches = matcher.find(ctx, shared_ctx={})
+        assert len(matches) == 1
+        assert "widget.component.spec.ts" in matches[0].matched_value
+
 
 def test_paired_file_stem_extraction():
     """Should correctly extract stem from filename (strip extension)."""

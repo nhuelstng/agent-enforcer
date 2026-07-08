@@ -12,7 +12,9 @@ from enforcer.glob_util import glob_match
 class PairedFileMatcher:
     """Given a source file, checks if a derived (paired) file exists.
     Uses {stem} (filename without extension) and {dir} (parent directory name) in derived_glob.
-    Supports glob wildcards (*, ?) in derived_glob — matches if at least one file matches.
+    Supports glob wildcards (*, ?, **) in derived_glob — matches if at least one file matches.
+    `**` matches across directory levels (recursive), so a co-located pair nested any
+    depth below a fixed prefix (e.g. `frontend/src/app/**/{stem}.spec.ts`) is found.
     Emits a match if the paired file does NOT exist.
 
     What:       flags source files (matching source_glob) whose derived paired file does NOT exist on disk
@@ -47,8 +49,10 @@ class PairedFileMatcher:
         derived_path = self.derived_glob.replace("{stem}", stem).replace("{dir}", parent_dir)
 
         full_path = os.path.join(self.workspace, derived_path)
-        # ponytail: glob.glob handles both exact paths (no wildcard) and patterns (* / ?)
-        if glob.glob(full_path):
+        # ponytail: recursive=True so `**` spans directory levels; harmless for exact
+        # paths and single-`*` patterns. Without it, `**` collapses to a single `*`
+        # (one level) and a co-located pair nested deeper is missed → false positive.
+        if glob.glob(full_path, recursive=True):
             return []
 
         return [Match(

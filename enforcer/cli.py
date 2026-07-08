@@ -64,6 +64,11 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
         sys.exit(2)
 
     config = load_config(config_path)
+    # The full rule set is what the on-disk conventions doc reflects. Capture it
+    # before --rule-id narrows the run set, so the doc-staleness check (rendered
+    # below) compares against the complete doc, not a single-rule subset —
+    # otherwise `--rule-id` spuriously trips `conventions-md-stale`.
+    all_rules = list(config.rules)
     if rule_id:
         config.rules = [r for r in config.rules if r.id == rule_id]
     ws = workspace or config.workspace
@@ -86,7 +91,7 @@ def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_ll
 
     builder = FileContextBuilder(config.rules, workspace=ws)
     from enforcer.docs import render_rules_doc
-    rendered_doc = render_rules_doc(config.rules, workspace=config.workspace or ws)
+    rendered_doc = render_rules_doc(all_rules, workspace=config.workspace or ws)
     shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=file_list, rendered_doc=rendered_doc)
 
     change_ctx = _build_change_context(ws, status_map)
