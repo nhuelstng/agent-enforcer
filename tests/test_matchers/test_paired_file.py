@@ -133,6 +133,45 @@ def test_paired_file_doublestar_missing_spec_flags(nested_dir):
         assert "widget.component.spec.ts" in matches[0].matched_value
 
 
+@pytest.mark.parametrize("status", ["modified", "renamed", "deleted"])
+def test_paired_file_statuses_skips_non_added_clean(status):
+    """statuses={'added'} must not flag a source file with a non-added git status."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "backend", "app", "api").mkdir(parents=True)
+        Path(tmpdir, "backend", "app", "api", "artifacts.py").write_text("x = 1")
+
+        matcher = PairedFileMatcher(
+            source_glob="backend/app/api/*.py",
+            derived_glob="backend/tests/integration/test_{stem}.py",
+            workspace=tmpdir,
+            statuses={"added"},
+        )
+        ctx = FileContext(path="backend/app/api/artifacts.py", raw="x = 1", status=status)
+        assert not matcher.find(ctx, shared_ctx={})
+
+
+@pytest.mark.parametrize("derived", [
+    "backend/tests/integration/test_{stem}.py",
+    "backend/tests/test_{stem}.py",
+    "tests/test_{stem}.py",
+])
+def test_paired_file_statuses_flags_added(derived):
+    """statuses={'added'} still flags a newly-added source file missing its pair."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "backend", "app", "api").mkdir(parents=True)
+        Path(tmpdir, "backend", "app", "api", "artifacts.py").write_text("x = 1")
+
+        matcher = PairedFileMatcher(
+            source_glob="backend/app/api/*.py",
+            derived_glob=derived,
+            workspace=tmpdir,
+            statuses={"added"},
+        )
+        ctx = FileContext(path="backend/app/api/artifacts.py", raw="x = 1", status="added")
+        matches = matcher.find(ctx, shared_ctx={})
+        assert len(matches) == 1
+
+
 def test_paired_file_stem_extraction():
     """Should correctly extract stem from filename (strip extension)."""
     with tempfile.TemporaryDirectory() as tmpdir:

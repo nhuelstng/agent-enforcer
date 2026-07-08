@@ -27,7 +27,7 @@ STYLE_RULES = [
         matchers=[InterfaceMatcher(min_methods=4)],
         file_globs=["enforcer/**/*.py"],
         exclude_globs=["enforcer/cli.py"],
-        message="Class '{matched_value}' at {file}:{line} has >=4 methods but no base class. Inherit from Protocol/ABC or a base class.",
+        message="Class '{matched_value}' at {file}:{line} has >=4 public methods but no base class. Inherit from Protocol/ABC or a base class.",
         fix_instruction="Add a base class (Protocol, ABC, or domain base) to the class definition.",
         diff_only=True,
         rationale="Classes with many methods and no interface are hard to mock, test in isolation, and substitute. An interface enables polymorphism and dependency injection.",
