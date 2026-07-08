@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 from enforcer.types import Severity, LLMConfig, ProviderConfig
@@ -44,12 +45,25 @@ def load_config(config_path: str) -> Config:
     (importlib.import_module).
     """
     if config_path.endswith(".py") or "/" in config_path or os.sep in config_path:
-        spec = importlib.util.spec_from_file_location("enforcer_config", config_path)
+        # Use a dedicated module name (not "enforcer_config") so loading a
+        # file-style config never shadows a real `enforcer_config` package that
+        # other code — or a later load — imports by name.
+        spec = importlib.util.spec_from_file_location("enforcer_user_config", config_path)
         if not spec or not spec.loader:
             raise ImportError(f"Cannot load config from {config_path}")
         module = importlib.util.module_from_spec(spec)
+        # Register before exec so dataclasses / typing resolve annotations against a
+        # module present in sys.modules (matches importlib's documented usage) —
+        # otherwise a @dataclass matcher defined in the config can fail to build.
+        sys.modules[spec.name] = module
         spec.loader.exec_module(module)
     else:
+        # A package-style config (e.g. "enforcer_config") lives at the repo root;
+        # ensure the cwd is importable so `enforcer check` works without callers
+        # having to export PYTHONPATH=. themselves.
+        cwd = os.getcwd()
+        if cwd not in sys.path:
+            sys.path.insert(0, cwd)
         module = importlib.import_module(config_path)
 
     return Config(

@@ -38,6 +38,19 @@ def test_cli_paths(runner, empty_config):
         result = runner.invoke(cli, ["check", "--paths", "x.ts", "--config", empty_config])
         assert result.exit_code == 0
 
+def test_cli_positional_files(runner, empty_config):
+    """Positional file args are accepted like --paths (pre-commit passes them so)."""
+    with patch("enforcer.runner.RuleRunner.run_rules_for_file", return_value=[]):
+        result = runner.invoke(cli, ["check", "x.ts", "y.ts", "--config", empty_config])
+        assert result.exit_code == 0
+
+
+def test_cli_positional_files_conflict_with_all(runner, empty_config):
+    """Positional files combined with --all is a usage error (exit 2)."""
+    result = runner.invoke(cli, ["check", "x.ts", "--all", "--config", empty_config])
+    assert result.exit_code == 2
+
+
 def test_cli_workspace(runner, empty_config):
     with patch("enforcer.runner.RuleRunner.run_rules_for_file", return_value=[]):
         result = runner.invoke(cli, ["check", "--workspace", ".", "--paths", "x.ts", "--config", empty_config])

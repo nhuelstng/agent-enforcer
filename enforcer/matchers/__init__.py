@@ -10,6 +10,8 @@ from enforcer.matchers.always import AlwaysMatcher
 from enforcer.matchers.file_exists import FileExistsMatcher
 from enforcer.matchers.import_matcher import ImportMatcher
 from enforcer.matchers.canonical_import import CanonicalImportMatcher
+from enforcer.matchers.css_custom_property import CssCustomPropertyDeclMatcher
+from enforcer.matchers.css_literal_value import CssLiteralValueMatcher
 from enforcer.matchers.function_complexity import FunctionComplexityMatcher
 from enforcer.matchers.paired_file import PairedFileMatcher
 from enforcer.matchers.branch_name import BranchNameMatcher
@@ -44,6 +46,8 @@ __all__ = [
     "CommentPerFunctionMatcher",
     "CommitMessageMatcher",
     "ConstantNamingMatcher",
+    "CssCustomPropertyDeclMatcher",
+    "CssLiteralValueMatcher",
     "DocSyncMatcher",
     "DocstringMatcher",
     "DuplicateCodeMatcher",

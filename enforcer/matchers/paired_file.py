@@ -17,8 +17,12 @@ class PairedFileMatcher:
     depth below a fixed prefix (e.g. `frontend/src/app/**/{stem}.spec.ts`) is found.
     Emits a match if the paired file does NOT exist.
 
-    What:       flags source files (matching source_glob) whose derived paired file does NOT exist on disk
-    Ignores:    excluded stems (default __init__); spec/test files themselves; paths not matching source_glob; pairs that exist
+    Set `statuses` to restrict firing to specific git statuses (e.g. {"added"} to
+    require a test only for newly-created files, not edits to pre-existing ones).
+    Left as None, it fires regardless of status.
+
+    What:       flags source files (matching source_glob, and — if set — with a git status in `statuses`) whose derived paired file does NOT exist on disk
+    Ignores:    excluded stems (default __init__); spec/test files themselves; paths not matching source_glob; files whose status is not in `statuses`; pairs that exist
     Basis:      RAW (path stem/dir substitution + glob.glob on disk)
     shared_ctx: none (defensive default only)
     """
@@ -26,6 +30,7 @@ class PairedFileMatcher:
     derived_glob: str
     workspace: str = "."
     exclude_stems: list[str] = field(default_factory=lambda: ["__init__"])
+    statuses: set[str] | None = None
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
@@ -34,6 +39,10 @@ class PairedFileMatcher:
         stem = Path(path).stem
 
         if stem in self.exclude_stems:
+            return []
+
+        # ponytail: restrict to given git statuses when set (e.g. new files only)
+        if self.statuses is not None and file_ctx.status not in self.statuses:
             return []
 
         # ponytail: skip derived files themselves (spec/test) to avoid recursive pairing

@@ -38,6 +38,7 @@ def _assert_output_contained(output: str, ws: str) -> None:
         sys.exit(2)
 
 @cli.command()
+@click.argument("files", nargs=-1)
 @click.option("--staged", is_flag=True, help="Check staged files only")
 @click.option("--all", "all_files", is_flag=True, help="Check entire repo")
 @click.option("--paths", multiple=True, help="Check specific files")
@@ -51,9 +52,16 @@ def _assert_output_contained(output: str, ws: str) -> None:
 @click.option("--fix", is_flag=True, help="Apply auto-fixes where available")
 @click.option("--output", "-o", default=None, help="Output file (default: stdout)")
 @click.option("--base-ref", default=None, help="Git ref to diff against (e.g. origin/master). Sets changed_lines so diff_only rules fire in CI.")
-def check(staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings, fix, output, base_ref):
-    """Check files for convention violations."""
+def check(files, staged, all_files, paths, fmt, config_path, workspace, severity, no_llm, rule_id, confirm_read_warnings, fix, output, base_ref):
+    """Check files for convention violations.
+
+    Positional FILES are treated like --paths, so pre-commit (which passes staged
+    filenames positionally) works out of the box: `enforcer check a.py b.py`.
+    """
     from enforcer.types import Severity
+
+    # Positional args and --paths are the same "specific files" mode; merge them.
+    paths = tuple(paths) + tuple(files)
 
     exclusive = sum([bool(staged), bool(base_ref), bool(all_files)])
     if exclusive > 1:

@@ -97,7 +97,7 @@ _Checked on changed lines only (`--staged`)._
 
 ### class-needs-interface
 
-Class '<matched_value>' at <file>:<line> has >=4 methods but no base class. Inherit from Protocol/ABC or a base class.
+Class '<matched_value>' at <file>:<line> has >=4 public methods but no base class. Inherit from Protocol/ABC or a base class.
 
 **Why:** Classes with many methods and no interface are hard to mock, test in isolation, and substitute. An interface enables polymorphism and dependency injection.
 
@@ -105,7 +105,7 @@ Class '<matched_value>' at <file>:<line> has >=4 methods but no base class. Inhe
 
 **Matchers:**
 
-- `InterfaceMatcher` — flags non-dataclass classes with >=min_methods methods and no base class (no inheritance)
+- `InterfaceMatcher` — flags non-dataclass classes with >=min_methods public methods and no base class (no inheritance)
 
 **Excludes:** enforcer/cli.py
 
@@ -146,7 +146,7 @@ No test file for combinator <file>. Every combinator needs paired tests.
 
 **Matchers:**
 
-- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+- `PairedFileMatcher` — flags source files (matching source_glob, and — if set — with a git status in `statuses`) whose derived paired file does NOT exist on disk
   - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/combinators/__init__.py
@@ -243,7 +243,7 @@ No test file for core module <file>.
 
 **Matchers:**
 
-- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+- `PairedFileMatcher` — flags source files (matching source_glob, and — if set — with a git status in `statuses`) whose derived paired file does NOT exist on disk
   - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/__init__.py, enforcer/matchers/**, enforcer/predicates/**, enforcer/combinators/**, enforcer/parsers/**, enforcer/extractors/**
@@ -325,7 +325,7 @@ Extractor <file> has no paired test. Create tests/test_extractors/test_<stem>*.p
 
 **Matchers:**
 
-- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+- `PairedFileMatcher` — flags source files (matching source_glob, and — if set — with a git status in `statuses`) whose derived paired file does NOT exist on disk
   - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/extractors/__init__.py
@@ -470,7 +470,7 @@ No test file for matcher <file>. Every matcher needs paired tests.
 
 **Matchers:**
 
-- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+- `PairedFileMatcher` — flags source files (matching source_glob, and — if set — with a git status in `statuses`) whose derived paired file does NOT exist on disk
   - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/matchers/__init__.py
@@ -780,7 +780,7 @@ No test file for predicate <file>. Every predicate needs paired tests.
 
 **Matchers:**
 
-- `PairedFileMatcher` — flags source files (matching source_glob) whose derived paired file does NOT exist on disk
+- `PairedFileMatcher` — flags source files (matching source_glob, and — if set — with a git status in `statuses`) whose derived paired file does NOT exist on disk
   - Tests: `tests/test_matchers/test_paired_file.py`
 
 **Excludes:** enforcer/predicates/__init__.py

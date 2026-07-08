@@ -64,6 +64,21 @@ class Repo(Protocol):
 '''
 
 
+_MANY_PRIVATE_ONE_PUBLIC = '''\
+class Worker:
+    def run(self):
+        pass
+    def _a(self):
+        pass
+    def _b(self):
+        pass
+    def _c(self):
+        pass
+    def __init__(self):
+        pass
+'''
+
+
 class TestInterfaceMatcherFlags:
     """flags non-dataclass classes with >=min_methods and no base class."""
 
@@ -103,6 +118,15 @@ class TestInterfaceMatcherClean:
     def test_no_match_on_valid(self, source):
         ctx = _make_ctx(source)
         assert InterfaceMatcher().find(ctx) == []
+
+    @pytest.mark.parametrize("source", [
+        _MANY_PRIVATE_ONE_PUBLIC,
+        "class C:\n    def p(self): pass\n    def _a(self): pass\n    def _b(self): pass\n    def _c(self): pass\n    def _d(self): pass\n",
+        "class C:\n    def __init__(self): pass\n    def _x(self): pass\n    def _y(self): pass\n    def _z(self): pass\n",
+    ])
+    def test_private_methods_do_not_count(self, source):
+        """Private/dunder methods don't count toward the interface threshold."""
+        assert InterfaceMatcher().find(_make_ctx(source)) == []
 
     def test_needs_ast_py(self):
         assert InterfaceMatcher().needs == Needs.AST_PY
