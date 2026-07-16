@@ -178,3 +178,77 @@ def test_end_to_end_architecture_violation(tmp_path: Path):
     matches = matcher.find(ctx, {"__import_graph__": graph})
     assert len(matches) == 1
     assert matches[0].matched_value == "a_layer -> b_layer"
+
+
+def test_source_root_resolves_subdir_package(tmp_path: Path):
+    """A package imported as 'app.*' but rooted at 'server/app' resolves via source_roots."""
+    _write(tmp_path, "server/app/features/a/x.py", "from app.features.b.y import z\n")
+    _write(tmp_path, "server/app/features/b/y.py", "z = 1\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(
+        builder=builder, workspace=str(tmp_path), source_roots={"app": "server/app"},
+    )
+    graph = graph_builder.build(staged_files=["server/app/features/a/x.py"])
+
+    assert graph["server/app/features/a/x.py"] == {"server/app/features/b/y.py"}
+
+
+def test_without_source_root_subdir_package_unresolved(tmp_path: Path):
+    """Same layout, no source_roots -> 'app.*' does not resolve (regression guard)."""
+    _write(tmp_path, "server/app/features/a/x.py", "from app.features.b.y import z\n")
+    _write(tmp_path, "server/app/features/b/y.py", "z = 1\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = graph_builder.build(staged_files=["server/app/features/a/x.py"])
+
+    assert graph["server/app/features/a/x.py"] == set()
+
+
+def test_source_root_symbol_fallback(tmp_path: Path):
+    """'from app.mod import symbol' falls back to the parent module file under the source root."""
+    _write(tmp_path, "server/app/mod.py", "symbol = 1\n")
+    _write(tmp_path, "server/app/caller.py", "from app.mod import symbol\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(
+        builder=builder, workspace=str(tmp_path), source_roots={"app": "server/app"},
+    )
+    graph = graph_builder.build(staged_files=["server/app/caller.py"])
+
+    assert graph["server/app/caller.py"] == {"server/app/mod.py"}
+
+
+def test_source_root_longest_prefix_wins(tmp_path: Path):
+    """When two prefixes overlap, the longer dotted prefix maps first."""
+    _write(tmp_path, "vendored/sub/thing.py", "v = 1\n")
+    _write(tmp_path, "server/app/thing.py", "a = 1\n")
+    _write(tmp_path, "server/app/caller.py", "from app.sub.thing import v\nfrom app.thing import a\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(
+        builder=builder, workspace=str(tmp_path),
+        source_roots={"app": "server/app", "app.sub": "vendored/sub"},
+    )
+    graph = graph_builder.build(staged_files=["server/app/caller.py"])
+
+    assert graph["server/app/caller.py"] == {"vendored/sub/thing.py", "server/app/thing.py"}
+
+
+def test_source_root_enables_sibling_isolation_at_repo_root(tmp_path: Path):
+    """End-to-end: source_roots lets isolate_siblings fire for a subdir-rooted package."""
+    _write(tmp_path, "server/app/features/orders/svc.py", "from app.features.billing.pay import charge\n")
+    _write(tmp_path, "server/app/features/billing/pay.py", "def charge():\n    return 1\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    graph_builder = ImportGraphBuilder(
+        builder=builder, workspace=str(tmp_path), source_roots={"app": "server/app"},
+    )
+    graph = graph_builder.build(staged_files=["server/app/features/orders/svc.py"])
+
+    matcher = ArchitectureMatcher(isolate_siblings=["server/app/features"])
+    ctx = FileContext(path="server/app/features/orders/svc.py", raw="from app.features.billing.pay import charge\n")
+    matches = matcher.find(ctx, {"__import_graph__": graph})
+    assert len(matches) == 1
+    assert "sibling slices" in matches[0].matched_value
