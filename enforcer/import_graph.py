@@ -9,13 +9,21 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from enforcer.context import FileContextBuilder
 
+# TypeScript/JS files the graph traverses, and the order relative specifiers
+# resolve against (a bare 'foo' import tries foo.ts, then foo.tsx, ...).
+_TS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mts", ".cts")
+_TS_RESOLVE_EXTS = (".ts", ".tsx", ".d.ts", ".js", ".jsx", ".mts", ".cts")
+
 
 class ImportGraphBuilder(ABC):
     """Builds {source_path: set[target_path]} from staged files + transitive closure.
 
-    What:       resolves Python imports (import X.Y, from X.Y import Z) to on-disk paths.
-    Ignores:    stdlib/third-party (unresolvable -> not in graph). relative imports (deferred).
-    Basis:      AST_PY via FileContextBuilder parse-once cache.
+    What:       resolves Python imports (import X.Y, from X.Y import Z) and TypeScript/JS
+                relative imports (import ... from './x', export ... from '../y') to
+                on-disk paths.
+    Ignores:    stdlib/third-party and TS bare/aliased specifiers (unresolvable -> not in
+                graph); Python relative imports and TS dynamic import() (deferred).
+    Basis:      AST_PY / AST_TS via FileContextBuilder parse-once cache.
     shared_ctx: none (standalone builder; consumers may stash result under __import_graph__).
     """
 
@@ -57,7 +65,7 @@ class ImportGraphBuilder(ABC):
         while queue and len(seen) < self.max_files:
             path = queue.popleft()
             queued.discard(path)
-            if path in seen or not path.endswith(".py"):
+            if path in seen or not path.endswith((".py",) + _TS_EXTS):
                 continue
             if not os.path.isfile(os.path.join(self.workspace, path)):
                 continue
@@ -85,6 +93,8 @@ class ImportGraphBuilder(ABC):
 
     def _resolve_for_path(self, path: str) -> set[str]:
         """Extract imports for path, resolve to target paths, record import lines."""
+        if path.endswith(_TS_EXTS):
+            return self._resolve_ts_for_path(path)
         resolved: set[str] = set()
         lines: dict[str, int] = {}
         for module, line in self._extract_imports(path).items():
@@ -226,3 +236,70 @@ class ImportGraphBuilder(ABC):
             if os.path.isfile(full):
                 resolved.append(cand.replace(os.sep, "/"))
         return resolved
+
+    # --- TypeScript / JS resolution ---
+    # Only relative specifiers ('./', '../') are local; bare ('rxjs') and aliased
+    # ('@angular/core', tsconfig paths) specifiers resolve to nothing, like an
+    # unresolvable Python module. A specifier resolves to the first on-disk file
+    # among <base><ext> then <base>/index<ext> (TS module-resolution order).
+
+    def _resolve_ts_for_path(self, path: str) -> set[str]:
+        """Resolve a TS/JS file's relative imports, recording each import's line."""
+        resolved: set[str] = set()
+        lines: dict[str, int] = {}
+        for spec, line in self._extract_ts_imports(path).items():
+            target = self._resolve_ts_import(spec, path)
+            if target is not None:
+                resolved.add(target)
+                lines.setdefault(target, line)
+        self.import_lines[path] = lines
+        return resolved
+
+    def _extract_ts_imports(self, path: str) -> dict[str, int]:
+        """Return {module specifier: 1-based line} for a TS/JS file. Cached."""
+        if path in self._imports_cache:
+            return self._imports_cache[path]
+        from enforcer.types import Needs
+        ctx = self.builder.build(path, force_needs={Needs.AST_TS})
+        specs = self._ts_import_specs(ctx.ast.root_node) if ctx.ast else {}
+        self._imports_cache[path] = specs
+        return specs
+
+    @staticmethod
+    def _ts_import_specs(root) -> dict[str, int]:
+        """Collect {specifier: line} from every import/export statement's source string.
+
+        The module source is the direct `string` child of an import_statement or a
+        re-exporting export_statement (`export ... from '...'`); an `export const x
+        = "s"` nests its string deeper, so direct children only avoids false hits.
+        """
+        from enforcer.parsers.ast_utils import walk_ast, node_text
+        specs: dict[str, int] = {}
+        for node in walk_ast(root):
+            if node.type not in ("import_statement", "export_statement"):
+                continue
+            src = next((c for c in node.children if c.type == "string"), None)
+            if src is not None:
+                specs.setdefault(node_text(src).strip("'\"`"), node.start_point[0] + 1)
+        return specs
+
+    def _resolve_ts_import(self, spec: str, src_path: str) -> str | None:
+        """Resolve a relative TS specifier to an on-disk file, or None if unresolvable."""
+        if not (spec.startswith("./") or spec.startswith("../")):
+            return None
+        src_dir = os.path.dirname(src_path)
+        base = os.path.normpath(os.path.join(src_dir, spec)).replace(os.sep, "/")
+        for cand in self._ts_candidates(base):
+            if os.path.isfile(os.path.join(self.workspace, cand)):
+                return cand
+        return None
+
+    @staticmethod
+    def _ts_candidates(base: str) -> list[str]:
+        """Ordered on-disk candidates for a TS import base path (file, then dir index)."""
+        cands: list[str] = []
+        if base.endswith(_TS_RESOLVE_EXTS):
+            cands.append(base)
+        cands.extend(base + ext for ext in _TS_RESOLVE_EXTS)
+        cands.extend(f"{base}/index{ext}" for ext in _TS_RESOLVE_EXTS)
+        return cands
