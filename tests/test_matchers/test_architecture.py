@@ -111,6 +111,69 @@ class TestArchitectureMatcherClean:
         assert ArchitectureMatcher(layers={}).needs == Needs.AST_PY
 
 
+class TestArchitectureMatcherSiblingIsolation:
+    """flags imports between peer slices under an isolate_siblings root."""
+
+    _ROOT = "app/features"
+
+    def test_flags_sibling_import(self):
+        graph = {"app/features/orders/svc.py": {"app/features/billing/pay.py"}}
+        matcher = ArchitectureMatcher(isolate_siblings=[self._ROOT])
+        matches = matcher.find(_ctx("app/features/orders/svc.py"), {"__import_graph__": graph})
+        assert len(matches) == 1
+        assert matches[0].matched_value == f"orders -> billing (sibling slices under {self._ROOT})"
+        assert matches[0].file == "app/features/orders/svc.py"
+
+    def test_clean_intra_slice_import(self):
+        graph = {"app/features/orders/svc.py": {"app/features/orders/repo.py"}}
+        matcher = ArchitectureMatcher(isolate_siblings=[self._ROOT])
+        assert not matcher.find(_ctx("app/features/orders/svc.py"), {"__import_graph__": graph})
+
+    def test_clean_import_to_non_sibling_target(self):
+        graph = {"app/features/orders/svc.py": {"app/shared/db.py", "app/domain/order.py"}}
+        matcher = ArchitectureMatcher(isolate_siblings=[self._ROOT])
+        assert not matcher.find(_ctx("app/features/orders/svc.py"), {"__import_graph__": graph})
+
+    def test_sibling_isolation_without_declared_layers(self):
+        graph = {"app/features/a/x.py": {"app/features/b/y.py"}}
+        matcher = ArchitectureMatcher(layers={}, isolate_siblings=[self._ROOT])
+        matches = matcher.find(_ctx("app/features/a/x.py"), {"__import_graph__": graph})
+        assert len(matches) == 1
+        assert matches[0].matched_value == f"a -> b (sibling slices under {self._ROOT})"
+
+    def test_default_isolate_siblings_is_empty_no_flag(self):
+        graph = {"app/features/a/x.py": {"app/features/b/y.py"}}
+        matcher = ArchitectureMatcher()
+        assert not matcher.find(_ctx("app/features/a/x.py"), {"__import_graph__": graph})
+
+    def test_multiple_roots(self):
+        graph = {"src/features/a/x.ts": {"src/features/b/y.ts"}}
+        matcher = ArchitectureMatcher(isolate_siblings=["backend/app/features", "src/features"])
+        matches = matcher.find(_ctx("src/features/a/x.ts"), {"__import_graph__": graph})
+        assert len(matches) == 1
+        assert matches[0].matched_value == "a -> b (sibling slices under src/features)"
+
+    def test_layer_and_sibling_compose_without_double_flag(self):
+        # features/orders -> features/billing is intra-layer for the DAG (skipped)
+        # but a sibling-boundary violation; exactly one match, from the sibling check.
+        graph = {"app/features/orders/svc.py": {"app/features/billing/pay.py"}}
+        matcher = ArchitectureMatcher(
+            layers={"features": ["app/features/**"], "shared": ["app/shared/**"]},
+            allowed_edges=[("features", "shared")],
+            forbid_implicit=True,
+            isolate_siblings=[self._ROOT],
+        )
+        matches = matcher.find(_ctx("app/features/orders/svc.py"), {"__import_graph__": graph})
+        assert len(matches) == 1
+        assert "sibling slices" in matches[0].matched_value
+
+    def test_root_prefix_boundary_not_partial_match(self):
+        # 'app/features_legacy/...' must not be treated as under 'app/features'
+        graph = {"app/features/a/x.py": {"app/features_legacy/b/y.py"}}
+        matcher = ArchitectureMatcher(isolate_siblings=[self._ROOT])
+        assert not matcher.find(_ctx("app/features/a/x.py"), {"__import_graph__": graph})
+
+
 class TestImportLineFor:
     """_import_line_for walks AST and returns the line of the importing statement."""
 

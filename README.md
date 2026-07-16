@@ -262,6 +262,15 @@ See [`enforcer/matchers/__init__.py`](enforcer/matchers/__init__.py) for the ful
 
 Enforce that source files have paired test files via `PairedFileMatcher(source_glob=..., derived_glob="test_{stem}.py")`. See [`enforcer_config.py`](enforcer_config.py) for working examples.
 
+## Recipe: Architecture boundaries
+
+`ArchitectureMatcher` reads the import graph and flags forbidden imports. Declare a layer DAG (`layers` + `allowed_edges`, with `forbid_implicit=True`), and/or `isolate_siblings` — parent dirs whose immediate children are peer slices that may not import each other (the vertical-slice "no cross-slice imports" invariant a flat layer can't express, since sibling slices collapse to one layer). Both share one import-graph pass; Python resolution today.
+
+```python
+ArchitectureMatcher(isolate_siblings=["app/features"])
+# app/features/orders/... -> app/features/billing/... flagged;  -> app/shared/... allowed
+```
+
 ## Example config
 
 See [enforcer_config.py](enforcer_config.py) for a real working example — this repo enforces its own conventions with 26 rules (19 ERROR for style/correctness + 7 WARN for critical-component reminders, including LLM-analyzed README length).

@@ -1,4 +1,4 @@
-"""ArchitectureMatcher: flags imports crossing forbidden layer boundaries."""
+"""ArchitectureMatcher: flags imports crossing forbidden layer or sibling boundaries."""
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
@@ -9,11 +9,27 @@ from enforcer.parsers.ast_utils import walk_ast, node_text
 
 @dataclass
 class ArchitectureMatcher:
-    """Flags imports where (source_layer, target_layer) crosses forbidden boundaries.
+    """Flags imports crossing forbidden layer edges or peer-slice boundaries.
 
-    What:       flags import statements where source file's layer -> target file's layer
-                is not in allowed_edges (forbid_implicit=True) or is in forbidden_edges
-    Ignores:    intra-layer imports; files not matching any layer glob; unresolvable targets
+    Two independent, composable constraints:
+
+    - **Layer DAG** (`layers` + `allowed_edges`/`forbidden_edges`): flags an
+      import when the source file's layer -> target file's layer is not in
+      allowed_edges (forbid_implicit=True) or is in forbidden_edges.
+    - **Sibling isolation** (`isolate_siblings`): each entry is a parent
+      directory whose immediate children are peer "slices" that may not import
+      one another. This expresses the vertical-slice invariant ("no cross-slice
+      imports") that the layer DAG alone can't — sibling slices matching one
+      layer glob collapse to a single layer, so their cross-imports read as
+      intra-layer and are skipped. Sibling isolation works with or without any
+      declared layer.
+
+    What:       flags import statements whose (source_layer -> target_layer) is
+                forbidden, OR that cross a peer-slice boundary under an
+                isolate_siblings root
+    Ignores:    intra-layer imports; imports between files in the same slice;
+                files/targets matching no layer glob and no isolate root;
+                unresolvable targets
     Basis:      AST_PY (reads pre-built __import_graph__; line attribution walks AST)
     shared_ctx: reads __import_graph__ (dict[str, set[str]]) built by ImportGraphBuilder
     """
@@ -21,32 +37,54 @@ class ArchitectureMatcher:
     allowed_edges: list[tuple[str, str]] = field(default_factory=list)
     forbidden_edges: list[tuple[str, str]] = field(default_factory=list)
     forbid_implicit: bool = True
+    isolate_siblings: list[str] = field(default_factory=list)
     needs: Needs = Needs.AST_PY
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
-        """Flag imports crossing forbidden layer boundaries. Returns list of Match."""
+        """Flag imports crossing forbidden layer or sibling boundaries. Returns list of Match."""
         shared_ctx = shared_ctx or {}
         graph = shared_ctx.get("__import_graph__", {})
         targets = graph.get(file_ctx.path, set())
         src_layer = self._layer_for_path(file_ctx.path)
-        if src_layer is None:
-            return []
 
         matches: list[Match] = []
         for tgt in targets:
-            tgt_layer = self._layer_for_path(tgt)
-            if tgt_layer is None:
-                continue
-            if tgt_layer == src_layer:
-                continue
-            edge = (src_layer, tgt_layer)
-            if self._is_forbidden(edge):
+            violation = self._layer_violation(src_layer, tgt) or self._sibling_violation(file_ctx.path, tgt)
+            if violation is not None:
                 matches.append(Match(
                     file=file_ctx.path,
                     line=self._import_line_for(file_ctx, tgt),
-                    matched_value=f"{src_layer} -> {tgt_layer}",
+                    matched_value=violation,
                 ))
         return matches
+
+    def _layer_violation(self, src_layer: str | None, tgt: str) -> str | None:
+        """Return 'src_layer -> tgt_layer' if the edge is forbidden, else None."""
+        if src_layer is None:
+            return None
+        tgt_layer = self._layer_for_path(tgt)
+        if tgt_layer is None or tgt_layer == src_layer:
+            return None
+        edge = (src_layer, tgt_layer)
+        return f"{src_layer} -> {tgt_layer}" if self._is_forbidden(edge) else None
+
+    def _sibling_violation(self, src_path: str, tgt_path: str) -> str | None:
+        """Return a sibling-boundary message if src and tgt are peer slices, else None."""
+        for root in self.isolate_siblings:
+            src_slice = self._child_under(src_path, root)
+            tgt_slice = self._child_under(tgt_path, root)
+            if src_slice and tgt_slice and src_slice != tgt_slice:
+                return f"{src_slice} -> {tgt_slice} (sibling slices under {root})"
+        return None
+
+    @staticmethod
+    def _child_under(path: str, root: str) -> str | None:
+        """Return the immediate child segment of `path` under `root`, or None if not under it."""
+        prefix = root.rstrip("/") + "/"
+        if not path.startswith(prefix):
+            return None
+        segment = path[len(prefix):].split("/", 1)[0]
+        return segment or None
 
     def _is_forbidden(self, edge: tuple[str, str]) -> bool:
         """Return True if edge is forbidden per allowed/forbidden config."""
