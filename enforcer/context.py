@@ -63,7 +63,7 @@ class FileContextBuilder(ContextBuilderProtocol):
     def _ast_need(needs: set[Needs]) -> Needs | None:
         """Return the first AST need from the set, or None."""
         for n in needs:
-            if n in (Needs.AST_TS, Needs.AST_PY, Needs.AST_CSS):
+            if n in (Needs.AST_TS, Needs.AST_PY, Needs.AST_CSS, Needs.AST_GO):
                 return n
         return None
 

@@ -18,7 +18,7 @@ An agent must use these terms correctly in code, commits, and discussion:
 - **Combinator** — combines matchers (AllOf, AnyOf, Not, NoneOf, OneOf). Defined in `enforcer/combinators/core.py`.
 - **FileContext** — per-file parsed state: raw text, optional AST, changed_lines. Built once, reused by all matchers.
 - **shared_ctx** — cross-file dict passed to every `matcher.find()`. Used for cross-file reference data (allowlists, paired files, duplicate detection).
-- **Needs** — enum declaring what a matcher requires: `RAW`, `AST_PY`, `AST_TS`, `AST_CSS`. Drives parse-once caching.
+- **Needs** — enum declaring what a matcher requires: `RAW`, `AST_PY`, `AST_TS`, `AST_CSS`, `AST_GO`. Drives parse-once caching.
 - **Severity** — `ERROR` (style/correctness, always blocks), `WARN` (critical-component reminder, blocks unless `--confirm-read-warnings`), `INFO` (advisory).
 - **RuleType** — `CONTENT` (checked per-file) vs `METADATA` (checked once per run, e.g. branch name, commit message).
 - **LLMMatcher** — matcher that calls an LLM as the check itself. Returns `Match` objects from structured JSON verdicts. Composes via combinators like any matcher. Defined in `enforcer/matchers/llm_check.py`.
@@ -78,7 +78,7 @@ Every matcher must implement this interface:
 ```python
 @dataclass
 class MyMatcher:
-    needs: Needs = Needs.RAW  # or AST_PY, AST_TS, AST_CSS
+    needs: Needs = Needs.RAW  # or AST_PY, AST_TS, AST_CSS, AST_GO
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         ...
@@ -146,6 +146,19 @@ tests/
   test_combinators/ — paired tests for each combinator
 ```
 
+## Language Support
+
+RAW matchers work on any text file. AST matchers need a tree-sitter grammar and declare it via `needs`; the extension→language map is in `parsers/language.py`.
+
+| Language | `Needs` | Extensions | AST matcher coverage |
+|----------|---------|------------|----------------------|
+| Python | `AST_PY` | `.py` | all |
+| TypeScript / JS | `AST_TS` | `.ts .tsx .js .jsx` | all |
+| CSS / SCSS | `AST_CSS` | `.css .scss` | CSS matchers |
+| Go | `AST_GO` | `.go` | `FunctionComplexityMatcher`, `NamingConventionMatcher`, `ImportMatcher`, `AstNodeMatcher` |
+
+For Go, set `needs=Needs.AST_GO` on the supported matchers. `NamingConventionMatcher` targets Go spec nodes (`function_declaration`, `method_declaration`, `type_spec`, `const_spec`, `var_spec`, `field_declaration`) and reads method/field names from `field_identifier`. `FunctionComplexityMatcher` selects the params list after the function name, so it excludes the method receiver and the result tuple and counts grouped params (`a, b int` → 2); Go `switch`/`select` cases count toward cyclomatic and their bodies toward nesting. Not yet supported for Go: doc-comments (`DocstringMatcher`, Go uses `//` sibling comments) and import graphs (`ArchitectureMatcher`, Go resolves imports to packages/dirs).
+
 ## Adding a New Matcher
 
 1. Create `enforcer/matchers/<name>.py`
@@ -154,7 +167,7 @@ tests/
 4. Add to `enforcer/matchers/__init__.py` `__all__`
 5. Write `tests/test_matchers/test_<name>.py`
 6. Add a Rule to `enforcer_config.py` if self-enforcing
-7. **Document the matcher with a structured docstring.** Class docstring must include `What:` (what it flags) and `Basis:` (RAW/AST_PY/AST_TS/AST_CSS) sections. Example:
+7. **Document the matcher with a structured docstring.** Class docstring must include `What:` (what it flags) and `Basis:` (RAW/AST_PY/AST_TS/AST_CSS/AST_GO) sections. Example:
 
    ```python
    @dataclass

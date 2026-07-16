@@ -1,13 +1,13 @@
-"""Shared AST utilities: iterative walker + node-type constants for Python/TS."""
+"""Shared AST utilities: iterative walker + node-type constants for Python/TS/Go."""
 from __future__ import annotations
 import re
 from typing import Iterator
 
 FUNC_NODE_TYPES = {
     "function_definition",
-    "function_declaration",
+    "function_declaration",   # Python? no — TS/JS standalone func + Go top-level func
     "method_definition",
-    "method_declaration",
+    "method_declaration",     # TS method + Go method (with receiver)
 }
 
 DECL_NODE_TYPES = {
@@ -18,12 +18,22 @@ DECL_NODE_TYPES = {
     "class_definition",
     "class_declaration",
     "variable_declaration",
+    # Go: declarations wrap named specs; both the wrapper and the spec are listed
+    # so callers can target whichever granularity they need.
+    "type_declaration",
+    "type_spec",
+    "const_declaration",
+    "const_spec",
+    "var_declaration",
+    "var_spec",
+    "short_var_declaration",
 }
 
 IMPORT_NODE_TYPES = {
     "import_statement",
     "import_from_statement",
-    "import_declaration",
+    "import_declaration",     # TS/JS import + Go import block
+    "import_spec",            # Go: a single import within the block
 }
 
 

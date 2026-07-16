@@ -48,10 +48,10 @@ class AstNodeMatcher:
 
     def _is_scope_node(self, node, scope: str) -> bool:
         type_map = {
-            "class": {"class_declaration", "class_definition", "class"},
+            "class": {"class_declaration", "class_definition", "class", "type_declaration", "type_spec"},
             "function": {"function_declaration", "function_definition",
-                          "method_definition"},
-            "module": {"program"},
+                          "method_definition", "method_declaration"},
+            "module": {"program", "source_file"},
         }
         return node.type in type_map.get(scope, set())
 

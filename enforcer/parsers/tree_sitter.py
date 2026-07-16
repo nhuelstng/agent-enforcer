@@ -1,4 +1,4 @@
-"""Tree-sitter AST parser: loads grammars for TypeScript, Python, CSS. Handles version compatibility."""
+"""Tree-sitter AST parser: loads grammars for TypeScript, Python, CSS, Go. Handles version compatibility."""
 from __future__ import annotations
 from enforcer.types import Needs
 
@@ -13,6 +13,7 @@ def parse(source: str, needs: Needs) -> object | None:
         Needs.AST_TS: _get_ts_language,
         Needs.AST_PY: _get_py_language,
         Needs.AST_CSS: _get_css_language,
+        Needs.AST_GO: _get_go_language,
     }
 
     lang_func = language_map.get(needs)
@@ -52,5 +53,13 @@ def _get_css_language():
         import tree_sitter as ts
         import tree_sitter_css as ts_css
         return ts.Language(ts_css.language())
+    except Exception:
+        return None
+
+def _get_go_language():
+    try:
+        import tree_sitter as ts
+        import tree_sitter_go as ts_go
+        return ts.Language(ts_go.language())
     except Exception:
         return None

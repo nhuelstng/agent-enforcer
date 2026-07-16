@@ -17,6 +17,7 @@ class Needs(Enum):
     AST_TS = "ast_ts"
     AST_PY = "ast_py"
     AST_CSS = "ast_css"
+    AST_GO = "ast_go"
 
 class RuleType(Enum):
     """Whether a rule operates on file contents (per-file) or git metadata (once per run)."""

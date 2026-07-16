@@ -6,9 +6,9 @@ from enforcer.types import Match, FileContext, Needs
 # ponytail: tree-sitter node types for functions across languages
 _FUNC_NODE_TYPES = {
     "function_definition",       # Python def (top-level + class methods)
-    "function_declaration",      # TypeScript standalone function
+    "function_declaration",      # TypeScript standalone function + Go top-level func
     "method_definition",         # TypeScript class method
-    "method_declaration",        # TypeScript class method (alt grammar)
+    "method_declaration",        # TypeScript class method (alt grammar) + Go method (with receiver)
 }
 
 _DECISION_NODE_TYPES = {
@@ -17,15 +17,19 @@ _DECISION_NODE_TYPES = {
     "conditional_expression",   # ternary
     "boolean_op",               # Python and/or
     "case_clause",              # match/case
+    # Go: each switch/select case is a branch (default excluded, like else/case _)
+    "expression_case", "type_case", "communication_case",
 }
 
-# ponytail: TS &&/|| are binary_expression nodes — only count when operator is && or ||
+# ponytail: TS/Go &&/|| are binary_expression nodes — only count when operator is && or ||
 _TS_LOGICAL_OPS = {"&&", "||"}
 
 _NESTING_NODE_TYPES = {
     "if_statement", "for_statement", "while_statement",
     "except_clause", "catch_clause", "try_statement",
     "with_statement", "match_statement", "case_clause",
+    # Go: switch/select bodies introduce a nesting level
+    "expression_switch_statement", "type_switch_statement", "select_statement",
 }
 
 # ponytail: param node types across Python + TypeScript
@@ -35,10 +39,14 @@ _PARAM_NODE_TYPES = {
     "required_parameter", "optional_parameter", "rest_pattern",
 }
 
+# ponytail: Go groups params by type (`a, b int` is one node with two names), so
+# count identifiers inside the parameter_list rather than the declaration nodes.
+_GO_PARAM_DECL_TYPES = {"parameter_declaration", "variadic_parameter_declaration"}
+
 @dataclass
 class FunctionComplexityMatcher:
     """Walks the AST for function/method nodes, computes a complexity metric, emits if over threshold.
-    Set needs=AST_PY for Python, needs=AST_TS for TypeScript.
+    Set needs=AST_PY for Python, needs=AST_TS for TypeScript, needs=AST_GO for Go.
 
     What:       flags functions whose `metric` (lines/params/nesting/cyclomatic) exceeds `max_value`
     Ignores:    files with no parsed AST; __init__ methods (params metric only); nested functions (analyzed independently); functions at or below threshold
@@ -99,10 +107,41 @@ class FunctionComplexityMatcher:
         return 0
 
     def _count_params(self, func_node) -> int:
+        params = self._params_node(func_node)
+        if params is None:
+            return 0
+        if any(c.type in _GO_PARAM_DECL_TYPES for c in params.children):
+            return self._count_go_params(params)
+        return sum(1 for c in params.children if c.type in _PARAM_NODE_TYPES)
+
+    @staticmethod
+    def _params_node(func_node):
+        """Return the parameter container node, or None.
+
+        For Go the params list is the first `parameter_list` *after* the function
+        name — a leading `parameter_list` is the method receiver and a trailing one
+        is the (parenthesised) results. Python/TS expose a single named container.
+        """
+        seen_name = False
         for child in func_node.children:
-            if child.type in ("parameters", "parameter_list", "formal_parameters"):
-                return sum(1 for c in child.children if c.type in _PARAM_NODE_TYPES)
-        return 0
+            if child.type in ("identifier", "field_identifier"):
+                seen_name = True
+            elif child.type == "parameter_list" and seen_name:
+                return child
+            elif child.type in ("parameters", "formal_parameters"):
+                return child
+        return None
+
+    @staticmethod
+    def _count_go_params(params) -> int:
+        """Count Go parameters: each declaration groups one or more identifiers by type."""
+        total = 0
+        for decl in params.children:
+            if decl.type not in _GO_PARAM_DECL_TYPES:
+                continue
+            names = sum(1 for c in decl.children if c.type == "identifier")
+            total += names or 1  # an unnamed result/param declaration still counts as one
+        return total
 
     def _max_depth(self, root, start: int) -> int:
         # ponytail: iterative DFS — avoids RecursionError, skips nested functions
