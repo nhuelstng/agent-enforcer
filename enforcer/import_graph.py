@@ -10,12 +10,18 @@ if TYPE_CHECKING:
     from enforcer.context import FileContextBuilder
 
 
+_SOURCE_EXTS = (".py", ".go")
+
+
 class ImportGraphBuilder(ABC):
     """Builds {source_path: set[target_path]} from staged files + transitive closure.
 
-    What:       resolves Python imports (import X.Y, from X.Y import Z) to on-disk paths.
-    Ignores:    stdlib/third-party (unresolvable -> not in graph). relative imports (deferred).
-    Basis:      AST_PY via FileContextBuilder parse-once cache.
+    What:       resolves Python imports (import X.Y, from X.Y import Z) and Go imports
+                (import "mod/pkg") to on-disk paths. Go imports resolve to every .go
+                file in the target package directory (a Go package is a directory).
+    Ignores:    stdlib/third-party (unresolvable -> not in graph); Python relative
+                imports (deferred); Go test files as import targets (_test.go).
+    Basis:      AST_PY / AST_GO via FileContextBuilder parse-once cache.
     shared_ctx: none (standalone builder; consumers may stash result under __import_graph__).
     """
 
@@ -27,6 +33,9 @@ class ImportGraphBuilder(ABC):
         # ponytail: parse-once cache keyed by path; reuses builder but also
         # holds imports extracted per file to avoid re-walking AST
         self._imports_cache: dict[str, set[str]] = {}
+        # ponytail: Go module path from go.mod, resolved lazily. False = not yet
+        # read; None = no go.mod / no module line; str = the module path.
+        self._go_module: str | None | bool = False
 
     def build(self, staged_files: list[str]) -> dict[str, set[str]]:
         """Build import graph from staged files + transitive closure. Returns graph dict."""
@@ -45,7 +54,7 @@ class ImportGraphBuilder(ABC):
         while queue and len(seen) < self.max_files:
             path = queue.popleft()
             queued.discard(path)
-            if path in seen or not path.endswith(".py"):
+            if path in seen or not path.endswith(_SOURCE_EXTS):
                 continue
             if not os.path.isfile(os.path.join(self.workspace, path)):
                 continue
@@ -73,6 +82,8 @@ class ImportGraphBuilder(ABC):
 
     def _resolve_for_path(self, path: str) -> set[str]:
         """Extract imports for path and resolve each to on-disk target paths."""
+        if path.endswith(".go"):
+            return self._resolve_go_for_path(path)
         resolved: set[str] = set()
         targets = self._extract_imports(path)
         for tgt in targets:
@@ -191,3 +202,86 @@ class ImportGraphBuilder(ABC):
             if os.path.isfile(full):
                 resolved.append(cand.replace(os.sep, "/"))
         return resolved
+
+    # --- Go resolution ---
+    # A Go package is a directory; an import path resolves (against the go.mod
+    # module prefix) to every non-test .go file in that directory.
+
+    def _resolve_go_for_path(self, path: str) -> set[str]:
+        """Resolve a Go file's local imports to the .go files of each target package."""
+        module = self._go_module_path()
+        if not module:
+            return set()
+        resolved: set[str] = set()
+        for imp in self._extract_go_imports(path):
+            resolved.update(self._resolve_go_import(imp, module))
+        return resolved
+
+    def _extract_go_imports(self, path: str) -> set[str]:
+        """Return the set of import-path strings declared in a Go file. Cached."""
+        if path in self._imports_cache:
+            return self._imports_cache[path]
+        from enforcer.types import Needs
+        ctx = self.builder.build(path, force_needs={Needs.AST_GO})
+        imports = self._go_import_strings(ctx.ast.root_node) if ctx.ast else set()
+        self._imports_cache[path] = imports
+        return imports
+
+    @staticmethod
+    def _go_import_strings(root) -> set[str]:
+        """Collect the quoted path from every Go import_spec node under root."""
+        from enforcer.parsers.ast_utils import walk_ast, node_text
+        imports: set[str] = set()
+        for node in walk_ast(root):
+            if node.type != "import_spec":
+                continue
+            literal = next((c for c in node.children
+                            if c.type in ("interpreted_string_literal", "raw_string_literal")), None)
+            if literal is not None:
+                imports.add(node_text(literal).strip('"`'))
+        return imports
+
+    def _resolve_go_import(self, import_path: str, module: str) -> list[str]:
+        """Map a local import path to the non-test .go files in its package directory.
+
+        Only imports under the module prefix are local; stdlib/third-party imports
+        resolve to nothing (like unresolvable Python modules).
+        """
+        if import_path == module:
+            rel = ""
+        elif import_path.startswith(module + "/"):
+            rel = import_path[len(module) + 1:]
+        else:
+            return []
+        pkg_dir = os.path.join(self.workspace, rel) if rel else self.workspace
+        if not os.path.isdir(pkg_dir):
+            return []
+        files: list[str] = []
+        for name in os.listdir(pkg_dir):
+            if not name.endswith(".go") or name.endswith("_test.go"):
+                continue
+            if not os.path.isfile(os.path.join(pkg_dir, name)):
+                continue
+            files.append(f"{rel}/{name}" if rel else name)
+        return files
+
+    def _go_module_path(self) -> str | None:
+        """Return the module path from go.mod at the workspace root, or None. Cached."""
+        if self._go_module is not False:
+            return self._go_module  # type: ignore[return-value]
+        self._go_module = self._parse_go_mod(os.path.join(self.workspace, "go.mod"))
+        return self._go_module
+
+    @staticmethod
+    def _parse_go_mod(path: str) -> str | None:
+        """Extract the `module <path>` declaration from a go.mod file, or None."""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except (IOError, OSError, UnicodeDecodeError):
+            return None
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("module "):
+                return stripped[len("module "):].strip()
+        return None

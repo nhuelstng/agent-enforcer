@@ -155,9 +155,9 @@ RAW matchers work on any text file. AST matchers need a tree-sitter grammar and 
 | Python | `AST_PY` | `.py` | all |
 | TypeScript / JS | `AST_TS` | `.ts .tsx .js .jsx` | all |
 | CSS / SCSS | `AST_CSS` | `.css .scss` | CSS matchers |
-| Go | `AST_GO` | `.go` | `FunctionComplexityMatcher`, `NamingConventionMatcher`, `ImportMatcher`, `AstNodeMatcher` |
+| Go | `AST_GO` | `.go` | `FunctionComplexityMatcher`, `NamingConventionMatcher`, `ImportMatcher`, `AstNodeMatcher`, `ArchitectureMatcher` |
 
-For Go, set `needs=Needs.AST_GO` on the supported matchers. `NamingConventionMatcher` targets Go spec nodes (`function_declaration`, `method_declaration`, `type_spec`, `const_spec`, `var_spec`, `field_declaration`) and reads method/field names from `field_identifier`. `FunctionComplexityMatcher` selects the params list after the function name, so it excludes the method receiver and the result tuple and counts grouped params (`a, b int` → 2); Go `switch`/`select` cases count toward cyclomatic and their bodies toward nesting. Not yet supported for Go: doc-comments (`DocstringMatcher`, Go uses `//` sibling comments) and import graphs (`ArchitectureMatcher`, Go resolves imports to packages/dirs).
+For Go, set `needs=Needs.AST_GO` on the supported matchers. `NamingConventionMatcher` targets Go spec nodes (`function_declaration`, `method_declaration`, `type_spec`, `const_spec`, `var_spec`, `field_declaration`) and reads method/field names from `field_identifier`. `FunctionComplexityMatcher` selects the params list after the function name, so it excludes the method receiver and the result tuple and counts grouped params (`a, b int` → 2); Go `switch`/`select` cases count toward cyclomatic and their bodies toward nesting. `ArchitectureMatcher` works on Go via the import graph: `ImportGraphBuilder` reads the module path from `go.mod` and resolves each `import "mod/pkg"` to the non-test `.go` files in that package directory (a Go package is a directory). Not yet supported for Go: doc-comments (`DocstringMatcher`, Go uses `//` sibling comments).
 
 ## Adding a New Matcher
 

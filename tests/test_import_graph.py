@@ -178,3 +178,69 @@ def test_end_to_end_architecture_violation(tmp_path: Path):
     matches = matcher.find(ctx, {"__import_graph__": graph})
     assert len(matches) == 1
     assert matches[0].matched_value == "a_layer -> b_layer"
+
+
+# --- Go import graph ---
+
+_GOMOD = "module example.com/proj\n\ngo 1.22\n"
+
+
+def _go_builder(tmp_path: Path) -> ImportGraphBuilder:
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    return ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+
+
+def test_go_import_resolves_to_package_files(tmp_path: Path):
+    """A Go import under the module prefix resolves to the target package's .go files."""
+    _write(tmp_path, "go.mod", _GOMOD)
+    _write(tmp_path, "internal/api/handler.go",
+           'package api\nimport "example.com/proj/internal/db"\nvar _ = db.Get\n')
+    _write(tmp_path, "internal/db/store.go", "package db\nfunc Get() {}\n")
+
+    graph = _go_builder(tmp_path).build(staged_files=["internal/api/handler.go"])
+    assert graph["internal/api/handler.go"] == {"internal/db/store.go"}
+
+
+def test_go_stdlib_and_thirdparty_excluded(tmp_path: Path):
+    """Imports outside the module prefix (stdlib, third-party) are not graph edges."""
+    _write(tmp_path, "go.mod", _GOMOD)
+    _write(tmp_path, "internal/api/handler.go",
+           'package api\nimport (\n\t"fmt"\n\t"github.com/other/x"\n)\nvar _ = fmt.Print\n')
+
+    graph = _go_builder(tmp_path).build(staged_files=["internal/api/handler.go"])
+    assert graph["internal/api/handler.go"] == set()
+
+
+def test_go_test_files_excluded_as_targets(tmp_path: Path):
+    """Importing a package pulls its .go files but not its _test.go files."""
+    _write(tmp_path, "go.mod", _GOMOD)
+    _write(tmp_path, "internal/api/h.go",
+           'package api\nimport "example.com/proj/internal/db"\nvar _ = db.Get\n')
+    _write(tmp_path, "internal/db/store.go", "package db\nfunc Get() {}\n")
+    _write(tmp_path, "internal/db/store_test.go", "package db\n")
+
+    graph = _go_builder(tmp_path).build(staged_files=["internal/api/h.go"])
+    assert graph["internal/api/h.go"] == {"internal/db/store.go"}
+
+
+def test_go_transitive_closure(tmp_path: Path):
+    """a imports b, b imports c -> closure expands through Go packages."""
+    _write(tmp_path, "go.mod", _GOMOD)
+    _write(tmp_path, "a/a.go", 'package a\nimport "example.com/proj/b"\nvar _ = b.X\n')
+    _write(tmp_path, "b/b.go", 'package b\nimport "example.com/proj/c"\nvar X = c.Y\n')
+    _write(tmp_path, "c/c.go", "package c\nvar Y = 1\n")
+
+    graph = _go_builder(tmp_path).build(staged_files=["a/a.go"])
+    assert graph["a/a.go"] == {"b/b.go"}
+    assert graph["b/b.go"] == {"c/c.go"}
+    assert graph["c/c.go"] == set()
+
+
+def test_go_no_gomod_yields_no_edges(tmp_path: Path):
+    """Without go.mod the module prefix is unknown, so no local imports resolve."""
+    _write(tmp_path, "internal/api/h.go",
+           'package api\nimport "example.com/proj/internal/db"\nvar _ = db.Get\n')
+    _write(tmp_path, "internal/db/store.go", "package db\nfunc Get() {}\n")
+
+    graph = _go_builder(tmp_path).build(staged_files=["internal/api/h.go"])
+    assert graph["internal/api/h.go"] == set()
