@@ -285,7 +285,7 @@ Function '<matched_value>' at <file>:<line> missing docstring. Public functions 
 
 **Matchers:**
 
-- `DocstringMatcher` — flags public functions (name not _-prefixed) whose body's first statement is not a string expression
+- `DocstringMatcher` — flags public functions (Python/TS: name not _-prefixed; Go: exported) lacking a docstring/doc comment
   - Tests: `tests/test_matchers/test_docstring.py`
 
 **Fix:** Add a docstring: """<one-line description>."""

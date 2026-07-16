@@ -5,9 +5,9 @@ from enforcer.types import Match, FileContext, Needs
 
 _FUNC_NODE_TYPES = {
     "function_definition",       # Python def (top-level + class methods)
-    "function_declaration",      # TypeScript standalone function
+    "function_declaration",      # TypeScript standalone function + Go top-level func
     "method_definition",         # TypeScript class method
-    "method_declaration",        # TypeScript class method (alt grammar)
+    "method_declaration",        # TypeScript class method (alt grammar) + Go method
 }
 
 
@@ -17,9 +17,13 @@ class DocstringMatcher:
     Skips _-prefixed (private, including dunders). Checks if the first statement
     in the function body is an expression_statement containing a string.
 
-    What:       flags public functions (name not _-prefixed) whose body's first statement is not a string expression
-    Ignores:    files with no parsed AST; private/dunder functions; functions with a docstring
-    Basis:      AST_PY (walks file_ctx.ast for function_definition nodes and their block/expression_statement/string children)
+    For Go (needs=AST_GO), "public" means exported (upper-case first letter) and a
+    docstring means a `//`/`/* */` doc comment on the line directly above the
+    declaration (Go's convention), detected as an adjacent preceding comment node.
+
+    What:       flags public functions (Python/TS: name not _-prefixed; Go: exported) lacking a docstring/doc comment
+    Ignores:    files with no parsed AST; private (Python/TS _-prefixed, Go unexported) functions; documented functions
+    Basis:      AST_PY (default; AST_GO for Go) — walks file_ctx.ast function nodes
     shared_ctx: none (defensive default only)
     """
     needs: Needs = Needs.AST_PY
@@ -28,19 +32,28 @@ class DocstringMatcher:
         """Flag public functions missing docstrings in the AST. Returns list of Match."""
         if not file_ctx.ast:
             return []
+        is_go = self.needs == Needs.AST_GO
         matches: list[Match] = []
         root = file_ctx.ast.root_node
         for func_node in self._find_functions(root):
             name = self._extract_name(func_node)
-            if not name or name.startswith("_"):
+            if not name or not self._is_public(name, is_go):
                 continue
-            if not self._has_docstring(func_node):
+            documented = self._has_go_doc(func_node) if is_go else self._has_docstring(func_node)
+            if not documented:
                 matches.append(Match(
                     file=file_ctx.path,
                     line=func_node.start_point[0] + 1,
                     matched_value=name,
                 ))
         return matches
+
+    @staticmethod
+    def _is_public(name: str, is_go: bool) -> bool:
+        """Public means exported in Go (upper-case first letter), non _-prefixed elsewhere."""
+        if is_go:
+            return name[:1].isupper()
+        return not name.startswith("_")
 
     def _find_functions(self, root) -> list:
         result: list = []
@@ -53,11 +66,21 @@ class DocstringMatcher:
         return result
 
     def _extract_name(self, node) -> str:
+        # ponytail: Go method/function names are field_identifier / identifier direct children
         for child in node.children:
-            if child.type in ("identifier", "property_identifier"):
+            if child.type in ("identifier", "property_identifier", "field_identifier"):
                 raw = child.text
                 return raw.decode() if hasattr(raw, "decode") else str(raw)
         return ""
+
+    @staticmethod
+    def _has_go_doc(func_node) -> bool:
+        """A Go declaration is documented if a comment sits on the line directly above it."""
+        prev = func_node.prev_named_sibling
+        if prev is None or prev.type != "comment":
+            return False
+        # ponytail: Go doc comments must be adjacent — a blank line breaks the association.
+        return func_node.start_point[0] - prev.end_point[0] <= 1
 
     def _has_docstring(self, func_node) -> bool:
         """Check if function body's first statement is a docstring string."""
