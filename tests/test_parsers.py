@@ -15,8 +15,22 @@ def test_language_for_path_css():
     assert language_for_path("foo.css") == Needs.AST_CSS
 
 
+def test_language_for_path_go():
+    assert language_for_path("foo.go") == Needs.AST_GO
+
+
 def test_language_for_path_unknown():
     assert language_for_path("foo.txt") is None
+
+
+def test_parse_go_returns_tree():
+    src = "package main\n\nfunc main() {}\n"
+    tree = parse(src, Needs.AST_GO)
+    if tree is None:
+        import pytest
+        pytest.skip("tree-sitter go not installed")
+    assert hasattr(tree, "root_node")
+    assert tree.root_node.type == "source_file"
 
 
 def test_parse_returns_tree():
@@ -36,5 +50,6 @@ if __name__ == "__main__":
     test_language_for_path_ts()
     test_language_for_path_py()
     test_language_for_path_css()
+    test_language_for_path_go()
     test_language_for_path_unknown()
     print("ok")

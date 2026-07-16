@@ -1,4 +1,4 @@
-"""Language detection: maps file extensions to Needs (AST_TS, AST_PY, AST_CSS)."""
+"""Language detection: maps file extensions to Needs (AST_TS, AST_PY, AST_CSS, AST_GO)."""
 from __future__ import annotations
 import os
 from enforcer.types import Needs
@@ -11,6 +11,7 @@ _EXT_TO_NEEDS = {
     ".py": Needs.AST_PY,
     ".scss": Needs.AST_CSS,
     ".css": Needs.AST_CSS,
+    ".go": Needs.AST_GO,
 }
 
 def language_for_path(path: str) -> Needs | None:

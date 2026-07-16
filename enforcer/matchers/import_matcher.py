@@ -14,7 +14,7 @@ _IMPORT_NODE_TYPES = {
 @dataclass
 class ImportMatcher:
     """Walks the tree-sitter AST for import statements, flags any whose text matches a forbidden regex.
-    Set needs=AST_PY for Python files, needs=AST_TS for TypeScript/JS files.
+    Set needs=AST_PY for Python files, needs=AST_TS for TypeScript/JS files, needs=AST_GO for Go files.
 
     What:       flags import statements whose text matches any of `forbidden_patterns`
     Ignores:    files with no parsed AST; non-import nodes; imports that match no forbidden pattern

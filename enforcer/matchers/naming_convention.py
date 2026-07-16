@@ -7,12 +7,18 @@ from enforcer.types import Match, FileContext, Needs
 # ponytail: node types where the name is the first identifier child
 _DECL_NODE_TYPES = {
     "function_definition": "function",     # Python def
-    "function_declaration": "function",     # TS function
+    "function_declaration": "function",     # TS function + Go func
     "method_definition": "method",          # Python/TS method
-    "method_declaration": "method",         # TS method declaration
+    "method_declaration": "method",         # TS method declaration + Go method
     "class_definition": "class",            # Python class
     "class_declaration": "class",           # TS class
     "variable_declaration": "variable",     # TS const/let/var
+    # Go: names live on the *_spec nodes inside a declaration wrapper. Target the
+    # spec node types directly (e.g. declaration_types=["type_spec"]).
+    "type_spec": "type",                    # Go type
+    "const_spec": "constant",               # Go const
+    "var_spec": "variable",                 # Go var
+    "field_declaration": "field",           # Go struct field
 }
 
 @dataclass
@@ -53,9 +59,10 @@ class NamingConventionMatcher:
         return matches
 
     def _extract_name(self, node) -> str:
-        # ponytail: name is the first identifier child for most declaration nodes
+        # ponytail: name is the first identifier child for most declaration nodes.
+        # Go methods and struct fields name themselves with a field_identifier.
         for child in node.children:
-            if child.type in ("identifier", "type_identifier", "property_identifier"):
+            if child.type in ("identifier", "type_identifier", "property_identifier", "field_identifier"):
                 raw = child.text
                 return raw.decode() if hasattr(raw, "decode") else str(raw)
         return ""
