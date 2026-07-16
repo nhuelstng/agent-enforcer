@@ -33,7 +33,7 @@ Layer violation: <matched_value> at <file>:<line>
 
 **Matchers:**
 
-- `ArchitectureMatcher` — flags import statements where source file's layer -> target file's layer
+- `ArchitectureMatcher` — flags import statements whose (source_layer -> target_layer) is
   - Tests: `tests/test_matchers/test_architecture.py`
 
 **Excludes:** enforcer/__init__.py
