@@ -29,7 +29,7 @@ class ArchitectureMatcher:
     Ignores:    intra-layer imports; imports between files in the same slice;
                 files/targets matching no layer glob and no isolate root;
                 unresolvable targets
-    Basis:      AST_PY/AST_TS (reads pre-built __import_graph__; line attribution walks AST)
+    Basis:      AST_PY/AST_TS/AST_GO (reads pre-built __import_graph__; line attribution walks AST)
     shared_ctx: reads __import_graph__ (dict[str, set[str]]) built by ImportGraphBuilder
     """
     layers: dict[str, list[str]] = field(default_factory=dict)

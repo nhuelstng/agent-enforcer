@@ -18,12 +18,14 @@ _TS_RESOLVE_EXTS = (".ts", ".tsx", ".d.ts", ".js", ".jsx", ".mts", ".cts")
 class ImportGraphBuilder(ABC):
     """Builds {source_path: set[target_path]} from staged files + transitive closure.
 
-    What:       resolves Python imports (import X.Y, from X.Y import Z) and TypeScript/JS
-                relative imports (import ... from './x', export ... from '../y') to
-                on-disk paths.
+    What:       resolves Python imports (import X.Y, from X.Y import Z), TypeScript/JS
+                relative imports (import ... from './x', export ... from '../y'), and
+                Go imports (import "mod/pkg") to on-disk paths. A Go import resolves to
+                every .go file in the target package directory (a Go package is a dir).
     Ignores:    stdlib/third-party and TS bare/aliased specifiers (unresolvable -> not in
-                graph); Python relative imports and TS dynamic import() (deferred).
-    Basis:      AST_PY / AST_TS via FileContextBuilder parse-once cache.
+                graph); Python relative imports and TS dynamic import() (deferred); Go
+                test files as import targets (_test.go).
+    Basis:      AST_PY / AST_TS / AST_GO via FileContextBuilder parse-once cache.
     shared_ctx: none (standalone builder; consumers may stash result under __import_graph__).
     """
 
@@ -38,15 +40,18 @@ class ImportGraphBuilder(ABC):
         self.source_roots = dict(
             sorted((source_roots or {}).items(), key=lambda kv: -len(kv[0]))
         )
-        # ponytail: parse-once cache keyed by path; maps each dotted import to
-        # the 1-based line of its statement, so line attribution is recorded at
-        # resolution time (source_roots/submodules/aliases all handled) instead
-        # of re-matched from AST text by consumers.
-        self._imports_cache: dict[str, dict[str, int]] = {}
+        # ponytail: parse-once cache keyed by path. Python/TS entries map each
+        # import to the 1-based line of its statement (line attribution recorded
+        # at resolution time); Go entries hold the bare import-path set (Go line
+        # attribution is resolved lazily by consumers via ast_utils).
+        self._imports_cache: dict[str, dict[str, int] | set[str]] = {}
         # {source_path: {resolved_target_path: import_line}} — consumers read
         # this (via shared_ctx["__import_lines__"]) to attribute a violation to
         # the exact import that produced the edge.
         self.import_lines: dict[str, dict[str, int]] = {}
+        # ponytail: Go module path from go.mod, resolved lazily. False = not yet
+        # read; None = no go.mod / no module line; str = the module path.
+        self._go_module: str | None | bool = False
 
     def build(self, staged_files: list[str]) -> dict[str, set[str]]:
         """Build import graph from staged files + transitive closure. Returns graph dict."""
@@ -65,7 +70,7 @@ class ImportGraphBuilder(ABC):
         while queue and len(seen) < self.max_files:
             path = queue.popleft()
             queued.discard(path)
-            if path in seen or not path.endswith((".py",) + _TS_EXTS):
+            if path in seen or not path.endswith((".py", ".go") + _TS_EXTS):
                 continue
             if not os.path.isfile(os.path.join(self.workspace, path)):
                 continue
@@ -95,6 +100,8 @@ class ImportGraphBuilder(ABC):
         """Extract imports for path, resolve to target paths, record import lines."""
         if path.endswith(_TS_EXTS):
             return self._resolve_ts_for_path(path)
+        if path.endswith(".go"):
+            return self._resolve_go_for_path(path)
         resolved: set[str] = set()
         lines: dict[str, int] = {}
         for module, line in self._extract_imports(path).items():
@@ -303,3 +310,86 @@ class ImportGraphBuilder(ABC):
         cands.extend(base + ext for ext in _TS_RESOLVE_EXTS)
         cands.extend(f"{base}/index{ext}" for ext in _TS_RESOLVE_EXTS)
         return cands
+
+    # --- Go resolution ---
+    # A Go package is a directory; an import path resolves (against the go.mod
+    # module prefix) to every non-test .go file in that directory.
+
+    def _resolve_go_for_path(self, path: str) -> set[str]:
+        """Resolve a Go file's local imports to the .go files of each target package."""
+        module = self._go_module_path()
+        if not module:
+            return set()
+        resolved: set[str] = set()
+        for imp in self._extract_go_imports(path):
+            resolved.update(self._resolve_go_import(imp, module))
+        return resolved
+
+    def _extract_go_imports(self, path: str) -> set[str]:
+        """Return the set of import-path strings declared in a Go file. Cached."""
+        if path in self._imports_cache:
+            return self._imports_cache[path]
+        from enforcer.types import Needs
+        ctx = self.builder.build(path, force_needs={Needs.AST_GO})
+        imports = self._go_import_strings(ctx.ast.root_node) if ctx.ast else set()
+        self._imports_cache[path] = imports
+        return imports
+
+    @staticmethod
+    def _go_import_strings(root) -> set[str]:
+        """Collect the quoted path from every Go import_spec node under root."""
+        from enforcer.parsers.ast_utils import walk_ast, node_text
+        imports: set[str] = set()
+        for node in walk_ast(root):
+            if node.type != "import_spec":
+                continue
+            literal = next((c for c in node.children
+                            if c.type in ("interpreted_string_literal", "raw_string_literal")), None)
+            if literal is not None:
+                imports.add(node_text(literal).strip('"`'))
+        return imports
+
+    def _resolve_go_import(self, import_path: str, module: str) -> list[str]:
+        """Map a local import path to the non-test .go files in its package directory.
+
+        Only imports under the module prefix are local; stdlib/third-party imports
+        resolve to nothing (like unresolvable Python modules).
+        """
+        if import_path == module:
+            rel = ""
+        elif import_path.startswith(module + "/"):
+            rel = import_path[len(module) + 1:]
+        else:
+            return []
+        pkg_dir = os.path.join(self.workspace, rel) if rel else self.workspace
+        if not os.path.isdir(pkg_dir):
+            return []
+        files: list[str] = []
+        for name in os.listdir(pkg_dir):
+            if not name.endswith(".go") or name.endswith("_test.go"):
+                continue
+            if not os.path.isfile(os.path.join(pkg_dir, name)):
+                continue
+            files.append(f"{rel}/{name}" if rel else name)
+        return files
+
+    def _go_module_path(self) -> str | None:
+        """Return the module path from go.mod at the workspace root, or None. Cached."""
+        if self._go_module is not False:
+            return self._go_module  # type: ignore[return-value]
+        self._go_module = self._parse_go_mod(os.path.join(self.workspace, "go.mod"))
+        return self._go_module
+
+    @staticmethod
+    def _parse_go_mod(path: str) -> str | None:
+        """Extract the `module <path>` declaration from a go.mod file, or None."""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except (IOError, OSError, UnicodeDecodeError):
+            return None
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("module "):
+                return stripped[len("module "):].strip()
+        return None
