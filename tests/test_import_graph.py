@@ -302,3 +302,72 @@ def test_architecture_matcher_uses_recorded_line(tmp_path: Path):
     assert len(matches) == 1
     assert matches[0].line == 4          # was 0 before recorded-line attribution
     assert "sibling slices" in matches[0].matched_value
+
+
+def _ts_available() -> bool:
+    from enforcer.parsers.tree_sitter import parse
+    from enforcer.types import Needs
+    return parse("const x = 1;\n", Needs.AST_TS) is not None
+
+
+ts_only = pytest.mark.skipif(not _ts_available(), reason="tree-sitter TypeScript grammar not available")
+
+
+@ts_only
+def test_ts_relative_import_resolves(tmp_path: Path):
+    """A relative TS import resolves to the sibling on-disk file."""
+    _write(tmp_path, "src/features/billing/pay.ts", "export const pay = 1;\n")
+    _write(tmp_path, "src/features/orders/svc.ts", "import { pay } from '../billing/pay';\nexport const x = pay;\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    gb = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = gb.build(staged_files=["src/features/orders/svc.ts"])
+
+    assert graph["src/features/orders/svc.ts"] == {"src/features/billing/pay.ts"}
+    assert gb.import_lines["src/features/orders/svc.ts"]["src/features/billing/pay.ts"] == 1
+
+
+@ts_only
+def test_ts_barrel_index_and_reexport(tmp_path: Path):
+    """A directory specifier resolves to index.ts; `export … from` counts as an edge."""
+    _write(tmp_path, "src/shared/ui/badge.component.ts", "export const Badge = 1;\n")
+    _write(tmp_path, "src/shared/ui/index.ts", "export { Badge } from './badge.component';\n")
+    _write(tmp_path, "src/app/host.ts", "import { Badge } from '../shared/ui';\nexport const b = Badge;\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    gb = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = gb.build(staged_files=["src/app/host.ts"])
+
+    assert "src/shared/ui/index.ts" in graph["src/app/host.ts"]              # dir -> index.ts
+    assert graph["src/shared/ui/index.ts"] == {"src/shared/ui/badge.component.ts"}  # re-export edge
+
+
+@ts_only
+def test_ts_bare_and_aliased_specifiers_unresolved(tmp_path: Path):
+    """Bare (npm) and non-relative specifiers resolve to nothing."""
+    _write(tmp_path, "src/a.ts", "import { Component } from '@angular/core';\nimport { of } from 'rxjs';\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    gb = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = gb.build(staged_files=["src/a.ts"])
+
+    assert graph["src/a.ts"] == set()
+
+
+@ts_only
+def test_ts_sibling_isolation_end_to_end(tmp_path: Path):
+    """ArchitectureMatcher flags a cross-slice TS import at the correct line."""
+    _write(tmp_path, "src/features/billing/pay.ts", "export const pay = 1;\n")
+    src = "src/features/orders/svc.ts"
+    _write(tmp_path, src, "import { Component } from '@angular/core';\n\nimport { pay } from '../billing/pay';\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    gb = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = gb.build(staged_files=[src])
+    shared_ctx = {"__import_graph__": graph, "__import_lines__": gb.import_lines}
+
+    matcher = ArchitectureMatcher(isolate_siblings=["src/features"])
+    matches = matcher.find(builder.build(src), shared_ctx)
+    assert len(matches) == 1
+    assert matches[0].line == 3
+    assert "sibling slices" in matches[0].matched_value
