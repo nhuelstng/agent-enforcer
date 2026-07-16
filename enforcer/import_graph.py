@@ -20,10 +20,16 @@ class ImportGraphBuilder(ABC):
     """
 
     def __init__(self, builder: "FileContextBuilder", workspace: str = ".",
-                 max_files: int = 500):
+                 max_files: int = 500, source_roots: dict[str, str] | None = None):
         self.builder = builder
         self.workspace = workspace
         self.max_files = max_files
+        # ponytail: import-prefix -> on-disk dir, for a package rooted in a
+        # subdirectory (import 'app.x' whose file lives at 'server/app/x.py').
+        # Longest prefix first so 'app.sub' wins over 'app'.
+        self.source_roots = dict(
+            sorted((source_roots or {}).items(), key=lambda kv: -len(kv[0]))
+        )
         # ponytail: parse-once cache keyed by path; reuses builder but also
         # holds imports extracted per file to avoid re-walking AST
         self._imports_cache: dict[str, set[str]] = {}
@@ -167,21 +173,36 @@ class ImportGraphBuilder(ABC):
             # ponytail: relative import support deferred -- add when a repo needs it
             return []
         parts = module.split(".")
+        disk = self._ondisk_parts(parts)
         candidates: list[str] = [
-            os.path.join(*parts, "__init__.py"),
-            os.path.join(*parts[:-1], parts[-1] + ".py"),
+            os.path.join(*disk, "__init__.py"),
+            os.path.join(*disk[:-1], disk[-1] + ".py"),
         ]
         resolved = self._existing(candidates)
         if not resolved and len(parts) >= 2:
             # ponytail: final component is a symbol, not a submodule; fall back to
             # the parent package (its __init__ or .py file).
-            parent = parts[:-1]
+            parent = self._ondisk_parts(parts[:-1])
             parent_candidates: list[str] = [
                 os.path.join(*parent, "__init__.py"),
                 os.path.join(*parent[:-1], parent[-1] + ".py"),
             ]
             resolved = self._existing(parent_candidates)
         return resolved
+
+    def _ondisk_parts(self, parts: list[str]) -> list[str]:
+        """Map import-path segments to on-disk segments via source_roots.
+
+        The first source root (longest prefix wins) whose dotted key matches the
+        leading segments has that prefix replaced by its on-disk directory;
+        unmatched imports pass through unchanged. Graph node paths therefore
+        stay repo-relative so path globs keep matching.
+        """
+        for prefix, root_dir in self.source_roots.items():
+            pre = prefix.split(".")
+            if parts[:len(pre)] == pre:
+                return root_dir.strip("/").split("/") + parts[len(pre):]
+        return parts
 
     def _existing(self, candidates: list[str]) -> list[str]:
         """Filter candidate paths to those existing on disk, normalized to /."""

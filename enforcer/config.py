@@ -15,6 +15,7 @@ class Config:
     workspace: str = "."
     severity_actions: dict = field(default_factory=dict)
     llm_config: LLMConfig = field(default_factory=LLMConfig)
+    source_roots: dict = field(default_factory=dict)
 
 def _coerce_llm_config(raw: Any) -> LLMConfig:
     """Coerce LLM_CONFIG from enforcer_config.py into an LLMConfig object.
@@ -75,4 +76,5 @@ def load_config(config_path: str) -> Config:
             Severity.INFO: "hint",
         }),
         llm_config=_coerce_llm_config(getattr(module, "LLM_CONFIG", LLMConfig())),
+        source_roots=getattr(module, "SOURCE_ROOTS", {}),
     )

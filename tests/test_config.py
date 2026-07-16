@@ -59,6 +59,31 @@ RULES = []
 
     assert config.workspace == "."
 
+def test_config_source_roots():
+    config_content = '''
+from enforcer import Rule, Severity
+RULES = []
+SOURCE_ROOTS = {"app": "backend/app"}
+'''
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(config_content)
+        f.flush()
+        config = load_config(f.name)
+
+    assert config.source_roots == {"app": "backend/app"}
+
+def test_config_default_source_roots_empty():
+    config_content = '''
+from enforcer import Rule, Severity
+RULES = []
+'''
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(config_content)
+        f.flush()
+        config = load_config(f.name)
+
+    assert config.source_roots == {}
+
 def test_config_llm_config():
     from enforcer.types import LLMConfig
     config_content = '''

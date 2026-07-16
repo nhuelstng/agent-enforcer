@@ -177,7 +177,10 @@ def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = 
                     shared_ctx[rel] = builder.build(rel)
     if staged_files and _needs_import_graph(config.rules):
         from enforcer.import_graph import ImportGraphBuilder
-        graph_builder = ImportGraphBuilder(builder=builder, workspace=ws)
+        graph_builder = ImportGraphBuilder(
+            builder=builder, workspace=ws,
+            source_roots=getattr(config, "source_roots", None),
+        )
         shared_ctx["__import_graph__"] = graph_builder.build(staged_files)
     return shared_ctx
 
