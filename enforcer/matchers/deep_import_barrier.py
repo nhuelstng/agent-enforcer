@@ -37,6 +37,7 @@ class DeepImportBarrierMatcher:
         """Flag cross-module imports that bypass the target module's facade. Returns list of Match."""
         shared_ctx = shared_ctx or {}
         graph = shared_ctx.get("__import_graph__", {})
+        import_lines = shared_ctx.get("__import_lines__", {}).get(file_ctx.path, {})
         src_module = self._module_of(file_ctx.path)
 
         matches: list[Match] = []
@@ -46,9 +47,11 @@ class DeepImportBarrierMatcher:
                 continue
             if self._is_entry_point(tgt, tgt_module):
                 continue
+            line = import_lines.get(tgt) or import_line_for(
+                file_ctx.ast.root_node if file_ctx.ast else None, tgt)
             matches.append(Match(
                 file=file_ctx.path,
-                line=import_line_for(file_ctx.ast.root_node if file_ctx.ast else None, tgt),
+                line=line,
                 matched_value=f"{tgt} (deep import into {tgt_module}; import its entry point)",
             ))
         return matches

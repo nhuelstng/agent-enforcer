@@ -182,6 +182,9 @@ def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = 
             source_roots=getattr(config, "source_roots", None),
         )
         shared_ctx["__import_graph__"] = graph_builder.build(staged_files)
+        # {source: {target: import_line}} recorded at resolution time, so a
+        # matcher attributes an edge to the exact import that produced it.
+        shared_ctx["__import_lines__"] = graph_builder.import_lines
     return shared_ctx
 
 
