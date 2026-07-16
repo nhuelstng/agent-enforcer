@@ -1,10 +1,9 @@
 """ArchitectureMatcher: flags imports crossing forbidden layer or sibling boundaries."""
 from __future__ import annotations
-import re
 from dataclasses import dataclass, field
 from enforcer.types import Match, FileContext, Needs
 from enforcer.glob_util import glob_match
-from enforcer.parsers.ast_utils import walk_ast, node_text
+from enforcer.parsers.ast_utils import import_line_for
 
 
 @dataclass
@@ -39,6 +38,7 @@ class ArchitectureMatcher:
     forbid_implicit: bool = True
     isolate_siblings: list[str] = field(default_factory=list)
     needs: Needs = Needs.AST_PY
+    reads_import_graph = True  # marker: check_runner builds __import_graph__ when present
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Flag imports crossing forbidden layer or sibling boundaries. Returns list of Match."""
@@ -101,14 +101,4 @@ class ArchitectureMatcher:
 
     def _import_line_for(self, file_ctx: FileContext, target: str) -> int:
         """Walk file_ctx.ast for the import node resolving to target. Returns line or 0."""
-        if not file_ctx.ast:
-            return 0
-        target_module = target.replace("/", ".").removesuffix(".__init__").removesuffix(".py")
-        for node in walk_ast(file_ctx.ast.root_node):
-            if node.type not in ("import_statement", "import_from_statement"):
-                continue
-            text = node_text(node)
-            # ponytail: word-boundary match on dotted path; avoids mis-attributing enforcer.types inside import enforcer.types_utils
-            if re.search(rf"\b{re.escape(target_module)}\b", text):
-                return node.start_point[0] + 1
-        return 0
+        return import_line_for(file_ctx.ast.root_node if file_ctx.ast else None, target)

@@ -15,14 +15,19 @@ def _glob_any_match(name: str, patterns) -> bool:
     return any(fnmatch.fnmatch(name, p) for p in patterns)
 
 
-def _has_architecture_matcher(rules: list) -> bool:
-    """Return True if any rule contains an ArchitectureMatcher in its matcher tree."""
+def _needs_import_graph(rules: list) -> bool:
+    """Return True if any rule's matcher tree contains an import-graph consumer.
+
+    Import-graph consumers (ArchitectureMatcher, DeepImportBarrierMatcher) carry a
+    `reads_import_graph` marker; check_runner builds __import_graph__ only when one
+    is present, keeping the graph pass off the hot path for graph-free configs.
+    """
     stack: list = []
     for rule in rules:
         stack.extend(rule.matchers)
     while stack:
         m = stack.pop()
-        if hasattr(m, "layers"):
+        if getattr(m, "reads_import_graph", False):
             return True
         if hasattr(m, "matchers") and isinstance(m.matchers, list):
             stack.extend(m.matchers)
@@ -170,7 +175,7 @@ def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = 
                 rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
                 if rel not in shared_ctx:
                     shared_ctx[rel] = builder.build(rel)
-    if staged_files and _has_architecture_matcher(config.rules):
+    if staged_files and _needs_import_graph(config.rules):
         from enforcer.import_graph import ImportGraphBuilder
         graph_builder = ImportGraphBuilder(builder=builder, workspace=ws)
         shared_ctx["__import_graph__"] = graph_builder.build(staged_files)
