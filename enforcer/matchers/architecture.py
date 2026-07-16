@@ -47,13 +47,14 @@ class ArchitectureMatcher:
         targets = graph.get(file_ctx.path, set())
         src_layer = self._layer_for_path(file_ctx.path)
 
+        import_lines = shared_ctx.get("__import_lines__", {}).get(file_ctx.path, {})
         matches: list[Match] = []
         for tgt in targets:
             violation = self._layer_violation(src_layer, tgt) or self._sibling_violation(file_ctx.path, tgt)
             if violation is not None:
                 matches.append(Match(
                     file=file_ctx.path,
-                    line=self._import_line_for(file_ctx, tgt),
+                    line=import_lines.get(tgt) or self._import_line_for(file_ctx, tgt),
                     matched_value=violation,
                 ))
         return matches

@@ -30,9 +30,15 @@ class ImportGraphBuilder(ABC):
         self.source_roots = dict(
             sorted((source_roots or {}).items(), key=lambda kv: -len(kv[0]))
         )
-        # ponytail: parse-once cache keyed by path; reuses builder but also
-        # holds imports extracted per file to avoid re-walking AST
-        self._imports_cache: dict[str, set[str]] = {}
+        # ponytail: parse-once cache keyed by path; maps each dotted import to
+        # the 1-based line of its statement, so line attribution is recorded at
+        # resolution time (source_roots/submodules/aliases all handled) instead
+        # of re-matched from AST text by consumers.
+        self._imports_cache: dict[str, dict[str, int]] = {}
+        # {source_path: {resolved_target_path: import_line}} — consumers read
+        # this (via shared_ctx["__import_lines__"]) to attribute a violation to
+        # the exact import that produced the edge.
+        self.import_lines: dict[str, dict[str, int]] = {}
 
     def build(self, staged_files: list[str]) -> dict[str, set[str]]:
         """Build import graph from staged files + transitive closure. Returns graph dict."""
@@ -78,15 +84,18 @@ class ImportGraphBuilder(ABC):
             )
 
     def _resolve_for_path(self, path: str) -> set[str]:
-        """Extract imports for path and resolve each to on-disk target paths."""
+        """Extract imports for path, resolve to target paths, record import lines."""
         resolved: set[str] = set()
-        targets = self._extract_imports(path)
-        for tgt in targets:
-            resolved.update(self._resolve_import(tgt))
+        lines: dict[str, int] = {}
+        for module, line in self._extract_imports(path).items():
+            for target in self._resolve_import(module):
+                resolved.add(target)
+                lines.setdefault(target, line)
+        self.import_lines[path] = lines
         return resolved
 
-    def _extract_imports(self, path: str) -> set[str]:
-        """Parse file's imports, return set of dotted module-path strings. Cached.
+    def _extract_imports(self, path: str) -> dict[str, int]:
+        """Parse file's imports, return {dotted module-path: 1-based line}. Cached.
 
         Emits 'X.Y.Z' for 'from X.Y import Z' (Z may be symbol or submodule).
         _resolve_import handles the symbol-vs-submodule distinction by falling
@@ -94,7 +103,7 @@ class ImportGraphBuilder(ABC):
         """
         if path in self._imports_cache:
             return self._imports_cache[path]
-        modules: set[str] = set()
+        modules: dict[str, int] = {}
         root = self._root_node(path)
         if root is not None:
             self._collect_modules(root, modules)
@@ -110,32 +119,40 @@ class ImportGraphBuilder(ABC):
         return ctx.ast.root_node
 
     @staticmethod
-    def _collect_modules(root, modules: set[str]) -> None:
-        """Walk AST, collect dotted module strings into modules set."""
+    def _collect_modules(root, modules: dict[str, int]) -> None:
+        """Walk AST, collect {dotted module: 1-based line} (first occurrence wins)."""
         from enforcer.parsers.ast_utils import walk_ast, node_text
         for node in walk_ast(root):
+            line = node.start_point[0] + 1
             if node.type == "import_statement":
-                ImportGraphBuilder._collect_plain_import(node, node_text, modules)
+                ImportGraphBuilder._collect_plain_import(node, node_text, modules, line)
             elif node.type == "import_from_statement":
-                ImportGraphBuilder._collect_from_import(node, node_text, modules)
+                ImportGraphBuilder._collect_from_import(node, node_text, modules, line)
 
     @staticmethod
-    def _collect_plain_import(node, node_text, modules: set[str]) -> None:
+    def _dotted_name_text(node, node_text) -> str | None:
+        """Return a node's dotted-name text, unwrapping an aliased_import; else None."""
+        if node.type == "dotted_name":
+            return node_text(node)
+        if node.type == "aliased_import":
+            sub = next((c for c in node.children if c.type == "dotted_name"), None)
+            return node_text(sub) if sub is not None else None
+        return None
+
+    @staticmethod
+    def _collect_plain_import(node, node_text, modules: dict[str, int], line: int) -> None:
         """Extract modules from 'import X.Y [as z], A.B [as w], ...'.
 
         One import_statement holds comma-separated modules; each is either a
         bare dotted_name or an aliased_import wrapping a dotted_name.
         """
         for child in node.children:
-            if child.type == "dotted_name":
-                modules.add(node_text(child))
-            elif child.type == "aliased_import":
-                sub = next((cc for cc in child.children if cc.type == "dotted_name"), None)
-                if sub is not None:
-                    modules.add(node_text(sub))
+            name = ImportGraphBuilder._dotted_name_text(child, node_text)
+            if name is not None:
+                modules.setdefault(name, line)
 
     @staticmethod
-    def _collect_from_import(node, node_text, modules: set[str]) -> None:
+    def _collect_from_import(node, node_text, modules: dict[str, int], line: int) -> None:
         """Extract modules from 'from X import Y[, Z]'.
 
         Y/Z may be bare dotted_names or aliased_imports (Y as foo); descend
@@ -150,15 +167,12 @@ class ImportGraphBuilder(ABC):
         pkg = node_text(dotted_names[0])
         imported = dotted_names[1:] + [c for c in children if c.type == "aliased_import"]
         if not imported:
-            modules.add(pkg)
+            modules.setdefault(pkg, line)
             return
         for name_node in imported:
-            if name_node.type == "aliased_import":
-                sub = next((cc for cc in name_node.children if cc.type == "dotted_name"), None)
-                if sub is None:
-                    continue
-                name_node = sub
-            modules.add(f"{pkg}.{node_text(name_node)}")
+            name = ImportGraphBuilder._dotted_name_text(name_node, node_text)
+            if name is not None:
+                modules.setdefault(f"{pkg}.{name}", line)
 
     def _resolve_import(self, module: str) -> list[str]:
         """Resolve a dotted module string to on-disk paths relative to workspace.

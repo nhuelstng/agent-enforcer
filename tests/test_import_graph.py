@@ -252,3 +252,53 @@ def test_source_root_enables_sibling_isolation_at_repo_root(tmp_path: Path):
     matches = matcher.find(ctx, {"__import_graph__": graph})
     assert len(matches) == 1
     assert "sibling slices" in matches[0].matched_value
+
+
+def test_import_lines_recorded(tmp_path: Path):
+    """The builder records the 1-based line of each resolving import."""
+    _write(tmp_path, "pkg/__init__.py", "")
+    _write(tmp_path, "pkg/b.py", "x = 1\n")
+    _write(tmp_path, "pkg/a.py", "import os\n\nfrom pkg import b\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    gb = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    gb.build(staged_files=["pkg/a.py"])
+
+    assert gb.import_lines["pkg/a.py"]["pkg/b.py"] == 3
+
+
+def test_import_lines_recorded_via_source_root(tmp_path: Path):
+    """Line attribution follows the SOURCE_ROOTS remap (import name != on-disk path)."""
+    _write(tmp_path, "server/app/features/billing/pay.py", "def charge():\n    return 1\n")
+    _write(tmp_path, "server/app/features/orders/svc.py",
+           "import json\n\n\nfrom app.features.billing.pay import charge\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    gb = ImportGraphBuilder(
+        builder=builder, workspace=str(tmp_path), source_roots={"app": "server/app"},
+    )
+    gb.build(staged_files=["server/app/features/orders/svc.py"])
+
+    # the import sits on line 4, though written as 'app.…' not 'server/app/…'
+    assert gb.import_lines["server/app/features/orders/svc.py"]["server/app/features/billing/pay.py"] == 4
+
+
+def test_architecture_matcher_uses_recorded_line(tmp_path: Path):
+    """End-to-end: a source-root sibling violation reports the real import line, not 0."""
+    _write(tmp_path, "server/app/features/billing/pay.py", "def charge():\n    return 1\n")
+    src = "server/app/features/orders/svc.py"
+    _write(tmp_path, src, "import json\n\n\nfrom app.features.billing.pay import charge\n")
+
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    gb = ImportGraphBuilder(
+        builder=builder, workspace=str(tmp_path), source_roots={"app": "server/app"},
+    )
+    graph = gb.build(staged_files=[src])
+    shared_ctx = {"__import_graph__": graph, "__import_lines__": gb.import_lines}
+
+    matcher = ArchitectureMatcher(isolate_siblings=["server/app/features"])
+    ctx = builder.build(src)
+    matches = matcher.find(ctx, shared_ctx)
+    assert len(matches) == 1
+    assert matches[0].line == 4          # was 0 before recorded-line attribution
+    assert "sibling slices" in matches[0].matched_value
