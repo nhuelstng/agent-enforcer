@@ -1,6 +1,6 @@
-"""Tests for check_runner helpers: _has_architecture_matcher and build_shared_ctx staged_files gating."""
+"""Tests for check_runner helpers: _needs_import_graph and build_shared_ctx staged_files gating."""
 from unittest.mock import patch
-from enforcer.check_runner import _has_architecture_matcher, build_shared_ctx
+from enforcer.check_runner import _needs_import_graph, build_shared_ctx
 
 
 class _FakeRule:
@@ -9,7 +9,7 @@ class _FakeRule:
 
 
 class _ArchMatcher:
-    layers = [("a", "b")]
+    reads_import_graph = True
 
 
 class _PlainMatcher:
@@ -26,24 +26,30 @@ class _Wrapper:
         self.matcher = matcher
 
 
-def test_has_architecture_matcher_direct():
-    assert _has_architecture_matcher([_FakeRule([_ArchMatcher()])]) is True
+def test_needs_import_graph_direct():
+    assert _needs_import_graph([_FakeRule([_ArchMatcher()])]) is True
 
 
-def test_has_architecture_matcher_nested_in_combinator():
-    assert _has_architecture_matcher([_FakeRule([_Combinator([_ArchMatcher()])])]) is True
+def test_needs_import_graph_nested_in_combinator():
+    assert _needs_import_graph([_FakeRule([_Combinator([_ArchMatcher()])])]) is True
 
 
-def test_has_architecture_matcher_in_wrapper():
-    assert _has_architecture_matcher([_FakeRule([_Wrapper(_ArchMatcher())])]) is True
+def test_needs_import_graph_in_wrapper():
+    assert _needs_import_graph([_FakeRule([_Wrapper(_ArchMatcher())])]) is True
 
 
-def test_has_architecture_matcher_absent():
-    assert _has_architecture_matcher([_FakeRule([_PlainMatcher()])]) is False
+def test_needs_import_graph_absent():
+    assert _needs_import_graph([_FakeRule([_PlainMatcher()])]) is False
 
 
-def test_has_architecture_matcher_empty():
-    assert _has_architecture_matcher([]) is False
+def test_needs_import_graph_empty():
+    assert _needs_import_graph([]) is False
+
+
+def test_needs_import_graph_detects_real_matchers():
+    from enforcer.matchers import ArchitectureMatcher, DeepImportBarrierMatcher
+    assert _needs_import_graph([_FakeRule([ArchitectureMatcher()])]) is True
+    assert _needs_import_graph([_FakeRule([DeepImportBarrierMatcher(module_glob="pkg/*")])]) is True
 
 
 def test_build_shared_ctx_skips_graph_without_arch_matcher():
