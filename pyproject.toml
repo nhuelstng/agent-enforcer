@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pre-commit-agent-enforcer"
-version = "0.4.3"
+version = "0.4.4"
 description = "Deterministic convention enforcement for coding agents"
 readme = "README.md"
 license = {text = "MIT"}
