@@ -31,6 +31,7 @@ from enforcer.matchers.no_module_side_effects import NoModuleSideEffectsMatcher
 from enforcer.matchers.constant_naming import ConstantNamingMatcher
 from enforcer.matchers.magic_number import MagicNumberMatcher
 from enforcer.matchers.architecture import ArchitectureMatcher
+from enforcer.matchers.import_cycle import CycleMatcher
 from enforcer.matchers.deep_import_barrier import DeepImportBarrierMatcher
 from enforcer.matchers.facade_exists import FacadeExistsMatcher
 from enforcer.matchers.facade_exposes_interface import FacadeExposesInterfaceMatcher
@@ -49,6 +50,7 @@ __all__ = [
     "ConstantNamingMatcher",
     "CssCustomPropertyDeclMatcher",
     "CssLiteralValueMatcher",
+    "CycleMatcher",
     "DeepImportBarrierMatcher",
     "DocSyncMatcher",
     "DocstringMatcher",
