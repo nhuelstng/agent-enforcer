@@ -8,7 +8,8 @@ _FUNC_NODE_TYPES = {
     "function_definition",       # Python def (top-level + class methods)
     "function_declaration",      # TypeScript standalone function + Go top-level func
     "method_definition",         # TypeScript class method
-    "method_declaration",        # TypeScript class method (alt grammar) + Go method (with receiver)
+    "method_declaration",        # TypeScript class method (alt grammar) + Go method (with receiver) + C# method
+    "local_function_statement",  # C#: function nested in a method body
 }
 
 _DECISION_NODE_TYPES = {
@@ -19,9 +20,11 @@ _DECISION_NODE_TYPES = {
     "case_clause",              # match/case
     # Go: each switch/select case is a branch (default excluded, like else/case _)
     "expression_case", "type_case", "communication_case",
+    # C#: foreach and do-while loops (if/for/while/catch shared above)
+    "foreach_statement", "do_statement",
 }
 
-# ponytail: TS/Go &&/|| are binary_expression nodes — only count when operator is && or ||
+# ponytail: TS/Go/C# &&/|| are binary_expression nodes — only count when operator is && or ||
 _TS_LOGICAL_OPS = {"&&", "||"}
 
 _NESTING_NODE_TYPES = {
@@ -30,13 +33,16 @@ _NESTING_NODE_TYPES = {
     "with_statement", "match_statement", "case_clause",
     # Go: switch/select bodies introduce a nesting level
     "expression_switch_statement", "type_switch_statement", "select_statement",
+    # C#: foreach/do/switch bodies introduce a nesting level
+    "foreach_statement", "do_statement", "switch_statement",
 }
 
-# ponytail: param node types across Python + TypeScript
+# ponytail: param node types across Python + TypeScript + C# ("parameter")
 _PARAM_NODE_TYPES = {
     "identifier", "default_parameter", "typed_parameter",
     "typed_default_parameter", "list_splat_pattern", "dictionary_splat_pattern",
     "required_parameter", "optional_parameter", "rest_pattern",
+    "parameter",
 }
 
 # ponytail: Go groups params by type (`a, b int` is one node with two names), so
@@ -46,7 +52,8 @@ _GO_PARAM_DECL_TYPES = {"parameter_declaration", "variadic_parameter_declaration
 @dataclass
 class FunctionComplexityMatcher:
     """Walks the AST for function/method nodes, computes a complexity metric, emits if over threshold.
-    Set needs=AST_PY for Python, needs=AST_TS for TypeScript, needs=AST_GO for Go.
+    Set needs=AST_PY for Python, needs=AST_TS for TypeScript, needs=AST_GO for Go,
+    needs=AST_CSHARP for C#.
 
     What:       flags functions whose `metric` (lines/params/nesting/cyclomatic) exceeds `max_value`
     Ignores:    files with no parsed AST; __init__ methods (params metric only); nested functions (analyzed independently); functions at or below threshold
@@ -166,12 +173,19 @@ class FunctionComplexityMatcher:
                 count += 1
             elif node.type == "binary_expression" and self._has_ts_logical_op(node):
                 count += 1
+            elif node.type == "switch_section" and self._is_case_section(node):
+                count += 1
         return count
 
     @staticmethod
     def _has_ts_logical_op(node) -> bool:
         """Return True if a binary_expression node contains a TS && or || operator."""
         return any(child.type in _TS_LOGICAL_OPS for child in node.children)
+
+    @staticmethod
+    def _is_case_section(node) -> bool:
+        """Return True for a C# switch_section headed by `case` (a branch); `default` is not."""
+        return any(child.type == "case" for child in node.children)
 
     def _walk_iterative(self, root):
         # ponytail: iterative DFS — avoids RecursionError, skips nested functions (they get their own analysis)

@@ -48,10 +48,13 @@ class AstNodeMatcher:
 
     def _is_scope_node(self, node, scope: str) -> bool:
         type_map = {
-            "class": {"class_declaration", "class_definition", "class", "type_declaration", "type_spec"},
+            "class": {"class_declaration", "class_definition", "class", "type_declaration", "type_spec",
+                      # C#: type declarations
+                      "interface_declaration", "struct_declaration", "enum_declaration", "record_declaration"},
             "function": {"function_declaration", "function_definition",
-                          "method_definition", "method_declaration"},
-            "module": {"program", "source_file"},
+                          "method_definition", "method_declaration",
+                          "local_function_statement"},
+            "module": {"program", "source_file", "compilation_unit"},
         }
         return node.type in type_map.get(scope, set())
 

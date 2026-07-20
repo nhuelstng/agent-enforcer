@@ -9,12 +9,14 @@ _IMPORT_NODE_TYPES = {
     "import_statement",      # Python: import X
     "import_from_statement",  # Python: from X import Y
     "import_declaration",     # TypeScript/JS: import ... from ...
+    "using_directive",        # C#: using X.Y;
 }
 
 @dataclass
 class ImportMatcher:
     """Walks the tree-sitter AST for import statements, flags any whose text matches a forbidden regex.
-    Set needs=AST_PY for Python files, needs=AST_TS for TypeScript/JS files, needs=AST_GO for Go files.
+    Set needs=AST_PY for Python files, needs=AST_TS for TypeScript/JS files, needs=AST_GO for Go
+    files, needs=AST_CSHARP for C# files.
 
     What:       flags import statements whose text matches any of `forbidden_patterns`
     Ignores:    files with no parsed AST; non-import nodes; imports that match no forbidden pattern

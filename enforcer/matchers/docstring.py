@@ -7,7 +7,7 @@ _FUNC_NODE_TYPES = {
     "function_definition",       # Python def (top-level + class methods)
     "function_declaration",      # TypeScript standalone function + Go top-level func
     "method_definition",         # TypeScript class method
-    "method_declaration",        # TypeScript class method (alt grammar) + Go method
+    "method_declaration",        # TypeScript class method (alt grammar) + Go method + C# method
 }
 
 
@@ -21,9 +21,12 @@ class DocstringMatcher:
     docstring means a `//`/`/* */` doc comment on the line directly above the
     declaration (Go's convention), detected as an adjacent preceding comment node.
 
-    What:       flags public functions (Python/TS: name not _-prefixed; Go: exported) lacking a docstring/doc comment
-    Ignores:    files with no parsed AST; private (Python/TS _-prefixed, Go unexported) functions; documented functions
-    Basis:      AST_PY (default; AST_GO for Go) — walks file_ctx.ast function nodes
+    For C# (needs=AST_CSHARP), "public" means a `public` access modifier and a
+    docstring means a `///` XML doc comment on the line directly above the method.
+
+    What:       flags public functions (Python/TS: name not _-prefixed; Go: exported; C#: public modifier) lacking a docstring/doc comment
+    Ignores:    files with no parsed AST; private functions; documented functions
+    Basis:      AST_PY (default; AST_GO for Go, AST_CSHARP for C#) — walks file_ctx.ast function nodes
     shared_ctx: none (defensive default only)
     """
     needs: Needs = Needs.AST_PY
@@ -33,13 +36,14 @@ class DocstringMatcher:
         if not file_ctx.ast:
             return []
         is_go = self.needs == Needs.AST_GO
+        is_csharp = self.needs == Needs.AST_CSHARP
         matches: list[Match] = []
         root = file_ctx.ast.root_node
         for func_node in self._find_functions(root):
-            name = self._extract_name(func_node)
-            if not name or not self._is_public(name, is_go):
+            name = self._extract_name(func_node, is_csharp)
+            if not name or not self._is_public(func_node, name, is_go, is_csharp):
                 continue
-            documented = self._has_go_doc(func_node) if is_go else self._has_docstring(func_node)
+            documented = self._is_documented(func_node, is_go, is_csharp)
             if not documented:
                 matches.append(Match(
                     file=file_ctx.path,
@@ -48,12 +52,33 @@ class DocstringMatcher:
                 ))
         return matches
 
-    @staticmethod
-    def _is_public(name: str, is_go: bool) -> bool:
-        """Public means exported in Go (upper-case first letter), non _-prefixed elsewhere."""
+    def _is_public(self, func_node, name: str, is_go: bool, is_csharp: bool) -> bool:
+        """Public: C# `public` modifier; Go exported (upper-case first letter); else non _-prefixed."""
+        if is_csharp:
+            return self._has_public_modifier(func_node)
         if is_go:
             return name[:1].isupper()
         return not name.startswith("_")
+
+    def _is_documented(self, func_node, is_go: bool, is_csharp: bool) -> bool:
+        """A function is documented per its language's convention."""
+        if is_go:
+            return self._has_adjacent_comment(func_node)
+        if is_csharp:
+            return self._has_adjacent_comment(func_node, prefix="///")
+        return self._has_docstring(func_node)
+
+    @staticmethod
+    def _has_public_modifier(func_node) -> bool:
+        """Return True if a C# declaration carries a `public` access modifier."""
+        for child in func_node.children:
+            if child.type != "modifier":
+                continue
+            raw = child.text
+            text = raw.decode() if hasattr(raw, "decode") else str(raw)
+            if text == "public":
+                return True
+        return False
 
     def _find_functions(self, root) -> list:
         result: list = []
@@ -65,8 +90,11 @@ class DocstringMatcher:
             stack.extend(reversed(node.children))
         return result
 
-    def _extract_name(self, node) -> str:
-        # ponytail: Go method/function names are field_identifier / identifier direct children
+    def _extract_name(self, node, is_csharp: bool = False) -> str:
+        # ponytail: C# member names sit before the parameter list (a leading
+        # identifier is the return type). Go/TS names are direct identifier children.
+        if is_csharp:
+            return self._extract_csharp_name(node)
         for child in node.children:
             if child.type in ("identifier", "property_identifier", "field_identifier"):
                 raw = child.text
@@ -74,13 +102,34 @@ class DocstringMatcher:
         return ""
 
     @staticmethod
-    def _has_go_doc(func_node) -> bool:
-        """A Go declaration is documented if a comment sits on the line directly above it."""
+    def _extract_csharp_name(node) -> str:
+        """Return a C# method name: the identifier immediately before its parameter_list."""
+        for idx, child in enumerate(node.children):
+            if child.type != "parameter_list":
+                continue
+            prev = [c for c in node.children[:idx] if c.type == "identifier"]
+            if prev:
+                raw = prev[-1].text
+                return raw.decode() if hasattr(raw, "decode") else str(raw)
+        return ""
+
+    @staticmethod
+    def _has_adjacent_comment(func_node, prefix: str | None = None) -> bool:
+        """A declaration is documented if a comment sits on the line directly above it.
+
+        When `prefix` is given (C# `///`), the comment must start with it to count
+        as a doc comment rather than an ordinary line comment.
+        """
         prev = func_node.prev_named_sibling
         if prev is None or prev.type != "comment":
             return False
-        # ponytail: Go doc comments must be adjacent — a blank line breaks the association.
-        return func_node.start_point[0] - prev.end_point[0] <= 1
+        if func_node.start_point[0] - prev.end_point[0] > 1:
+            return False
+        if prefix is not None:
+            raw = prev.text
+            text = raw.decode() if hasattr(raw, "decode") else str(raw)
+            return text.lstrip().startswith(prefix)
+        return True
 
     def _has_docstring(self, func_node) -> bool:
         """Check if function body's first statement is a docstring string."""

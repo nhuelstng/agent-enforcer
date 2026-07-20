@@ -19,6 +19,14 @@ _DECL_NODE_TYPES = {
     "const_spec": "constant",               # Go const
     "var_spec": "variable",                 # Go var
     "field_declaration": "field",           # Go struct field
+    # C#: type and member declarations (class_declaration/method_declaration shared above)
+    "interface_declaration": "interface",   # C# interface
+    "struct_declaration": "struct",         # C# struct
+    "enum_declaration": "enum",             # C# enum
+    "record_declaration": "record",         # C# record
+    "property_declaration": "property",     # C# property
+    "local_function_statement": "function",  # C# local function
+    "namespace_declaration": "namespace",   # C# namespace
 }
 
 @dataclass
@@ -61,8 +69,32 @@ class NamingConventionMatcher:
     def _extract_name(self, node) -> str:
         # ponytail: name is the first identifier child for most declaration nodes.
         # Go methods and struct fields name themselves with a field_identifier.
+        if self.needs == Needs.AST_CSHARP:
+            return self._extract_csharp_name(node)
         for child in node.children:
             if child.type in ("identifier", "type_identifier", "property_identifier", "field_identifier"):
+                raw = child.text
+                return raw.decode() if hasattr(raw, "decode") else str(raw)
+        return ""
+
+    @staticmethod
+    def _extract_csharp_name(node) -> str:
+        """Return a C# declaration's name.
+
+        For members (method/local-function/property/record) the name is the
+        identifier immediately preceding the parameter or accessor list, since a
+        leading identifier would be the return/element type. For plain type
+        declarations (class/interface/struct/enum) the first identifier is the name.
+        """
+        for idx, child in enumerate(node.children):
+            if child.type not in ("parameter_list", "accessor_list"):
+                continue
+            prev = [c for c in node.children[:idx] if c.type == "identifier"]
+            if prev:
+                raw = prev[-1].text
+                return raw.decode() if hasattr(raw, "decode") else str(raw)
+        for child in node.children:
+            if child.type == "identifier":
                 raw = child.text
                 return raw.decode() if hasattr(raw, "decode") else str(raw)
         return ""
