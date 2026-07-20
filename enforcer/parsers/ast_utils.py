@@ -79,6 +79,11 @@ def import_line_for(root, target_path: str) -> int:
         return 0
     if target_path.endswith(".go"):
         return _go_import_line(root, target_path)
+    if target_path.endswith(".cs"):
+        # ponytail: C# edges attribute their line via __import_lines__ recorded at
+        # resolution (a using->namespace->file mapping isn't recoverable from the
+        # target path alone). 0 is the fallback when that record is absent.
+        return 0
     target_module = target_path.replace("/", ".").removesuffix(".__init__").removesuffix(".py")
     for node in walk_ast(root):
         if node.type not in ("import_statement", "import_from_statement"):

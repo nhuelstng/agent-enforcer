@@ -437,3 +437,64 @@ def test_go_no_gomod_yields_no_edges(tmp_path: Path):
 
     graph = _go_builder(tmp_path).build(staged_files=["internal/api/h.go"])
     assert graph["internal/api/h.go"] == set()
+
+
+# --- C# namespace resolution ---
+
+def _cs_available() -> bool:
+    from enforcer.parsers.tree_sitter import parse
+    from enforcer.types import Needs
+    return parse("class C { }", Needs.AST_CSHARP) is not None
+
+
+def test_csharp_using_resolves_to_namespace_files(tmp_path: Path):
+    """A `using X.Y` resolves to every file declaring `namespace X.Y`."""
+    if not _cs_available():
+        import pytest
+        pytest.skip("tree-sitter c-sharp grammar not available")
+    _write(tmp_path, "src/Api/Handler.cs",
+           "using App.Db;\nnamespace App.Api;\npublic class Handler { }\n")
+    _write(tmp_path, "src/Db/Store.cs", "namespace App.Db;\npublic class Store { }\n")
+    _write(tmp_path, "src/Db/Repo.cs", "namespace App.Db;\npublic class Repo { }\n")
+
+    graph = _go_builder(tmp_path).build(staged_files=["src/Api/Handler.cs"])
+    assert graph["src/Api/Handler.cs"] == {"src/Db/Store.cs", "src/Db/Repo.cs"}
+
+
+def test_csharp_external_namespace_excluded(tmp_path: Path):
+    """A using of a namespace declared nowhere in the workspace is not an edge."""
+    if not _cs_available():
+        import pytest
+        pytest.skip("tree-sitter c-sharp grammar not available")
+    _write(tmp_path, "src/Api/Handler.cs",
+           "using System;\nusing System.Linq;\nnamespace App.Api;\npublic class Handler { }\n")
+
+    graph = _go_builder(tmp_path).build(staged_files=["src/Api/Handler.cs"])
+    assert graph["src/Api/Handler.cs"] == set()
+
+
+def test_csharp_transitive_closure(tmp_path: Path):
+    """a uses b's namespace, b uses c's -> closure expands through C# files."""
+    if not _cs_available():
+        import pytest
+        pytest.skip("tree-sitter c-sharp grammar not available")
+    _write(tmp_path, "a/A.cs", "using App.B;\nnamespace App.A;\npublic class A { }\n")
+    _write(tmp_path, "b/B.cs", "using App.C;\nnamespace App.B;\npublic class B { }\n")
+    _write(tmp_path, "c/C.cs", "namespace App.C;\npublic class C { }\n")
+
+    graph = _go_builder(tmp_path).build(staged_files=["a/A.cs"])
+    assert graph["a/A.cs"] == {"b/B.cs"}
+    assert graph["b/B.cs"] == {"c/C.cs"}
+    assert graph["c/C.cs"] == set()
+
+
+def test_csharp_self_namespace_not_self_edge(tmp_path: Path):
+    """A file that both declares and uses its own namespace produces no self-edge."""
+    if not _cs_available():
+        import pytest
+        pytest.skip("tree-sitter c-sharp grammar not available")
+    _write(tmp_path, "src/App/A.cs", "using App.Core;\nnamespace App.Core;\npublic class A { }\n")
+    _write(tmp_path, "src/App/B.cs", "namespace App.Core;\npublic class B { }\n")
+
+    graph = _go_builder(tmp_path).build(staged_files=["src/App/A.cs"])
+    assert graph["src/App/A.cs"] == {"src/App/B.cs"}
