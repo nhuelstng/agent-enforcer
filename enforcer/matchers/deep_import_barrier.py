@@ -25,7 +25,7 @@ class DeepImportBarrierMatcher:
                 pkg/b/__init__.py is exported)
     Ignores:    intra-module imports; edges whose target is in no governed module;
                 edges that land on an entry point; unresolvable targets
-    Basis:      AST_PY (reads pre-built __import_graph__; line attribution walks AST)
+    Basis:      AST_PY/AST_TS/AST_GO/AST_CSHARP (reads pre-built __import_graph__; line attribution walks AST)
     shared_ctx: reads __import_graph__ (dict[str, set[str]]) built by ImportGraphBuilder
     """
     module_glob: str = ""
