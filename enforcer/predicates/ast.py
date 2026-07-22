@@ -1,4 +1,4 @@
-"""AST-aware predicates: HasDecoratorPredicate, NodeNamePredicate."""
+"""AST-aware predicates: HasDecoratorPredicate, HasAttributePredicate, NodeNamePredicate."""
 from __future__ import annotations
 import re
 from dataclasses import dataclass
@@ -69,6 +69,44 @@ class HasDecoratorPredicate:
     def _matches_decorator(self, sibling) -> bool:
         """Return True if the decorator sibling matches the pattern (or no pattern set)."""
         raw = sibling.text
+        text = raw.decode() if hasattr(raw, "decode") else str(raw)
+        return not self.pattern or self._compiled.search(text)
+
+@dataclass
+class HasAttributePredicate:
+    """Passes if the matched C# declaration carries an attribute (e.g. [ApiController]).
+    If pattern is set, the attribute text must match it.
+
+    The C# analogue of HasDecoratorPredicate. A C# `attribute_list` node is a
+    child of the declaration it annotates (unlike a Python decorator, which is a
+    preceding sibling), so this scans the matched node's own children, then its
+    parent's, to cover a match that lands on an inner identifier. It never climbs
+    past the parent, so an attribute on an enclosing type is not mis-attributed to
+    an undecorated member inside it."""
+    pattern: str | None = None
+
+    def __post_init__(self):
+        if self.pattern:
+            self._compiled = re.compile(self.pattern)
+
+    def test(self, match: Match) -> bool:
+        """Return True if the match's declaration (or its parent) has a matching attribute."""
+        ctx = getattr(match, "file_ctx", None) or getattr(match, "_file_ctx", None)
+        node = _get_node_at_line(ctx, match.line) if ctx else None
+        if not node:
+            return False
+        return self._scan(node) or (node.parent is not None and self._scan(node.parent))
+
+    def _scan(self, node) -> bool:
+        """True if any direct `attribute_list` child of node matches the pattern."""
+        return any(
+            child.type == "attribute_list" and self._matches(child)
+            for child in node.children
+        )
+
+    def _matches(self, attr_list) -> bool:
+        """Return True if the attribute_list text matches the pattern (or no pattern set)."""
+        raw = attr_list.text
         text = raw.decode() if hasattr(raw, "decode") else str(raw)
         return not self.pattern or self._compiled.search(text)
 

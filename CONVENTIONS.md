@@ -105,7 +105,7 @@ Class '<matched_value>' at <file>:<line> has >=4 public methods but no base clas
 
 **Matchers:**
 
-- `InterfaceMatcher` — flags non-dataclass classes with >=min_methods public methods and no base class (no inheritance)
+- `InterfaceMatcher` — flags non-dataclass classes with >=min_methods public methods and no base type (no inheritance/interface)
 
 **Excludes:** enforcer/cli.py
 
@@ -626,7 +626,7 @@ Magic number <matched_value> at <file>:<line>. Extract to a named constant.
 
 **Matchers:**
 
-- `MagicNumberMatcher` — flags numeric literals (integers outside -5..5, all floats) in function bodies, not in assignments or parameter defaults
+- `MagicNumberMatcher` — flags numeric literals (integers outside -5..5, all floats) in function/method bodies, not in constants or parameter defaults
   - Tests: `tests/test_matchers/test_magic_number.py`
 
 **Excludes:** enforcer/cli.py, enforcer/mcp_server.py, enforcer/types.py
