@@ -19,7 +19,7 @@ def _match(source: str, node_type: str, lang: Needs) -> Match:
         stack.extend(reversed(n.children))
     assert node is not None
     m = Match(file="C.cs", line=node.start_point[0] + 1, matched_value="x")
-    m._file_ctx = ctx
+    m.file_ctx = ctx
     return m
 
 

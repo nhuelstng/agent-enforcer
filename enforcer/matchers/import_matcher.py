@@ -3,14 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
-
-# ponytail: tree-sitter node types for import statements across languages
-_IMPORT_NODE_TYPES = {
-    "import_statement",      # Python: import X
-    "import_from_statement",  # Python: from X import Y
-    "import_declaration",     # TypeScript/JS: import ... from ...
-    "using_directive",        # C#: using X.Y;
-}
+from enforcer.parsers.ast_utils import IMPORT_NODE_TYPES as _IMPORT_NODE_TYPES
 
 @dataclass
 class ImportMatcher:

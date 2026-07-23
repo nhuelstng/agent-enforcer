@@ -2,31 +2,31 @@
 from __future__ import annotations
 import os
 import sys
-from abc import ABC
 from collections import deque
 from typing import TYPE_CHECKING
+from enforcer.types import ImportResolver
+from enforcer.ts_imports import TS_EXTS as _TS_EXTS
 
 if TYPE_CHECKING:
     from enforcer.context import FileContextBuilder
-
-# TypeScript/JS files the graph traverses, and the order relative specifiers
-# resolve against (a bare 'foo' import tries foo.ts, then foo.tsx, ...).
-_TS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mts", ".cts")
-_TS_RESOLVE_EXTS = (".ts", ".tsx", ".d.ts", ".js", ".jsx", ".mts", ".cts")
 
 # C# source files the graph traverses. C# usings reference namespaces (not file
 # paths); enforcer.csharp_imports resolves them via a workspace namespace index.
 _CS_EXTS = (".cs",)
 
 
-class ImportGraphBuilder(ABC):
+class ImportGraphBuilder:
     """Builds {source_path: set[target_path]} from staged files + transitive closure.
+
+    Language-specific resolution lives behind the ImportResolver seam: one adapter per
+    language (Python/TS/Go/C#), each returning a uniform ImportResult. The builder owns
+    only the queue-driven closure and edge-line bookkeeping — it never parses imports
+    itself, so adding a language is adding an adapter and one extension mapping.
 
     What:       resolves Python imports (import X.Y, from X.Y import Z), TypeScript/JS
                 relative imports (import ... from './x', export ... from '../y'),
                 Go imports (import "mod/pkg"), and C# usings (using X.Y) to on-disk
-                paths. A Go import resolves to every .go file in the target package
-                directory; a C# using resolves to every file declaring that namespace.
+                paths, via the per-language ImportResolver adapters.
     Ignores:    stdlib/third-party and TS bare/aliased specifiers (unresolvable -> not in
                 graph); Python relative imports and TS dynamic import() (deferred); Go
                 test files as import targets (_test.go); C# usings of namespaces
@@ -40,23 +40,13 @@ class ImportGraphBuilder(ABC):
         self.builder = builder
         self.workspace = workspace
         self.max_files = max_files
-        # ponytail: import-prefix -> on-disk dir, for a package rooted in a
-        # subdirectory (import 'app.x' whose file lives at 'server/app/x.py').
-        # Longest prefix first so 'app.sub' wins over 'app'.
-        self.source_roots = dict(
-            sorted((source_roots or {}).items(), key=lambda kv: -len(kv[0]))
-        )
-        # ponytail: parse-once cache keyed by path for Python/TS: maps each import to
-        # the 1-based line of its statement (line attribution recorded at resolution
-        # time). Go/C# resolution keep their own caches in their resolver objects.
-        self._imports_cache: dict[str, dict[str, int]] = {}
+        self.source_roots = source_roots or {}
         # {source_path: {resolved_target_path: import_line}} — consumers read
         # this (via shared_ctx["__import_lines__"]) to attribute a violation to
         # the exact import that produced the edge.
         self.import_lines: dict[str, dict[str, int]] = {}
-        # ponytail: per-language resolvers, built lazily on first Go/C# file.
-        self._go_resolver = None
-        self._cs_resolver = None
+        # ponytail: per-language resolvers, each built lazily on first file of its kind.
+        self._resolvers: dict[str, ImportResolver] = {}
 
     def build(self, staged_files: list[str]) -> dict[str, set[str]]:
         """Build import graph from staged files + transitive closure. Returns graph dict."""
@@ -102,241 +92,44 @@ class ImportGraphBuilder(ABC):
             )
 
     def _resolve_for_path(self, path: str) -> set[str]:
-        """Extract imports for path, resolve to target paths, record import lines."""
+        """Resolve a file's imports via its language adapter, recording import lines."""
+        resolver = self._resolver_for(path)
+        if resolver is None:
+            return set()
+        result = resolver.resolve(path)
+        self.import_lines[path] = result.lines
+        return result.targets
+
+    def _resolver_for(self, path: str) -> "ImportResolver | None":
+        """Return the ImportResolver for a file's language (built lazily), or None if unsupported."""
         if path.endswith(_TS_EXTS):
-            return self._resolve_ts_for_path(path)
+            return self._get_resolver("ts", self._make_ts_resolver)
         if path.endswith(".go"):
-            return self._resolve_go_for_path(path)
+            return self._get_resolver("go", self._make_go_resolver)
         if path.endswith(_CS_EXTS):
-            return self._resolve_csharp_for_path(path)
-        resolved: set[str] = set()
-        lines: dict[str, int] = {}
-        for module, line in self._extract_imports(path).items():
-            for target in self._resolve_import(module):
-                resolved.add(target)
-                lines.setdefault(target, line)
-        self.import_lines[path] = lines
-        return resolved
-
-    def _extract_imports(self, path: str) -> dict[str, int]:
-        """Parse file's imports, return {dotted module-path: 1-based line}. Cached.
-
-        Emits 'X.Y.Z' for 'from X.Y import Z' (Z may be symbol or submodule).
-        _resolve_import handles the symbol-vs-submodule distinction by falling
-        back to the parent package file when Z is not a submodule on disk.
-        """
-        if path in self._imports_cache:
-            return self._imports_cache[path]
-        modules: dict[str, int] = {}
-        root = self._root_node(path)
-        if root is not None:
-            self._collect_modules(root, modules)
-        self._imports_cache[path] = modules
-        return modules
-
-    def _root_node(self, path: str):
-        """Return AST root node for path, or None if unparseable."""
-        from enforcer.types import Needs
-        ctx = self.builder.build(path, force_needs={Needs.AST_PY})
-        if not ctx.ast:
-            return None
-        return ctx.ast.root_node
-
-    @staticmethod
-    def _collect_modules(root, modules: dict[str, int]) -> None:
-        """Walk AST, collect {dotted module: 1-based line} (first occurrence wins)."""
-        from enforcer.parsers.ast_utils import walk_ast, node_text
-        for node in walk_ast(root):
-            line = node.start_point[0] + 1
-            if node.type == "import_statement":
-                ImportGraphBuilder._collect_plain_import(node, node_text, modules, line)
-            elif node.type == "import_from_statement":
-                ImportGraphBuilder._collect_from_import(node, node_text, modules, line)
-
-    @staticmethod
-    def _dotted_name_text(node, node_text) -> str | None:
-        """Return a node's dotted-name text, unwrapping an aliased_import; else None."""
-        if node.type == "dotted_name":
-            return node_text(node)
-        if node.type == "aliased_import":
-            sub = next((c for c in node.children if c.type == "dotted_name"), None)
-            return node_text(sub) if sub is not None else None
+            return self._get_resolver("cs", self._make_cs_resolver)
+        if path.endswith(".py"):
+            return self._get_resolver("py", self._make_py_resolver)
         return None
 
-    @staticmethod
-    def _collect_plain_import(node, node_text, modules: dict[str, int], line: int) -> None:
-        """Extract modules from 'import X.Y [as z], A.B [as w], ...'.
+    def _get_resolver(self, key: str, factory) -> "ImportResolver":
+        """Return the cached resolver for key, building it via factory on first use."""
+        if key not in self._resolvers:
+            self._resolvers[key] = factory()
+        return self._resolvers[key]
 
-        One import_statement holds comma-separated modules; each is either a
-        bare dotted_name or an aliased_import wrapping a dotted_name.
-        """
-        for child in node.children:
-            name = ImportGraphBuilder._dotted_name_text(child, node_text)
-            if name is not None:
-                modules.setdefault(name, line)
+    def _make_py_resolver(self) -> "ImportResolver":
+        from enforcer.python_imports import PythonImportResolver
+        return PythonImportResolver(self.builder, self.workspace, self.source_roots)
 
-    @staticmethod
-    def _collect_from_import(node, node_text, modules: dict[str, int], line: int) -> None:
-        """Extract modules from 'from X import Y[, Z]'.
+    def _make_ts_resolver(self) -> "ImportResolver":
+        from enforcer.ts_imports import TsImportResolver
+        return TsImportResolver(self.builder, self.workspace)
 
-        Y/Z may be bare dotted_names or aliased_imports (Y as foo); descend
-        into aliased_import children to recover the real imported name.
-        """
-        children = node.children
-        dotted_names = [c for c in children if c.type == "dotted_name"]
-        relative = [c for c in children if c.type == "relative_import"]
-        if relative or not dotted_names:
-            # ponytail: relative import support deferred -- add when repo needs it
-            return
-        pkg = node_text(dotted_names[0])
-        imported = dotted_names[1:] + [c for c in children if c.type == "aliased_import"]
-        if not imported:
-            modules.setdefault(pkg, line)
-            return
-        for name_node in imported:
-            name = ImportGraphBuilder._dotted_name_text(name_node, node_text)
-            if name is not None:
-                modules.setdefault(f"{pkg}.{name}", line)
+    def _make_go_resolver(self) -> "ImportResolver":
+        from enforcer.go_imports import GoImportResolver
+        return GoImportResolver(self.builder, self.workspace)
 
-    def _resolve_import(self, module: str) -> list[str]:
-        """Resolve a dotted module string to on-disk paths relative to workspace.
-
-        'pkg.sub' -> ['pkg/sub/__init__.py', 'pkg/sub.py'] (whichever exists).
-        For from-imports, the final component may be a symbol (not a submodule);
-        fall back to the parent package's file when the full dotted path has no
-        on-disk target. Example: 'enforcer.types.Needs' -> 'enforcer/types.py'.
-        Relative imports (module starts with '.') deferred.
-        """
-        if not module or module.startswith("."):
-            # ponytail: relative import support deferred -- add when a repo needs it
-            return []
-        parts = module.split(".")
-        disk = self._ondisk_parts(parts)
-        candidates: list[str] = [
-            os.path.join(*disk, "__init__.py"),
-            os.path.join(*disk[:-1], disk[-1] + ".py"),
-        ]
-        resolved = self._existing(candidates)
-        if not resolved and len(parts) >= 2:
-            # ponytail: final component is a symbol, not a submodule; fall back to
-            # the parent package (its __init__ or .py file).
-            parent = self._ondisk_parts(parts[:-1])
-            parent_candidates: list[str] = [
-                os.path.join(*parent, "__init__.py"),
-                os.path.join(*parent[:-1], parent[-1] + ".py"),
-            ]
-            resolved = self._existing(parent_candidates)
-        return resolved
-
-    def _ondisk_parts(self, parts: list[str]) -> list[str]:
-        """Map import-path segments to on-disk segments via source_roots.
-
-        The first source root (longest prefix wins) whose dotted key matches the
-        leading segments has that prefix replaced by its on-disk directory;
-        unmatched imports pass through unchanged. Graph node paths therefore
-        stay repo-relative so path globs keep matching.
-        """
-        for prefix, root_dir in self.source_roots.items():
-            pre = prefix.split(".")
-            if parts[:len(pre)] == pre:
-                return root_dir.strip("/").split("/") + parts[len(pre):]
-        return parts
-
-    def _existing(self, candidates: list[str]) -> list[str]:
-        """Filter candidate paths to those existing on disk, normalized to /."""
-        resolved: list[str] = []
-        for cand in candidates:
-            full = os.path.join(self.workspace, cand)
-            if os.path.isfile(full):
-                resolved.append(cand.replace(os.sep, "/"))
-        return resolved
-
-    # --- TypeScript / JS resolution ---
-    # Only relative specifiers ('./', '../') are local; bare ('rxjs') and aliased
-    # ('@angular/core', tsconfig paths) specifiers resolve to nothing, like an
-    # unresolvable Python module. A specifier resolves to the first on-disk file
-    # among <base><ext> then <base>/index<ext> (TS module-resolution order).
-
-    def _resolve_ts_for_path(self, path: str) -> set[str]:
-        """Resolve a TS/JS file's relative imports, recording each import's line."""
-        resolved: set[str] = set()
-        lines: dict[str, int] = {}
-        for spec, line in self._extract_ts_imports(path).items():
-            target = self._resolve_ts_import(spec, path)
-            if target is not None:
-                resolved.add(target)
-                lines.setdefault(target, line)
-        self.import_lines[path] = lines
-        return resolved
-
-    def _extract_ts_imports(self, path: str) -> dict[str, int]:
-        """Return {module specifier: 1-based line} for a TS/JS file. Cached."""
-        if path in self._imports_cache:
-            return self._imports_cache[path]
-        from enforcer.types import Needs
-        ctx = self.builder.build(path, force_needs={Needs.AST_TS})
-        specs = self._ts_import_specs(ctx.ast.root_node) if ctx.ast else {}
-        self._imports_cache[path] = specs
-        return specs
-
-    @staticmethod
-    def _ts_import_specs(root) -> dict[str, int]:
-        """Collect {specifier: line} from every import/export statement's source string.
-
-        The module source is the direct `string` child of an import_statement or a
-        re-exporting export_statement (`export ... from '...'`); an `export const x
-        = "s"` nests its string deeper, so direct children only avoids false hits.
-        """
-        from enforcer.parsers.ast_utils import walk_ast, node_text
-        specs: dict[str, int] = {}
-        for node in walk_ast(root):
-            if node.type not in ("import_statement", "export_statement"):
-                continue
-            src = next((c for c in node.children if c.type == "string"), None)
-            if src is not None:
-                specs.setdefault(node_text(src).strip("'\"`"), node.start_point[0] + 1)
-        return specs
-
-    def _resolve_ts_import(self, spec: str, src_path: str) -> str | None:
-        """Resolve a relative TS specifier to an on-disk file, or None if unresolvable."""
-        if not (spec.startswith("./") or spec.startswith("../")):
-            return None
-        src_dir = os.path.dirname(src_path)
-        base = os.path.normpath(os.path.join(src_dir, spec)).replace(os.sep, "/")
-        for cand in self._ts_candidates(base):
-            if os.path.isfile(os.path.join(self.workspace, cand)):
-                return cand
-        return None
-
-    @staticmethod
-    def _ts_candidates(base: str) -> list[str]:
-        """Ordered on-disk candidates for a TS import base path (file, then dir index)."""
-        cands: list[str] = []
-        if base.endswith(_TS_RESOLVE_EXTS):
-            cands.append(base)
-        cands.extend(base + ext for ext in _TS_RESOLVE_EXTS)
-        cands.extend(f"{base}/index{ext}" for ext in _TS_RESOLVE_EXTS)
-        return cands
-
-    def _resolve_go_for_path(self, path: str) -> set[str]:
-        """Resolve a Go file's imports via GoImportResolver (lazily built).
-
-        A Go package is a directory; imports resolve to its non-test .go files.
-        """
-        if self._go_resolver is None:
-            from enforcer.go_imports import GoImportResolver
-            self._go_resolver = GoImportResolver(self.builder, self.workspace)
-        return self._go_resolver.resolve(path)
-
-    def _resolve_csharp_for_path(self, path: str) -> set[str]:
-        """Resolve a C# file's usings via CSharpNamespaceResolver; record import lines.
-
-        C# usings reference namespaces (not file paths), so resolution is delegated
-        to a namespace -> files resolver built lazily on first C# file.
-        """
-        if self._cs_resolver is None:
-            from enforcer.csharp_imports import CSharpNamespaceResolver
-            self._cs_resolver = CSharpNamespaceResolver(self.builder, self.workspace)
-        resolved, lines = self._cs_resolver.resolve(path)
-        self.import_lines[path] = lines
-        return resolved
+    def _make_cs_resolver(self) -> "ImportResolver":
+        from enforcer.csharp_imports import CSharpNamespaceResolver
+        return CSharpNamespaceResolver(self.builder, self.workspace)

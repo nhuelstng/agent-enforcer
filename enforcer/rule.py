@@ -4,10 +4,8 @@ from dataclasses import dataclass, field
 from typing import Callable
 from enforcer.types import Severity, Match, FileContext, LLMConsequence, RuleType
 from enforcer.combinators.core import AllOf
+from enforcer.matcher_tree import is_combinator
 from enforcer.glob_util import glob_match as _glob_match  # ponytail: alias preserves call sites
-
-def _is_combinator(obj) -> bool:
-    return (hasattr(obj, "matchers") or hasattr(obj, "matcher")) and hasattr(obj, "find")
 
 def _run_matcher(matcher, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
     return matcher.find(file_ctx, shared_ctx)
@@ -36,7 +34,7 @@ class Rule:
         if self._excluded(file_ctx.path):
             return []
 
-        if len(self.matchers) == 1 and _is_combinator(self.matchers[0]):
+        if len(self.matchers) == 1 and is_combinator(self.matchers[0]):
             all_matches = _run_matcher(self.matchers[0], file_ctx, shared_ctx)
         else:
             combined = AllOf(self.matchers)

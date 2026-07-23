@@ -2,14 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
-from enforcer.parsers.ast_utils import walk_ast, node_text
-
-_FUNC_NODE_TYPES = {
-    "function_definition",       # Python def
-    "function_declaration",      # TypeScript
-    "method_definition",         # TypeScript class method
-    "method_declaration",        # TypeScript class method (alt grammar) + C# method
-}
+from enforcer.parsers.ast_utils import walk_ast, node_text, FUNC_NODE_TYPES
 
 
 @dataclass
@@ -72,7 +65,7 @@ class InterfaceMatcher:
         blocks = [c for c in node.children if c.type == container]
         return sum(
             1 for block in blocks for inner in walk_ast(block)
-            if inner.type in _FUNC_NODE_TYPES and self._is_public_method(inner)
+            if inner.type in FUNC_NODE_TYPES and self._is_public_method(inner)
         )
 
     def _is_public_method(self, func_node) -> bool:

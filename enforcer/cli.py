@@ -11,18 +11,10 @@ from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
 from enforcer.ignore import load_enforcerignore, is_ignored
 from enforcer.check_runner import (
-    _glob_any_match,
-    _parse_diff_changed_lines,
-    _parse_name_status,
-    build_change_context as _build_change_context,
     collect_files as _collect_files,
-    build_shared_ctx as _build_shared_ctx,
-    run_checks as _run_checks,
+    run_check_pass as _run_check_pass,
+    CheckOptions,
 )
-
-_JUNK_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
-               ".pytest_cache", ".mypy_cache", ".tox", "dist", "build",
-               "*.egg-info"}
 
 @click.group()
 def cli():
@@ -99,22 +91,14 @@ def check(files, staged, all_files, paths, fmt, config_path, workspace, severity
 
     builder = FileContextBuilder(config.rules, workspace=ws)
     from enforcer.docs import render_rules_doc
+    # Render the doc from the full rule set (before --rule-id narrowing), so the
+    # doc-staleness check compares against the complete doc, not a single-rule subset.
     rendered_doc = render_rules_doc(all_rules, workspace=config.workspace or ws)
-    shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=file_list, rendered_doc=rendered_doc)
 
-    change_ctx = _build_change_context(ws, status_map)
-    shared_ctx["__change__"] = change_ctx
-    shared_ctx["__llm_enabled__"] = not no_llm
-    shared_ctx["__llm_config__"] = config.llm_config
-
-    all_matches = _run_checks(runner, builder, file_list, shared_ctx, ws, staged,
-                              diff_ref=base_ref, status_map=status_map)
-
-    meta_matches = runner.run_metadata_rules(shared_ctx)
-    all_matches.extend(meta_matches)
-
-    cross_matches = runner.run_cross_file_finalizers(shared_ctx)
-    all_matches.extend(cross_matches)
+    all_matches = _run_check_pass(runner, builder, config, file_list, CheckOptions(
+        status_map=status_map, staged=staged, diff_ref=base_ref,
+        rendered_doc=rendered_doc, no_llm=no_llm,
+    ))
 
     if fix:
         from enforcer.fix import apply_fixes

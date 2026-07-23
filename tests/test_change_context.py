@@ -4,7 +4,7 @@ import tempfile
 import os
 from pathlib import Path
 from unittest.mock import patch
-from enforcer.cli import _parse_name_status, _build_change_context
+from enforcer.check_runner import _parse_name_status, build_change_context as _build_change_context
 
 
 def test_parse_name_status_added():

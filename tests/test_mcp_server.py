@@ -112,8 +112,7 @@ def test_check_conventions_empty_paths_not_staged():
         return [], {}
 
     with patch("enforcer.mcp_server._collect_files", side_effect=fake_collect_files), \
-         patch("enforcer.mcp_server._build_shared_ctx", return_value={}), \
-         patch("enforcer.mcp_server._run_checks", return_value=[]), \
+         patch("enforcer.mcp_server._run_check_pass", return_value=[]), \
          patch("enforcer.mcp_server.RuleRunner"):
         check_conventions(paths=[])
     assert call_log, "collect_files must be called"

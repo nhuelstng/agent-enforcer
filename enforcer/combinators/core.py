@@ -1,7 +1,8 @@
 """Combinator implementations: compose matchers with AND/OR/NOT logic."""
 from __future__ import annotations
 from dataclasses import dataclass, field
-from enforcer.types import Match, FileContext, Needs
+from enforcer.types import Match, FileContext, Needs, Finalizing
+from enforcer.matcher_tree import iter_matchers
 
 def _run(matcher, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
     if shared_ctx is None:
@@ -9,24 +10,9 @@ def _run(matcher, file_ctx: FileContext, shared_ctx: dict | None = None) -> list
     return matcher.find(file_ctx, shared_ctx)
 
 
-def _collect_finalizers(matcher) -> list:
-    """Walk combinator tree iteratively, return matchers with finalize_duplicates.
-
-    Non-combinator matchers: returned if they have finalize_duplicates.
-    Combinators (AllOf/AnyOf/OneOf/NoneOf): descend into .matchers list.
-    Not: descend into .matcher attribute.
-    """
-    finalizers: list = []
-    stack: list = [matcher]
-    while stack:
-        m = stack.pop()
-        if hasattr(m, "matchers") and isinstance(m.matchers, list):
-            stack.extend(m.matchers)
-        elif hasattr(m, "matcher") and m.matcher is not None:
-            stack.append(m.matcher)
-        if hasattr(m, "finalize_duplicates") and callable(m.finalize_duplicates):
-            finalizers.append(m)
-    return finalizers
+def collect_finalizers(matchers: list) -> list:
+    """Return every matcher in the trees that has a cross-file finalize phase."""
+    return [m for m in iter_matchers(matchers) if isinstance(m, Finalizing)]
 
 @dataclass
 class AllOf:

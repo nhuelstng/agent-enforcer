@@ -27,7 +27,8 @@ def test_using_resolves_to_declaring_files(tmp_path: Path):
     _write(tmp_path, "src/Db/Store.cs", "namespace App.Db;\npublic class Store { }\n")
     _write(tmp_path, "src/Db/Repo.cs", "namespace App.Db;\npublic class Repo { }\n")
 
-    resolved, lines = _resolver(tmp_path).resolve("src/Api/Handler.cs")
+    _res = _resolver(tmp_path).resolve("src/Api/Handler.cs")
+    resolved, lines = _res.targets, _res.lines
     assert resolved == {"src/Db/Store.cs", "src/Db/Repo.cs"}
     assert lines["src/Db/Store.cs"] == 1 and lines["src/Db/Repo.cs"] == 1
 
@@ -37,7 +38,8 @@ def test_external_namespace_excluded(tmp_path: Path):
     _write(tmp_path, "src/Api/Handler.cs",
            "using System;\nusing System.Linq;\nnamespace App.Api;\npublic class Handler { }\n")
 
-    resolved, lines = _resolver(tmp_path).resolve("src/Api/Handler.cs")
+    _res = _resolver(tmp_path).resolve("src/Api/Handler.cs")
+    resolved, lines = _res.targets, _res.lines
     assert resolved == set()
 
 
@@ -46,7 +48,7 @@ def test_self_namespace_not_self_edge(tmp_path: Path):
     _write(tmp_path, "src/App/A.cs", "using App.Core;\nnamespace App.Core;\npublic class A { }\n")
     _write(tmp_path, "src/App/B.cs", "namespace App.Core;\npublic class B { }\n")
 
-    resolved, _ = _resolver(tmp_path).resolve("src/App/A.cs")
+    resolved = _resolver(tmp_path).resolve("src/App/A.cs").targets
     assert resolved == {"src/App/B.cs"}
 
 
@@ -57,5 +59,5 @@ def test_nested_namespace_resolves(tmp_path: Path):
     _write(tmp_path, "src/Api/Handler.cs",
            "using App.Domain;\nnamespace App.Api;\npublic class Handler { }\n")
 
-    resolved, _ = _resolver(tmp_path).resolve("src/Api/Handler.cs")
+    resolved = _resolver(tmp_path).resolve("src/Api/Handler.cs").targets
     assert resolved == {"src/Domain/Models.cs"}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
+from enforcer.parsers.ast_utils import find_functions
 
 @dataclass
 class CommentPerFunctionMatcher:
@@ -21,7 +22,7 @@ class CommentPerFunctionMatcher:
             return []
         matches: list[Match] = []
         root = file_ctx.ast.root_node
-        for func_node in self._find_functions(root):
+        for func_node in find_functions(root):
             comment_count = self._count_comments(func_node)
             if comment_count > self.max_comments:
                 matches.append(Match(
@@ -30,18 +31,6 @@ class CommentPerFunctionMatcher:
                     matched_value=str(comment_count),
                 ))
         return matches
-
-    def _find_functions(self, node):
-        func_types = {"function_declaration", "function_definition", "function",
-                       "method_definition", "method_declaration"}
-        result = []
-        stack = [node]
-        while stack:
-            current = stack.pop()
-            if current.type in func_types:
-                result.append(current)
-            stack.extend(reversed(current.children))
-        return result
 
     def _count_comments(self, func_node) -> int:
         count = 0

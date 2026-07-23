@@ -21,7 +21,7 @@ def _cs_match(source: str, node_type: str) -> Match:
         stack.extend(reversed(n.children))
     assert node is not None
     match = Match(file="C.cs", line=node.start_point[0] + 1, matched_value="x")
-    match._file_ctx = ctx
+    match.file_ctx = ctx
     return match
 
 

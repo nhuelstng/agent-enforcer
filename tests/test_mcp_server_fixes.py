@@ -8,8 +8,7 @@ from enforcer.mcp_server import check_conventions, run_mcp_server
 def test_mcp_staged_mode_skips_enforcerignore():
     """check_conventions(paths=None) is staged mode — must NOT call load_enforcerignore."""
     with patch("enforcer.mcp_server._collect_files", return_value=([], {})), \
-         patch("enforcer.mcp_server._build_shared_ctx", return_value={}), \
-         patch("enforcer.mcp_server._run_checks", return_value=[]), \
+         patch("enforcer.mcp_server._run_check_pass", return_value=[]), \
          patch("enforcer.mcp_server.load_enforcerignore") as mock_load, \
          patch("enforcer.mcp_server.RuleRunner"):
         check_conventions(paths=None)

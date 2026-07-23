@@ -1,6 +1,23 @@
+import pytest
 from enforcer import FileContext
 from enforcer.matchers import RegexMatcher
 from enforcer.combinators import StatusGate
+
+
+@pytest.mark.parametrize("status", ["added", "modified", "deleted"])
+def test_status_gate_matches_when_status_allowed(status):
+    """StatusGate runs its inner matcher and reports matches for every allowed status."""
+    ctx = FileContext(path="x.py", raw="print('hi')\n", status=status)
+    gate = StatusGate(RegexMatcher(r"print\("), allowed_statuses={"added", "modified", "deleted"})
+    assert len(gate.find(ctx)) == 1
+
+
+@pytest.mark.parametrize("status", ["modified", "deleted", "renamed"])
+def test_status_gate_no_match_when_status_disallowed(status):
+    """StatusGate suppresses its inner matcher for any status outside allowed_statuses."""
+    ctx = FileContext(path="x.py", raw="print('hi')\n", status=status)
+    gate = StatusGate(RegexMatcher(r"print\("), allowed_statuses={"added"})
+    assert not gate.find(ctx)
 
 
 def test_status_gate_runs_when_status_allowed():
@@ -57,17 +74,17 @@ def test_status_gate_needs_raw():
 
 
 def test_status_gate_finalizer_collected():
-    """A matcher with finalize_duplicates inside StatusGate must still be collected by _collect_finalizers."""
-    from enforcer.combinators.core import _collect_finalizers
+    """A matcher with finalize_duplicates inside StatusGate must still be collected by collect_finalizers."""
+    from enforcer.combinators.core import collect_finalizers
     from enforcer.matchers import RegexMatcher
 
     class FakeFinalizerMatcher:
         needs = None
         def find(self, file_ctx, shared_ctx=None):
             return []
-        def finalize_duplicates(self, matches, shared_ctx):
-            return matches
+        def finalize_duplicates(self, shared_ctx):
+            return []
 
     gate = StatusGate(FakeFinalizerMatcher())
-    finalizers = _collect_finalizers(gate)
+    finalizers = collect_finalizers([gate])
     assert any(hasattr(f, "finalize_duplicates") for f in finalizers)

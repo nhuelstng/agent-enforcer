@@ -243,7 +243,7 @@ WORKSPACE = "."
 
 def test_build_shared_ctx_stashes_rules():
     """_build_shared_ctx must stash __rules__ and __workspace__."""
-    from enforcer.cli import _build_shared_ctx
+    from enforcer.check_runner import build_shared_ctx as _build_shared_ctx
     from enforcer.config import Config
     from enforcer.context import FileContextBuilder
     from enforcer import Rule, Severity
@@ -262,7 +262,7 @@ def test_build_shared_ctx_stashes_rules():
 
 def test_build_shared_ctx_caches_all_glob_matches(tmp_path):
     """_build_shared_ctx must cache FileContext for every file matching a read_target glob, not just the first."""
-    from enforcer.cli import _build_shared_ctx
+    from enforcer.check_runner import build_shared_ctx as _build_shared_ctx
     from enforcer.config import Config
     from enforcer.context import FileContextBuilder
     from enforcer import Rule, Severity
@@ -295,7 +295,7 @@ def test_build_shared_ctx_caches_all_glob_matches(tmp_path):
 
 def test_build_shared_ctx_overlapping_globs_dedupe(tmp_path):
     """Two rules with overlapping globs build each file's context only once."""
-    from enforcer.cli import _build_shared_ctx
+    from enforcer.check_runner import build_shared_ctx as _build_shared_ctx
     from enforcer.config import Config
     from enforcer.context import FileContextBuilder
     from enforcer import Rule, Severity

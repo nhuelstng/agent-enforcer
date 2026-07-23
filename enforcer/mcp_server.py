@@ -10,8 +10,8 @@ from enforcer.reporter import Reporter
 from enforcer.check_runner import (
     collect_files as _collect_files,
     build_shared_ctx as _build_shared_ctx,
-    run_checks as _run_checks,
-    build_change_context as _build_change_context,
+    run_check_pass as _run_check_pass,
+    CheckOptions,
 )
 from enforcer.ignore import load_enforcerignore, is_ignored
 
@@ -39,20 +39,10 @@ def check_conventions(paths: list[str] | None = None, format: str = "json", no_l
     builder = FileContextBuilder(config.rules, workspace=ws)
     from enforcer.docs import render_rules_doc
     rendered_doc = render_rules_doc(config.rules, workspace=config.workspace or ws)
-    shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=file_list, rendered_doc=rendered_doc)
 
-    change_ctx = _build_change_context(ws, status_map)
-    shared_ctx["__change__"] = change_ctx
-    shared_ctx["__llm_enabled__"] = runner.llm_executor.enabled
-    shared_ctx["__llm_config__"] = config.llm_config
-
-    all_matches = _run_checks(
-        runner, builder, file_list, shared_ctx, ws,
-        staged=paths is None, diff_ref=None, status_map=status_map,
-    )
-
-    all_matches.extend(runner.run_metadata_rules(shared_ctx))
-    all_matches.extend(runner.run_cross_file_finalizers(shared_ctx))
+    all_matches = _run_check_pass(runner, builder, config, file_list, CheckOptions(
+        status_map=status_map, staged=paths is None, rendered_doc=rendered_doc, no_llm=no_llm,
+    ))
 
     reporter = Reporter(format=format)
     return reporter.render(all_matches, severity_actions=config.severity_actions)

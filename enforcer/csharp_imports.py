@@ -9,6 +9,7 @@ exact namespace (C# `using Foo` imports Foo, not its sub-namespaces).
 from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
+from enforcer.types import ImportResult, ImportResolver
 
 if TYPE_CHECKING:
     from enforcer.context import FileContextBuilder
@@ -18,7 +19,7 @@ _SKIP_DIRS = {"bin", "obj", ".git", "node_modules", "packages", ".vs"}
 _NS_TYPES = ("namespace_declaration", "file_scoped_namespace_declaration")
 
 
-class CSharpNamespaceResolver:
+class CSharpNamespaceResolver(ImportResolver):
     """Resolves C# `using` directives to the workspace files declaring each namespace.
 
     What:       given a .cs file, returns the files its usings resolve to (files
@@ -34,14 +35,14 @@ class CSharpNamespaceResolver:
         self._index: dict[str, list[str]] | None = None
         self._usings_cache: dict[str, dict[str, int]] = {}
 
-    def resolve(self, path: str) -> tuple[set[str], dict[str, int]]:
-        """Return (target files, {target: 1-based using line}) for a C# file."""
+    def resolve(self, path: str) -> ImportResult:
+        """Return the files a C# file's usings resolve to, with each using's line."""
         index = self._namespace_index()
         resolved: set[str] = set()
         lines: dict[str, int] = {}
         for namespace, line in self._extract_usings(path).items():
             self._add_targets(index.get(namespace, ()), path, line, resolved, lines)
-        return resolved, lines
+        return ImportResult(targets=resolved, lines=lines)
 
     @staticmethod
     def _add_targets(targets, source: str, line: int,

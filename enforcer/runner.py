@@ -72,13 +72,10 @@ class RuleRunner(RunnerProtocol):
 
     def _collect_unique_finalizers(self, rule) -> list:
         """Collect deduplicated finalizer matchers from a rule's matcher tree."""
-        from enforcer.combinators.core import _collect_finalizers
-        finalizers: list = []
-        for matcher in rule.matchers:
-            finalizers.extend(_collect_finalizers(matcher))
+        from enforcer.combinators.core import collect_finalizers
         seen: set[int] = set()
         unique: list = []
-        for f in finalizers:
+        for f in collect_finalizers(rule.matchers):
             if id(f) in seen:
                 continue
             seen.add(id(f))
