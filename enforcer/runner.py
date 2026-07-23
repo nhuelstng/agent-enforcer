@@ -136,10 +136,13 @@ class RuleRunner(RunnerProtocol):
     def run_cross_file_finalizers(self, shared_ctx: dict) -> list[Match]:
         """Call finalize_duplicates on any matcher with that method, after all files processed."""
         all_matches: list[Match] = []
+        all_files = shared_ctx.get("__all_files__", False)
         for rule in self.content_rules:
             if SEVERITY_RANK.get(rule.severity, 0) < SEVERITY_RANK.get(self.min_severity, 0):
                 continue
-            if rule.diff_only:
+            # ponytail: diff_only finalizers are gated to changed sets — except in a
+            # full scan (--all), where the whole repo is in scope.
+            if rule.diff_only and not all_files:
                 continue
             all_matches.extend(self._process_rule_finalizers(rule, shared_ctx))
         return all_matches
