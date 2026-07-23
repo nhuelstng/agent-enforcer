@@ -4,9 +4,10 @@ import re
 from dataclasses import dataclass
 from typing import Pattern
 from enforcer.types import Match
+from enforcer.predicates.core import Predicate
 
 @dataclass
-class StringMatchesPredicate:
+class StringMatchesPredicate(Predicate):
     """Tests whether a string value matches a regex pattern."""
     pattern: str | Pattern
 
@@ -21,7 +22,7 @@ class StringMatchesPredicate:
         return bool(self._compiled.search(match.matched_value))
 
 @dataclass
-class StringNotMatchesPredicate:
+class StringNotMatchesPredicate(Predicate):
     """Tests whether a string value does NOT match a regex pattern."""
     pattern: str | Pattern
 

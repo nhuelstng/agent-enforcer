@@ -138,25 +138,32 @@ def call_llm(provider: str | None, model: str | None, prompt: str, timeout: int,
 
 
 class LLMExecutor(ExecutorProtocol):
-    """Executes LLM consequences. Deduplicates: one call per (file, consequence) pair. Response attached to all matches from that file."""
+    """Executes a rule's LLM consequence: one call per (file, consequence), response attached to every match from that file.
+
+    The transport is injected (`caller`, defaulting to call_llm) so tests can supply a
+    fake instead of monkeypatching the module-level function or hitting the network."""
     def __init__(self, concurrency: int = 5, timeout: int = 30, enabled: bool = True,
-                 llm_config: LLMConfig | None = None):
+                 llm_config: LLMConfig | None = None, caller=None):
         self.concurrency = concurrency
         self.timeout = timeout
         self.enabled = enabled
         self.llm_config = llm_config or LLMConfig()
+        # ponytail: keep the injected caller (or None); resolve the module-level default
+        # at call time in execute() so a monkeypatched call_llm is still honored.
+        self._call = caller
 
     def execute(self, matches: list[Match], consequence: LLMConsequence | None,
                 file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
-        """Run LLM consequences for matches. Returns dict of (file, consequence) -> response."""
+        """Attach the LLM response to each match (one call per file+consequence). Returns the matches."""
         if not consequence or not self.enabled or not matches:
             return matches
         if not file_ctx.raw:
             return matches
 
         prompt = self._build_prompt(consequence, file_ctx, shared_ctx)
-        response = call_llm(consequence.provider, consequence.model, prompt,
-                           consequence.timeout, self.llm_config)
+        call = self._call or call_llm
+        response = call(consequence.provider, consequence.model, prompt,
+                        consequence.timeout, self.llm_config)
 
         for m in matches:
             m.llm_response = response
