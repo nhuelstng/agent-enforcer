@@ -37,6 +37,7 @@ from enforcer.matchers.facade_exists import FacadeExistsMatcher
 from enforcer.matchers.facade_exposes_interface import FacadeExposesInterfaceMatcher
 from enforcer.matchers.invocation import InvocationMatcher
 from enforcer.matchers.async_method import AsyncMethodMatcher
+from enforcer.matchers.endpoint_auth import EndpointAuthMatcher
 from enforcer.matchers.project_reference import ProjectReferenceMatcher
 
 __all__ = [
@@ -60,6 +61,7 @@ __all__ = [
     "DocstringMatcher",
     "DuplicateCodeMatcher",
     "DuplicateRuleIdMatcher",
+    "EndpointAuthMatcher",
     "FacadeExposesInterfaceMatcher",
     "FacadeExistsMatcher",
     "FileExistsMatcher",

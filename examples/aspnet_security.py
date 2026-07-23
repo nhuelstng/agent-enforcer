@@ -13,10 +13,11 @@ so a match survives only when a controller has neither [Authorize] nor
 [AllowAnonymous] — i.e. a route that would ship unauthenticated by accident.
 """
 from enforcer import Rule, Severity, Needs
-from enforcer.matchers import AstNodeMatcher
+from enforcer.matchers import AstNodeMatcher, EndpointAuthMatcher
 from enforcer.predicates import NodeNamePredicate, HasAttributePredicate, HasBaseTypePredicate, NotP
 
 CONTROLLER_GLOBS = ["**/*Controller.cs", "**/Controllers/**/*.cs"]
+ENDPOINT_GLOBS = ["**/Program.cs", "**/Endpoints/**/*.cs"]
 
 ASPNET_SECURITY_RULES = [
     Rule(
@@ -36,6 +37,20 @@ ASPNET_SECURITY_RULES = [
             "its actions unauthenticated. The compiler and stock analyzers never "
             "flag this — the policy that 'auth is mandatory unless opted out' is "
             "project intent, so it must be enforced structurally."
+        ),
+    ),
+    Rule(
+        id="minimal-api-endpoint-requires-auth",
+        severity=Severity.ERROR,
+        matchers=[EndpointAuthMatcher()],
+        file_globs=ENDPOINT_GLOBS,
+        message="Minimal-API endpoint {matched_value} at {file}:{line} has no inline .RequireAuthorization()/.AllowAnonymous().",
+        fix_instruction="Chain .RequireAuthorization() onto the endpoint (or .AllowAnonymous() if intentionally public), or guard the group via app.MapGroup(...).RequireAuthorization().",
+        rationale=(
+            "The minimal-API counterpart to controller authorization: a bare "
+            "app.MapGet(...) registers an unauthenticated route. The guard must be "
+            "in the same fluent chain — group-level or stored-endpoint guards are "
+            "not tracked, so prefer inline .RequireAuthorization() at the call site."
         ),
     ),
 ]
