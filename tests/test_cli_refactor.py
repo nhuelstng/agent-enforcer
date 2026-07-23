@@ -2,7 +2,7 @@
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
-from enforcer.cli import _collect_files, _build_shared_ctx, _run_checks
+from enforcer.check_runner import collect_files as _collect_files, run_checks as _run_checks
 
 
 def test_collect_files_staged_empty():
@@ -71,7 +71,7 @@ def test_check_output_writes_file(tmp_path):
 
 def test_parse_diff_changed_lines_with_ref():
     """Should use <ref>...HEAD when ref is provided."""
-    from enforcer.cli import _parse_diff_changed_lines
+    from enforcer.check_runner import _parse_diff_changed_lines
     diff_output = b"@@ -1,2 +3,2 @@\n-old\n+new\n+newer\n"
     with patch("subprocess.run", return_value=type("R", (), {"returncode": 0, "stdout": diff_output.decode()})()) as mock_run:
         result = _parse_diff_changed_lines(".", "file.py", ref="origin/master")
@@ -84,7 +84,7 @@ def test_parse_diff_changed_lines_with_ref():
 
 def test_parse_diff_changed_lines_staged_no_ref():
     """Should use --cached when ref is None."""
-    from enforcer.cli import _parse_diff_changed_lines
+    from enforcer.check_runner import _parse_diff_changed_lines
     diff_output = b"@@ -1,0 +2,0 @@\n"
     with patch("subprocess.run", return_value=type("R", (), {"returncode": 0, "stdout": diff_output.decode()})()) as mock_run:
         _parse_diff_changed_lines(".", "file.py", ref=None)

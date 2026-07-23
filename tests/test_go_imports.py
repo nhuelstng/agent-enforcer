@@ -30,7 +30,7 @@ def test_import_resolves_to_package_files(tmp_path: Path):
     _write(tmp_path, "internal/db/store.go", "package db\nfunc Get() {}\n")
     _write(tmp_path, "internal/db/store_test.go", "package db\n")
 
-    assert _resolver(tmp_path).resolve("internal/api/h.go") == {"internal/db/store.go"}
+    assert _resolver(tmp_path).resolve("internal/api/h.go").targets == {"internal/db/store.go"}
 
 
 def test_stdlib_and_thirdparty_excluded(tmp_path: Path):
@@ -39,7 +39,7 @@ def test_stdlib_and_thirdparty_excluded(tmp_path: Path):
     _write(tmp_path, "internal/api/h.go",
            'package api\nimport (\n\t"fmt"\n\t"github.com/other/x"\n)\nvar _ = fmt.Print\n')
 
-    assert _resolver(tmp_path).resolve("internal/api/h.go") == set()
+    assert _resolver(tmp_path).resolve("internal/api/h.go").targets == set()
 
 
 def test_no_gomod_yields_no_edges(tmp_path: Path):
@@ -48,4 +48,4 @@ def test_no_gomod_yields_no_edges(tmp_path: Path):
            'package api\nimport "example.com/proj/internal/db"\nvar _ = db.Get\n')
     _write(tmp_path, "internal/db/store.go", "package db\nfunc Get() {}\n")
 
-    assert _resolver(tmp_path).resolve("internal/api/h.go") == set()
+    assert _resolver(tmp_path).resolve("internal/api/h.go").targets == set()

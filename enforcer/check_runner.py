@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
 _JUNK_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
@@ -18,22 +19,17 @@ def _glob_any_match(name: str, patterns) -> bool:
 def _needs_import_graph(rules: list) -> bool:
     """Return True if any rule's matcher tree contains an import-graph consumer.
 
-    Import-graph consumers (ArchitectureMatcher, DeepImportBarrierMatcher) carry a
-    `reads_import_graph` marker; check_runner builds __import_graph__ only when one
-    is present, keeping the graph pass off the hot path for graph-free configs.
+    Import-graph consumers (ArchitectureMatcher, DeepImportBarrierMatcher) satisfy the
+    ImportGraphConsumer Protocol; check_runner builds __import_graph__ only when one is
+    present, keeping the graph pass off the hot path for graph-free configs.
     """
-    stack: list = []
-    for rule in rules:
-        stack.extend(rule.matchers)
-    while stack:
-        m = stack.pop()
-        if getattr(m, "reads_import_graph", False):
-            return True
-        if hasattr(m, "matchers") and isinstance(m.matchers, list):
-            stack.extend(m.matchers)
-        elif hasattr(m, "matcher") and m.matcher is not None:
-            stack.append(m.matcher)
-    return False
+    from enforcer.types import ImportGraphConsumer
+    from enforcer.matcher_tree import iter_matchers
+    all_matchers = [m for rule in rules for m in rule.matchers]
+    return any(
+        isinstance(m, ImportGraphConsumer) and m.reads_import_graph
+        for m in iter_matchers(all_matchers)
+    )
 
 
 def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = None) -> set[int] | None:
@@ -186,6 +182,43 @@ def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = 
         # matcher attributes an edge to the exact import that produced it.
         shared_ctx["__import_lines__"] = graph_builder.import_lines
     return shared_ctx
+
+
+@dataclass
+class CheckOptions:
+    """How to run a check pass: file statuses, mode flags, and the pre-rendered doc.
+
+    Bundles the per-invocation knobs so run_check_pass keeps a small interface and the
+    CLI/MCP entry points pass one value object instead of a long positional list.
+    rendered_doc is supplied by the caller because rendering lives in the io layer."""
+    status_map: dict[str, str] = field(default_factory=dict)
+    staged: bool = False
+    diff_ref: str | None = None
+    rendered_doc: str = ""
+    no_llm: bool = False
+
+
+def run_check_pass(runner, builder, config, file_list: list[str], options: "CheckOptions") -> list:
+    """Run one full check pass and return the aggregated matches.
+
+    The single entry point both the CLI and the MCP server go through: it assembles
+    the shared context (read-targets, import graph, rendered conventions doc, change
+    metadata, LLM flags), then runs the three rule phases — per-file CONTENT rules,
+    METADATA rules, and cross-file finalizers. Callers stay thin: they build the
+    runner/builder, collect files, and format output; the pipeline lives here so the
+    two entry points cannot drift. The workspace is taken from the runner.
+    """
+    ws = runner.workspace
+    shared_ctx = build_shared_ctx(config, builder, ws, staged_files=file_list, rendered_doc=options.rendered_doc)
+    shared_ctx["__change__"] = build_change_context(ws, options.status_map)
+    shared_ctx["__llm_enabled__"] = not options.no_llm
+    shared_ctx["__llm_config__"] = config.llm_config
+
+    all_matches = run_checks(runner, builder, file_list, shared_ctx, ws, options.staged,
+                             diff_ref=options.diff_ref, status_map=options.status_map)
+    all_matches.extend(runner.run_metadata_rules(shared_ctx))
+    all_matches.extend(runner.run_cross_file_finalizers(shared_ctx))
+    return all_matches
 
 
 def run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool,

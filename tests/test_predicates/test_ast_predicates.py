@@ -1,5 +1,6 @@
 """Tests for AST predicates: HasDecoratorPredicate, NodeNamePredicate."""
 import re
+import pytest
 from enforcer.predicates.ast import HasDecoratorPredicate, NodeNamePredicate
 from enforcer.types import Match, FileContext, Needs
 
@@ -19,6 +20,35 @@ def _find_function(root):
         stack.extend(reversed(n.children))
     return None
 
+def _decorator_match(source: str) -> Match:
+    """Build a Match at the function declared in source, with AST context attached."""
+    ctx = _make_ctx(source)
+    func_node = _find_function(ctx.ast.root_node)
+    match = Match(file="test.py", line=func_node.start_point[0] + 1)
+    match.file_ctx = ctx
+    return match
+
+
+@pytest.mark.parametrize("source", [
+    "@fixture\ndef f():\n    pass\n",
+    "@app.route('/x')\ndef g():\n    pass\n",
+    "@staticmethod\ndef h():\n    pass\n",
+])
+def test_has_decorator_passes_when_decorated(source):
+    """HasDecoratorPredicate passes for any function carrying a decorator."""
+    assert HasDecoratorPredicate().test(_decorator_match(source)) is True
+
+
+@pytest.mark.parametrize("source", [
+    "def a():\n    pass\n",
+    "def b(x):\n    return x\n",
+    "x = 1\ndef c():\n    pass\n",
+])
+def test_has_decorator_fails_when_undecorated(source):
+    """HasDecoratorPredicate fails (no match) when the declaration has no decorator."""
+    assert not HasDecoratorPredicate().test(_decorator_match(source))
+
+
 def test_has_decorator_predicate_pass():
     """HasDecoratorPredicate should pass when the match's node has a decorator."""
     source = (
@@ -36,7 +66,7 @@ def test_has_decorator_predicate_pass():
         line=func_node.start_point[0] + 1,
         matched_value="my_fixture",
     )
-    match._file_ctx = ctx  # ponytail: attach context for predicate to access AST
+    match.file_ctx = ctx  # ponytail: attach context for predicate to access AST
     pred = HasDecoratorPredicate()
     assert pred.test(match) is True
 
@@ -51,7 +81,7 @@ def test_has_decorator_predicate_fail():
         line=func_node.start_point[0] + 1,
         matched_value="no_decorator",
     )
-    match._file_ctx = ctx
+    match.file_ctx = ctx
     pred = HasDecoratorPredicate()
     assert pred.test(match) is False
 
@@ -70,7 +100,7 @@ def test_has_decorator_with_pattern():
         line=func_node.start_point[0] + 1,
         matched_value="endpoint",
     )
-    match._file_ctx = ctx
+    match.file_ctx = ctx
     pred = HasDecoratorPredicate(pattern=r"app\.route")
     assert pred.test(match) is True
 
@@ -88,7 +118,7 @@ def test_node_name_predicate_match():
         line=func_node.start_point[0] + 1,
         matched_value="test_foo",
     )
-    match._file_ctx = ctx
+    match.file_ctx = ctx
     pred = NodeNamePredicate(pattern=r"^test_")
     assert pred.test(match) is True
 
@@ -103,12 +133,12 @@ def test_node_name_predicate_no_match():
         line=func_node.start_point[0] + 1,
         matched_value="not_a_test",
     )
-    match._file_ctx = ctx
+    match.file_ctx = ctx
     pred = NodeNamePredicate(pattern=r"^test_")
     assert pred.test(match) is False
 
 def test_predicate_without_ctx_returns_false():
-    """Predicates should return False when no _file_ctx attached (defensive)."""
+    """Predicates should return False when no file_ctx attached (defensive)."""
     match = Match(file="test.py", line=1, matched_value="foo")
     assert HasDecoratorPredicate().test(match) is False
     assert NodeNamePredicate(pattern=r"foo").test(match) is False

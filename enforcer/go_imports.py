@@ -8,12 +8,13 @@ resolved lazily by consumers via ast_utils.import_line_for.
 from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
+from enforcer.types import ImportResult, ImportResolver
 
 if TYPE_CHECKING:
     from enforcer.context import FileContextBuilder
 
 
-class GoImportResolver:
+class GoImportResolver(ImportResolver):
     """Resolves Go imports to the .go files of each imported package.
 
     What:       given a .go file, returns the non-test .go files its local imports
@@ -30,15 +31,18 @@ class GoImportResolver:
         self._module: str | None | bool = False
         self._imports_cache: dict[str, set[str]] = {}
 
-    def resolve(self, path: str) -> set[str]:
-        """Return the set of .go files a Go file's local imports resolve to."""
+    def resolve(self, path: str) -> ImportResult:
+        """Return the .go files a Go file's local imports resolve to.
+
+        lines stays empty: Go edge lines are attributed lazily by consumers via
+        ast_utils.import_line_for, not recorded here."""
         module = self._module_path()
         if not module:
-            return set()
-        resolved: set[str] = set()
+            return ImportResult()
+        targets: set[str] = set()
         for imp in self._extract_imports(path):
-            resolved.update(self._resolve_import(imp, module))
-        return resolved
+            targets.update(self._resolve_import(imp, module))
+        return ImportResult(targets=targets)
 
     def _extract_imports(self, path: str) -> set[str]:
         """Return the set of import-path strings declared in a Go file. Cached."""

@@ -2,14 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
-from enforcer.parsers.ast_utils import walk_ast, node_text
-
-_FUNC_NODE_TYPES = {
-    "function_definition",
-    "function_declaration",
-    "method_definition",
-    "method_declaration",
-}
+from enforcer.parsers.ast_utils import walk_ast, node_text, FUNC_NODE_TYPES
 
 
 @dataclass
@@ -30,7 +23,7 @@ class TypeHintMatcher:
         matches: list[Match] = []
         root = file_ctx.ast.root_node
         for node in walk_ast(root):
-            if node.type not in _FUNC_NODE_TYPES:
+            if node.type not in FUNC_NODE_TYPES:
                 continue
             name = self._extract_name(node)
             if not name or name.startswith("_"):

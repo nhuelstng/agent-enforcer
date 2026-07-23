@@ -2,13 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
-
-_FUNC_NODE_TYPES = {
-    "function_definition",       # Python def (top-level + class methods)
-    "function_declaration",      # TypeScript standalone function + Go top-level func
-    "method_definition",         # TypeScript class method
-    "method_declaration",        # TypeScript class method (alt grammar) + Go method + C# method
-}
+from enforcer.parsers.ast_utils import FUNC_NODE_TYPES, find_functions, node_text, declared_name
 
 
 @dataclass
@@ -39,8 +33,8 @@ class DocstringMatcher:
         is_csharp = self.needs == Needs.AST_CSHARP
         matches: list[Match] = []
         root = file_ctx.ast.root_node
-        for func_node in self._find_functions(root):
-            name = self._extract_name(func_node, is_csharp)
+        for func_node in find_functions(root):
+            name = declared_name(func_node, csharp=is_csharp)
             if not name or not self._is_public(func_node, name, is_go, is_csharp):
                 continue
             documented = self._is_documented(func_node, is_go, is_csharp)
@@ -71,47 +65,10 @@ class DocstringMatcher:
     @staticmethod
     def _has_public_modifier(func_node) -> bool:
         """Return True if a C# declaration carries a `public` access modifier."""
-        for child in func_node.children:
-            if child.type != "modifier":
-                continue
-            raw = child.text
-            text = raw.decode() if hasattr(raw, "decode") else str(raw)
-            if text == "public":
-                return True
-        return False
-
-    def _find_functions(self, root) -> list:
-        result: list = []
-        stack = [root]
-        while stack:
-            node = stack.pop()
-            if node.type in _FUNC_NODE_TYPES:
-                result.append(node)
-            stack.extend(reversed(node.children))
-        return result
-
-    def _extract_name(self, node, is_csharp: bool = False) -> str:
-        # ponytail: C# member names sit before the parameter list (a leading
-        # identifier is the return type). Go/TS names are direct identifier children.
-        if is_csharp:
-            return self._extract_csharp_name(node)
-        for child in node.children:
-            if child.type in ("identifier", "property_identifier", "field_identifier"):
-                raw = child.text
-                return raw.decode() if hasattr(raw, "decode") else str(raw)
-        return ""
-
-    @staticmethod
-    def _extract_csharp_name(node) -> str:
-        """Return a C# method name: the identifier immediately before its parameter_list."""
-        for idx, child in enumerate(node.children):
-            if child.type != "parameter_list":
-                continue
-            prev = [c for c in node.children[:idx] if c.type == "identifier"]
-            if prev:
-                raw = prev[-1].text
-                return raw.decode() if hasattr(raw, "decode") else str(raw)
-        return ""
+        return any(
+            child.type == "modifier" and node_text(child) == "public"
+            for child in func_node.children
+        )
 
     @staticmethod
     def _has_adjacent_comment(func_node, prefix: str | None = None) -> bool:
@@ -126,9 +83,7 @@ class DocstringMatcher:
         if func_node.start_point[0] - prev.end_point[0] > 1:
             return False
         if prefix is not None:
-            raw = prev.text
-            text = raw.decode() if hasattr(raw, "decode") else str(raw)
-            return text.lstrip().startswith(prefix)
+            return node_text(prev).lstrip().startswith(prefix)
         return True
 
     def _has_docstring(self, func_node) -> bool:

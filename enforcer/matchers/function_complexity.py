@@ -2,15 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
-
-# ponytail: tree-sitter node types for functions across languages
-_FUNC_NODE_TYPES = {
-    "function_definition",       # Python def (top-level + class methods)
-    "function_declaration",      # TypeScript standalone function + Go top-level func
-    "method_definition",         # TypeScript class method
-    "method_declaration",        # TypeScript class method (alt grammar) + Go method (with receiver) + C# method
-    "local_function_statement",  # C#: function nested in a method body
-}
+from enforcer.parsers.ast_utils import FUNC_NODE_TYPES, node_text
 
 _DECISION_NODE_TYPES = {
     "if_statement", "elif_clause", "for_statement", "while_statement",
@@ -86,9 +78,7 @@ class FunctionComplexityMatcher:
         """Check if function node is __init__ (constructors exempt from param count)."""
         for child in func_node.children:
             if child.type == "identifier":
-                raw = child.text
-                name = raw.decode() if hasattr(raw, "decode") else str(raw)
-                return name == "__init__"
+                return node_text(child) == "__init__"
         return False
 
     def _find_functions(self, root) -> list:
@@ -97,7 +87,7 @@ class FunctionComplexityMatcher:
         stack = [root]
         while stack:
             node = stack.pop()
-            if node.type in _FUNC_NODE_TYPES:
+            if node.type in FUNC_NODE_TYPES:
                 result.append(node)
             stack.extend(reversed(node.children))
         return result
@@ -161,7 +151,7 @@ class FunctionComplexityMatcher:
             stack.extend(
                 (child, depth + 1 if child.type in _NESTING_NODE_TYPES else depth)
                 for child in reversed(node.children)
-                if child.type not in _FUNC_NODE_TYPES
+                if child.type not in FUNC_NODE_TYPES
             )
         return max_d
 
@@ -192,7 +182,7 @@ class FunctionComplexityMatcher:
         stack = list(reversed(root.children))
         while stack:
             node = stack.pop()
-            if node.type in _FUNC_NODE_TYPES:
+            if node.type in FUNC_NODE_TYPES:
                 continue  # skip nested functions
             yield node
             stack.extend(reversed(node.children))

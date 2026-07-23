@@ -1,9 +1,9 @@
-"""Core type definitions: Severity, Needs, Match, FileContext, LLMConsequence, ChangeContext."""
+"""Core type definitions: Severity, Needs, Match, FileContext, Matcher, LLMConsequence, ChangeContext."""
 from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 class Severity(Enum):
     """Convention violation severity level. ERROR blocks commit, WARN blocks unless confirmed, INFO is advisory."""
@@ -63,6 +63,77 @@ class FileContext:
     ast: object | None = None
     changed_lines: set[int] | None = None
     status: str = "modified"  # "added" | "modified" | "deleted" | "renamed"
+
+@runtime_checkable
+class Matcher(Protocol):
+    """The contract every matcher and combinator satisfies: find violations in one file.
+
+    `needs` declares which parse the file requires — RAW for text, or an AST_* variant
+    for a parsed tree. `find` returns a Match per violation; an empty list means the file
+    is clean for this matcher. Optional capabilities (cross-file finalization, import-graph
+    consumption, combinator nesting) are expressed by the narrower Protocols below and
+    discovered structurally, never by ad-hoc hasattr probing scattered across callers."""
+    needs: Needs
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Return a Match per violation in the file; an empty list means clean."""
+        ...
+
+
+@runtime_checkable
+class Finalizing(Protocol):
+    """A matcher with a cross-file second phase, run once after every file is processed.
+
+    Used by whole-corpus checks (e.g. duplicate detection) that can only decide after
+    seeing all files. RuleRunner collects finalizers from the matcher tree and calls this."""
+    def finalize_duplicates(self, shared_ctx: dict) -> list[Match]:
+        """Return cross-file matches decided after every file has been processed."""
+        ...
+
+
+@runtime_checkable
+class ImportGraphConsumer(Protocol):
+    """A matcher that reads the pre-built import graph from shared_ctx.
+
+    The flag lets check_runner build the graph only when some matcher needs it, keeping
+    the graph pass off the hot path for graph-free configs."""
+    reads_import_graph: bool
+
+
+@runtime_checkable
+class Combinator(Protocol):
+    """A matcher composed of child matchers — the nesting seam the tree walker descends.
+
+    Concrete combinators expose children either as a `matchers` list (AllOf/AnyOf/...) or a
+    single `matcher` (Not/StatusGate). matcher_tree.iter_matchers is the one place that knows
+    this shape; nothing else should probe for `.matchers`/`.matcher`."""
+    needs: Needs
+    def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Run the composed child matchers and return their combined matches."""
+        ...
+
+
+@dataclass
+class ImportResult:
+    """The outcome of resolving one file's imports: target paths + per-target import line.
+
+    targets: repo-relative paths this file imports, resolved to on-disk files.
+    lines: {target: 1-based line of the import that produced the edge}; may be empty
+    when a language attributes lines lazily elsewhere (Go, via ast_utils.import_line_for)."""
+    targets: set[str] = field(default_factory=set)
+    lines: dict[str, int] = field(default_factory=dict)
+
+
+@runtime_checkable
+class ImportResolver(Protocol):
+    """Resolves one source file's imports to the files it depends on.
+
+    One adapter per language (Python, TypeScript/JS, Go, C#); the import graph composes
+    them by file extension rather than branching on language inline. Every adapter returns
+    the same ImportResult shape, so the builder never special-cases a language's return."""
+    def resolve(self, path: str) -> ImportResult:
+        """Return the ImportResult (targets + line attribution) for one source file."""
+        ...
+
 
 @dataclass
 class LLMConsequence:

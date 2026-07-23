@@ -3,6 +3,8 @@ from enforcer.parsers.ast_utils import (
     walk_ast,
     find_functions,
     node_text,
+    declared_name,
+    node_at_line,
     FUNC_NODE_TYPES,
     DECL_NODE_TYPES,
     IMPORT_NODE_TYPES,
@@ -10,11 +12,57 @@ from enforcer.parsers.ast_utils import (
 
 
 class FakeNode:
-    """Minimal tree-sitter node stub: .children/.type/.text."""
-    def __init__(self, type_: str, text: str = "", children: list | None = None):
+    """Minimal tree-sitter node stub: .children/.type/.text (+ optional location)."""
+    def __init__(self, type_: str, text: str = "", children: list | None = None, line: int = 1):
         self.type = type_
         self.text = text.encode() if isinstance(text, str) else text
         self.children = children or []
+        # ponytail: tree-sitter start_point row is 0-based; `line` here is the 1-based display line.
+        self.start_point = (line - 1, 0)
+
+    @property
+    def named_children(self) -> list:
+        return self.children
+
+
+def _ident(name: str, line: int = 0) -> "FakeNode":
+    return FakeNode("identifier", text=name, line=line)
+
+
+class TestDeclaredName:
+    def test_python_first_identifier(self):
+        fn = FakeNode("function_definition", children=[_ident("do_thing")])
+        assert declared_name(fn) == "do_thing"
+
+    def test_csharp_name_before_parameter_list(self):
+        node = FakeNode("method_declaration", children=[
+            _ident("string"),          # return type
+            _ident("Handle"),          # method name
+            FakeNode("parameter_list"),
+        ])
+        assert declared_name(node, csharp=True) == "Handle"
+
+    def test_csharp_type_falls_back_to_first_identifier(self):
+        node = FakeNode("class_declaration", children=[_ident("Widget")])
+        assert declared_name(node, csharp=True) == "Widget"
+
+    def test_no_identifier_returns_empty(self):
+        assert declared_name(FakeNode("block")) == ""
+
+
+class TestNodeAtLine:
+    def test_prefers_declaration_node_on_line(self):
+        decl = FakeNode("function_definition", children=[_ident("f", line=3)], line=3)
+        other = FakeNode("identifier", text="f", line=3)
+        root = FakeNode("module", children=[decl, other], line=1)
+        assert node_at_line(root, 3) is decl
+
+    def test_returns_none_when_no_node_on_line(self):
+        root = FakeNode("module", children=[FakeNode("expression_statement", line=1)], line=1)
+        assert node_at_line(root, 99) is None
+
+    def test_none_root_returns_none(self):
+        assert node_at_line(None, 1) is None
 
 
 def test_walk_ast_yields_root_then_descendants_dfs():

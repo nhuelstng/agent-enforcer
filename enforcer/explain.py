@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from enforcer.rule import Rule
+from enforcer.matcher_tree import walk_with_depth
 
 _INDENT_PAD = 13
 _SNIPPET_PAD = 17
@@ -212,25 +213,8 @@ def _render_rule_message_fields(rule: Rule) -> list[str]:
 
 
 def _flatten_matchers(matchers: list) -> list[tuple[int, object]]:
-    """Flatten matcher tree into list of (depth, matcher) tuples for rendering.
-
-    Combinators with .matchers (list) are descended; combinators with .matcher (single)
-    are descended once. Iterative DFS to avoid Python recursion limit on deep ASTs.
-    """
-    flat: list[tuple[int, object]] = []
-    # ponytail: iterative DFS, reverse-push to preserve sibling order on pop
-    stack: list[tuple[int, object]] = [(0, m) for m in reversed(matchers)]
-    while stack:
-        depth, m = stack.pop()
-        flat.append((depth, m))
-        children: list = []
-        if hasattr(m, "matchers") and isinstance(m.matchers, list):
-            children = list(m.matchers)
-        elif hasattr(m, "matcher") and m.matcher is not None:
-            children = [m.matcher]
-        for child in reversed(children):
-            stack.append((depth + 1, child))
-    return flat
+    """Flatten matcher tree into list of (depth, matcher) tuples for rendering."""
+    return walk_with_depth(matchers)
 
 
 def _render_worked_example(class_name: str, workspace: str, indent: str) -> list[str]:

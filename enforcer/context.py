@@ -3,22 +3,10 @@ from __future__ import annotations
 import os
 from typing import Protocol, runtime_checkable
 from enforcer.types import FileContext, Needs
+from enforcer.matcher_tree import iter_matchers
 from enforcer.parsers.language import language_for_path
 from enforcer.parsers.tree_sitter import parse as ts_parse
 from enforcer.glob_util import glob_match as _glob_match
-
-
-def _collect_needs(matcher, needs: set[Needs]) -> None:
-    """Walk combinator tree, collect Needs from all leaf matchers."""
-    stack: list = [matcher]
-    while stack:
-        m = stack.pop()
-        if hasattr(m, "matchers") and isinstance(m.matchers, list):
-            stack.extend(m.matchers)
-        elif hasattr(m, "matcher") and m.matcher is not None:
-            stack.append(m.matcher)
-        if hasattr(m, "needs") and m.needs:
-            needs.add(m.needs)
 
 
 @runtime_checkable
@@ -83,8 +71,10 @@ class FileContextBuilder(ContextBuilderProtocol):
                 continue
             if any(_glob_match(path, pat) for pat in rule.exclude_globs):
                 continue
-            for matcher in rule.matchers:
-                _collect_needs(matcher, needs)
+            for m in iter_matchers(rule.matchers):
+                declared = getattr(m, "needs", None)
+                if declared:
+                    needs.add(declared)
         return needs
 
     def clear_cache(self) -> None:
