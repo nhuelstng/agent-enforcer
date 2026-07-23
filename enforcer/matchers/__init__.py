@@ -38,6 +38,7 @@ from enforcer.matchers.facade_exposes_interface import FacadeExposesInterfaceMat
 from enforcer.matchers.invocation import InvocationMatcher
 from enforcer.matchers.async_method import AsyncMethodMatcher
 from enforcer.matchers.endpoint_auth import EndpointAuthMatcher
+from enforcer.matchers.project_reference import ProjectReferenceMatcher
 
 __all__ = [
     "AllSortedMatcher",
@@ -76,6 +77,7 @@ __all__ = [
     "NoModuleSideEffectsMatcher",
     "PairedFileMatcher",
     "PathNotMatchingMatcher",
+    "ProjectReferenceMatcher",
     "RegexMatcher",
     "TestCoverageMatcher",
     "TypeHintMatcher",
