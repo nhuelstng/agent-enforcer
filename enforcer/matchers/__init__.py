@@ -35,12 +35,15 @@ from enforcer.matchers.import_cycle import CycleMatcher
 from enforcer.matchers.deep_import_barrier import DeepImportBarrierMatcher
 from enforcer.matchers.facade_exists import FacadeExistsMatcher
 from enforcer.matchers.facade_exposes_interface import FacadeExposesInterfaceMatcher
+from enforcer.matchers.invocation import InvocationMatcher
+from enforcer.matchers.async_method import AsyncMethodMatcher
 
 __all__ = [
     "AllSortedMatcher",
     "AllowlistMatcher",
     "AlwaysMatcher",
     "ArchitectureMatcher",
+    "AsyncMethodMatcher",
     "CanonicalImportMatcher",
     "AstNodeMatcher",
     "BranchNameMatcher",
@@ -62,6 +65,7 @@ __all__ = [
     "FunctionComplexityMatcher",
     "ImportMatcher",
     "InterfaceMatcher",
+    "InvocationMatcher",
     "KeySetSyncMatcher",
     "LLMMatcher",
     "LineCountMatcher",

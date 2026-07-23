@@ -256,7 +256,7 @@ A minimal MCP server exposes the enforcer over JSON-RPC on stdio. Launch with `p
 
 ## Available matchers, combinators, predicates
 
-See [`enforcer/matchers/__init__.py`](enforcer/matchers/__init__.py) for the full catalog. Quick reference: matchers (`RegexMatcher`, `LineCountMatcher`, `FunctionComplexityMatcher`, `PairedFileMatcher`, `ImportMatcher`, `NamingConventionMatcher`, `DocstringMatcher`, `AlwaysMatcher`, `LLMMatcher`, …), combinators (`AllOf`, `AnyOf`, `OneOf`, `Not`, `NoneOf`), predicates (`IntPredicate`, `StringLengthPredicate`, `StringMatchesPredicate`, `HasDecoratorPredicate`, `NodeNamePredicate`, plus `All`/`Any`/`NotP`).
+See [`enforcer/matchers/__init__.py`](enforcer/matchers/__init__.py) for the full catalog. Quick reference: matchers (`RegexMatcher`, `LineCountMatcher`, `FunctionComplexityMatcher`, `PairedFileMatcher`, `ImportMatcher`, `NamingConventionMatcher`, `DocstringMatcher`, `AlwaysMatcher`, `LLMMatcher`, …), combinators (`AllOf`, `AnyOf`, `OneOf`, `Not`, `NoneOf`), predicates (`IntPredicate`, `StringLengthPredicate`, `StringMatchesPredicate`, `HasDecoratorPredicate`, `HasAttributePredicate`, `NodeNamePredicate`, plus `All`/`Any`/`NotP`).
 
 ## Recipe: Paired file (test coverage)
 
@@ -271,6 +271,10 @@ ArchitectureMatcher(isolate_siblings=["app/features"])
 # app/features/orders/... -> app/features/billing/... flagged;  -> app/shared/... allowed
 ```
 
+## Recipe: C# / ASP.NET Core conventions
+
+Set `needs=Needs.AST_CSHARP` on any AST matcher to check `.cs` files (`DocstringMatcher`, `NamingConventionMatcher`, `FunctionComplexityMatcher`, `ImportMatcher`, `AstNodeMatcher`, `MagicNumberMatcher`, `InterfaceMatcher`, `InvocationMatcher`, `AsyncMethodMatcher`, and the namespace-graph matchers `ArchitectureMatcher`/`DeepImportBarrierMatcher`/`CycleMatcher`). Attribute/base-type/argument predicates filter matches by the C# declaration they land on — the enablers for attribute-driven ASP.NET rules. Compose `AstNodeMatcher(node_type="class_declaration")` with `NodeNamePredicate(pattern=r"Controller$")` and: `NotP(HasAttributePredicate(pattern=r"Authorize|AllowAnonymous"))` (require `[Authorize]`), `NotP(HasBaseTypePredicate(pattern=r"ControllerBase"))` (must derive `ControllerBase`), or `NotP(AttributeArgumentPredicate(attribute="Route"))` (require a `[Route(...)]` template). `InvocationMatcher(pattern=r"\.Wait$")` bans sync-over-async calls; `AsyncMethodMatcher(check="no_async_void")` and `AsyncMethodMatcher(check="task_suffix")` enforce async conventions. `CsprojProps` extracts `<PropertyGroup>` names and `PackageReference` ids so `KeySetSyncMatcher` can require project properties (`Nullable`, `TreatWarningsAsErrors`) or keep `Directory.Packages.props` in sync. See [`AGENTS.md`](AGENTS.md#language-support) for C# node-type specifics.
+
 ## Example config
 
 See [enforcer_config.py](enforcer_config.py) for a real working example — this repo enforces its own conventions with 26 rules (19 ERROR for style/correctness + 7 WARN for critical-component reminders, including LLM-analyzed README length).
@@ -283,15 +287,7 @@ Composite action inputs: `install-method` (`pip`|`wheel`|`skip`, default `pip`),
 
 ### Cross-org usage
 
-```yaml
-- uses: nhuelstng/agent-enforcer/.github/actions/enforcer@main
-  with:
-    install-method: pip
-    token: ${{ secrets.ENFORCER_PAT }}
-    base-ref: origin/main
-```
-
-The PAT needs `contents:read` on the enforcer repo. The consuming repo needs `security-events: write` for SARIF upload.
+Reference the action as `nhuelstng/agent-enforcer/.github/actions/enforcer@main` with `token: ${{ secrets.ENFORCER_PAT }}` and `base-ref: origin/main`. The PAT needs `contents:read` on the enforcer repo; the consuming repo needs `security-events: write` for SARIF upload.
 
 ## Running tests
 

@@ -8,7 +8,7 @@ _FUNC_NODE_TYPES = {
     "function_definition",       # Python def
     "function_declaration",      # TypeScript
     "method_definition",         # TypeScript class method
-    "method_declaration",        # TypeScript class method (alt grammar)
+    "method_declaration",        # TypeScript class method (alt grammar) + C# method
 }
 
 
@@ -16,10 +16,11 @@ _FUNC_NODE_TYPES = {
 class InterfaceMatcher:
     """Walks AST for class nodes, flags classes with >=min_methods public methods and no base class.
     Skips @dataclass-decorated classes — they are config carriers, not behavioral objects.
+    Set needs=AST_PY for Python, needs=AST_CSHARP for C#.
 
-    What:       flags non-dataclass classes with >=min_methods public methods and no base class (no inheritance)
-    Ignores:    files with no parsed AST; dataclass-decorated classes; private/dunder methods (names starting with _); classes with <min_methods public methods; classes with base classes
-    Basis:      AST_PY (walks file_ctx.ast for class_definition nodes, checks decorators + argument_list + public method count)
+    What:       flags non-dataclass classes with >=min_methods public methods and no base type (no inheritance/interface)
+    Ignores:    files with no parsed AST; Python dataclasses; C# records (own node type); private/dunder methods and C# non-public methods; classes with <min_methods public methods; classes with a base class or implemented interface
+    Basis:      AST_PY (default) / AST_CSHARP — walks class nodes, checks base list + public method count
     shared_ctx: none (defensive default only)
     """
     min_methods: int = 4
@@ -31,8 +32,9 @@ class InterfaceMatcher:
             return []
         matches: list[Match] = []
         root = file_ctx.ast.root_node
+        class_type = "class_declaration" if self.needs == Needs.AST_CSHARP else "class_definition"
         for node in walk_ast(root):
-            if node.type != "class_definition":
+            if node.type != class_type:
                 continue
             if self._is_dataclass(node):
                 continue
@@ -60,20 +62,26 @@ class InterfaceMatcher:
         )
 
     def _count_methods(self, node) -> int:
-        """Count public methods in the class block (names not starting with '_').
+        """Count public methods in the class body (Python: names not starting with '_'; C#: `public` modifier).
 
         Private helpers and dunders (__init__, _helper) don't count toward the
         interface threshold — a class with a small public API but many private
         helpers doesn't need a base class for substitutability.
         """
-        blocks = [c for c in node.children if c.type == "block"]
+        container = "declaration_list" if self.needs == Needs.AST_CSHARP else "block"
+        blocks = [c for c in node.children if c.type == container]
         return sum(
             1 for block in blocks for inner in walk_ast(block)
             if inner.type in _FUNC_NODE_TYPES and self._is_public_method(inner)
         )
 
     def _is_public_method(self, func_node) -> bool:
-        """True if the method's declared name does not start with '_'."""
+        """True if the method is public (C#: a `public` modifier; else name not '_'-prefixed)."""
+        if self.needs == Needs.AST_CSHARP:
+            return any(
+                child.type == "modifier" and node_text(child) == "public"
+                for child in func_node.children
+            )
         name = self._method_name(func_node)
         return bool(name) and not name.startswith("_")
 
@@ -85,14 +93,16 @@ class InterfaceMatcher:
         return ""
 
     def _has_base_class(self, node) -> bool:
-        """Check if class has base classes (argument_list with identifiers)."""
+        """True if the class declares a base type (C#: a base_list; else an argument_list of identifiers)."""
+        if self.needs == Needs.AST_CSHARP:
+            return any(child.type == "base_list" for child in node.children)
         for child in node.children:
             if child.type == "argument_list":
                 return any(c.type == "identifier" for c in child.children)
         return False
 
     def _class_name(self, node) -> str:
-        """Extract class name from identifier child."""
+        """Extract class name from the first direct identifier child."""
         for child in node.children:
             if child.type == "identifier":
                 return node_text(child)
