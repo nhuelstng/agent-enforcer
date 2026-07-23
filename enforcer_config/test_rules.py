@@ -138,7 +138,7 @@ TEST_RULES = [
         severity=Severity.ERROR,
         matchers=[RegexMatcher(r"(?s)class\s+\w+.*?\"\"\"(?:(?!What:).)*?\"\"\"", redact=False)],
         file_globs=["enforcer/predicates/*.py"],
-        exclude_globs=["enforcer/predicates/__init__.py"],
+        exclude_globs=["enforcer/predicates/__init__.py", "enforcer/predicates/core.py"],
         message="Predicate class at {file}:{line} docstring missing 'What:' or 'Basis:' section.",
         fix_instruction="Add 'What: <what it passes>' and 'Basis: <RAW|AST_PY|AST_TS|AST_CSS>' lines to the class docstring.",
         diff_only=True,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enforcer.types import Match
+from enforcer.predicates.core import Predicate
 from enforcer.parsers.ast_utils import node_at_line, node_text
 
 def _get_node_at_line(file_ctx, line: int):
@@ -12,7 +13,7 @@ def _get_node_at_line(file_ctx, line: int):
     return node_at_line(file_ctx.ast.root_node, line)
 
 @dataclass
-class HasDecoratorPredicate:
+class HasDecoratorPredicate(Predicate):
     """Passes if the matched node (or its parent) has a decorator.
     If pattern is set, the decorator text must match it."""
     pattern: str | None = None
@@ -49,7 +50,7 @@ class HasDecoratorPredicate:
         return not self.pattern or bool(self._compiled.search(node_text(sibling)))
 
 @dataclass
-class HasAttributePredicate:
+class HasAttributePredicate(Predicate):
     """Passes if the matched C# declaration carries an attribute (e.g. [ApiController]).
     If pattern is set, the attribute text must match it.
 
@@ -87,7 +88,7 @@ class HasAttributePredicate:
 _BASE_CONTAINER_TYPES = ("base_list", "class_heritage", "argument_list")
 
 @dataclass
-class HasBaseTypePredicate:
+class HasBaseTypePredicate(Predicate):
     """Passes if the matched class declares a base type (base class or interface)
     whose text matches the pattern. With no pattern, passes when any base is present.
 
@@ -115,7 +116,7 @@ class HasBaseTypePredicate:
         return False
 
 @dataclass
-class AttributeArgumentPredicate:
+class AttributeArgumentPredicate(Predicate):
     """Passes if the C# attribute named `attribute` on the matched declaration carries
     at least one argument. If arg_pattern is set, the argument list text must also match it.
 
@@ -159,7 +160,7 @@ class AttributeArgumentPredicate:
         return ""
 
 @dataclass
-class NodeNamePredicate:
+class NodeNamePredicate(Predicate):
     """Passes if the matched node's name matches the regex pattern."""
     pattern: str
 

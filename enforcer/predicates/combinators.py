@@ -1,9 +1,10 @@
 """Predicate combinators: All (AND), Any (OR), NotP (NOT)."""
 from __future__ import annotations
 from dataclasses import dataclass
+from enforcer.predicates.core import Predicate
 
 @dataclass
-class All:
+class All(Predicate):
     """All predicates must pass. Short-circuits on first failure."""
     predicates: list
 
@@ -12,7 +13,7 @@ class All:
         return all(p.test(match) for p in self.predicates)
 
 @dataclass
-class Any:
+class Any(Predicate):
     """At least one predicate must pass."""
     predicates: list
 
@@ -21,7 +22,7 @@ class Any:
         return any(p.test(match) for p in self.predicates)
 
 @dataclass
-class NotP:
+class NotP(Predicate):
     """Negates a predicate."""
     predicate: object
 

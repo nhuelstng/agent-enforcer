@@ -18,10 +18,14 @@ class ContextBuilderProtocol(Protocol):
 
 
 class FileContextBuilder(ContextBuilderProtocol):
-    """Builds and caches FileContext objects. Each file is read once; AST is populated lazily when needed."""
-    def __init__(self, rules: list, workspace: str = "."):
+    """Builds and caches FileContext objects. Each file is read once; AST is populated lazily when needed.
+
+    The tree-sitter parser is injected (defaulting to the real one) so tests can drive
+    the parse-once cache with a fake parser instead of monkeypatching module state."""
+    def __init__(self, rules: list, workspace: str = ".", parser=ts_parse):
         self.rules = rules
         self.workspace = workspace
+        self._parse = parser
         self._cache: dict[str, FileContext] = {}
 
     def build(self, path: str, force_needs: set[Needs] | None = None) -> FileContext:
@@ -43,7 +47,7 @@ class FileContextBuilder(ContextBuilderProtocol):
 
         ctx = FileContext(path=path, raw=raw)
         if ast_need:
-            ctx.ast = ts_parse(raw, ast_need)
+            ctx.ast = self._parse(raw, ast_need)
         self._cache[path] = ctx
         return ctx
 
@@ -55,13 +59,12 @@ class FileContextBuilder(ContextBuilderProtocol):
                 return n
         return None
 
-    @staticmethod
-    def _populate_cached_ast(cached: FileContext, ast_need: Needs | None) -> None:
+    def _populate_cached_ast(self, cached: FileContext, ast_need: Needs | None) -> None:
         """Populate AST on a cached context if needed and raw is available."""
         if not ast_need or cached.ast is not None:
             return
         if cached.raw is not None:
-            cached.ast = ts_parse(cached.raw, ast_need)
+            cached.ast = self._parse(cached.raw, ast_need)
 
     def needs_for_file(self, path: str, rules: list) -> set[Needs]:
         """Aggregate all Needs from rules whose file_globs match this path."""
