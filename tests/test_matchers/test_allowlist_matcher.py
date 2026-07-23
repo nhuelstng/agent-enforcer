@@ -65,3 +65,24 @@ def test_allowlist_multi_file_glob_union(tmp_path):
     }
     matches = matcher.find(ctx, shared_ctx=shared_ctx)
     assert matches == []
+
+
+def _allow_matcher():
+    return AllowlistMatcher(
+        extractor=lambda raw: set(raw.split()),
+        consumer=lambda raw: set(raw.split()),
+        read_target="allow.txt",
+    )
+
+
+_ALLOW_SHARED = {"allow.txt": FileContext(path="allow.txt", raw="A B C")}
+
+
+@pytest.mark.parametrize("file_raw", ["A X", "Y Z", "A B Q"])
+def test_allowlist_flags_violation(file_raw):
+    assert _allow_matcher().find(FileContext(path="x.py", raw=file_raw), _ALLOW_SHARED)
+
+
+@pytest.mark.parametrize("file_raw", ["A", "A B", "B C"])
+def test_allowlist_passes_clean(file_raw):
+    assert not _allow_matcher().find(FileContext(path="x.py", raw=file_raw), _ALLOW_SHARED)

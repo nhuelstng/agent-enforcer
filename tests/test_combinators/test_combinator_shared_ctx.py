@@ -76,3 +76,21 @@ def test_allof_explicit_shared_ctx_still_works():
     matches = m.find(_ctx(), shared_ctx=shared)
     assert len(matches) == 2
     assert shared.get("written") is True
+
+
+import pytest
+from enforcer.matchers import RegexMatcher
+
+
+@pytest.mark.parametrize("raw", ["a\n", "a b\n", "aaa\n"])
+def test_shared_ctx_flags_violation(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = AllOf([RegexMatcher(r"a")]).find(ctx, shared_ctx={})
+    assert result
+
+
+@pytest.mark.parametrize("raw", ["\n", "z\n", "qqq\n"])
+def test_shared_ctx_passes_clean(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = AllOf([RegexMatcher(r"a")]).find(ctx, shared_ctx={})
+    assert not result

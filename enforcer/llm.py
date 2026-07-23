@@ -12,7 +12,9 @@ from enforcer.types import Match, FileContext, LLMConsequence, LLMConfig, Provid
 class ExecutorProtocol(Protocol):
     """Public contract for LLM consequence executors: apply consequences to matches."""
     def execute(self, matches: list[Match], consequence: LLMConsequence | None,
-                file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]: ...
+                file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Attach the LLM consequence's response to the given matches."""
+        ...
 
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)

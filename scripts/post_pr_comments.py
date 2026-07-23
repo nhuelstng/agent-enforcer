@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Lazy import: tests patch the module-level names above.
     if Github is None:
-        from github import Github as _Github  # type: ignore
+        from github import Github as _Github  # type: ignore[import-not-found]  # PyGithub is an optional CI-only dep
         globals()["Github"] = _Github
     if post_comments is None:
         from scripts.pr_commenter import post_comments as _post_comments

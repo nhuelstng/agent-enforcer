@@ -65,11 +65,8 @@ jobs:
           python-version: "3.11"
       - name: build-wheel
         run: pip install build && python -m build --wheel
-      # ponytail: report-only while the pre-existing full-scan backlog is being cleared —
-      # SARIF still uploads to code-scanning. Drop continue-on-error to make the audit
-      # blocking once the backlog PR lands.
+      # Full audit is blocking: the repo is clean under `enforcer check --all`.
       - uses: ./.github/actions/enforcer
-        continue-on-error: true
         with:
           install-method: wheel
           base-ref: ""

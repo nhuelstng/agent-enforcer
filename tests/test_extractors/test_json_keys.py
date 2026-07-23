@@ -32,3 +32,26 @@ def test_json_malformed():
 def test_json_nested_keys_top_level_only():
     raw = json.dumps({"top": "val", "nested": {"inner": "should-be-skipped"}})
     assert JsonKeys().extract(raw) == {"top", "nested"}
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw,key", [
+    ('{"name": "x"}', "name"),
+    ('{"a": 1, "b": 2, "c": 3}', "b"),
+    ('{"version": "1.0", "private": true}', "private"),
+])
+def test_json_extracts_key(raw, key):
+    """Top-level object keys are present in the extracted set."""
+    assert key in JsonKeys().extract(raw)
+
+
+@pytest.mark.parametrize("raw,key", [
+    ('{"name": "x"}', "surname"),
+    ('{}', "anything"),
+    ('[1, 2, 3]', "0"),
+])
+def test_json_absent_key(raw, key):
+    """Missing keys, empty objects, and non-objects yield no such key."""
+    assert not (key in JsonKeys().extract(raw))

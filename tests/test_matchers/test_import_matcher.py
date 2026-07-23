@@ -74,3 +74,26 @@ def test_import_matcher_no_ast_returns_empty():
     ctx = FileContext(path="test.py", raw="from app.jobs import x")
     matcher = ImportMatcher(forbidden_patterns=[r"app\.jobs"])
     assert matcher.find(ctx) == []
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", [
+    "from app.jobs.broker import dispatch\n",
+    "import app.jobs.worker\n",
+    "from app.jobs.auto import run\n",
+])
+def test_import_flags_violation(raw):
+    """Imports matching a forbidden pattern are flagged."""
+    assert ImportMatcher(forbidden_patterns=[r"app\.jobs\."]).find(_make_ctx(raw))
+
+
+@pytest.mark.parametrize("raw", [
+    "from app.services.artifact import foo\n",
+    "import os\n",
+    "from app.models.user import User\n",
+])
+def test_import_passes_clean(raw):
+    """Imports not matching any forbidden pattern pass cleanly."""
+    assert not ImportMatcher(forbidden_patterns=[r"app\.jobs\."]).find(_make_ctx(raw))

@@ -28,3 +28,20 @@ def test_any_of_none_match():
         RegexMatcher(r"\bconst\b"),
     ])
     assert m.find(ctx) == []
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", ["a\n", "a b\n", "aaa\n"])
+def test_any_of_flags_violation(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = AnyOf([RegexMatcher(r"a"), RegexMatcher(r"\bdebugger\b")]).find(ctx)
+    assert result
+
+
+@pytest.mark.parametrize("raw", ["\n", "z\n", "qqq\n"])
+def test_any_of_passes_clean(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = AnyOf([RegexMatcher(r"a"), RegexMatcher(r"\bdebugger\b")]).find(ctx)
+    assert not result

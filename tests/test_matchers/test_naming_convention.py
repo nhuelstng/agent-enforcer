@@ -90,3 +90,30 @@ def test_variable_naming():
     result = matcher.find(ctx)
     # Should return empty — no matching declaration_type nodes found
     assert result == []
+
+
+import pytest
+
+_SNAKE = r"^[a-z_][a-z0-9_]*$"
+
+
+@pytest.mark.parametrize("source", [
+    "def BadName():\n    pass\n",
+    "def CamelCase():\n    pass\n",
+    "def Also_Bad():\n    pass\ndef good():\n    pass\n",
+])
+def test_naming_flags_violation(source):
+    """Flags function names violating the snake_case pattern (>=3 cases)."""
+    matcher = NamingConventionMatcher(declaration_types=["function_definition"], pattern=_SNAKE)
+    assert matcher.find(_make_ctx(source))
+
+
+@pytest.mark.parametrize("source", [
+    "def good_name():\n    pass\n",
+    "def another_good():\n    pass\n",
+    "def a():\n    pass\ndef b_c():\n    pass\n",
+])
+def test_naming_passes_clean(source):
+    """No match when all function names are snake_case (>=3 cases)."""
+    matcher = NamingConventionMatcher(declaration_types=["function_definition"], pattern=_SNAKE)
+    assert not matcher.find(_make_ctx(source))

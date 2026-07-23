@@ -207,3 +207,36 @@ def test_keyset_sync_sorted_output():
     matches = matcher.find(source, shared)
     values = [m.matched_value for m in matches]
     assert values == ["ALPHA", "MIKE", "ZEBRA"]
+
+
+def _mk_matcher():
+    return KeySetSyncMatcher(
+        source_extractor=EnvFileKeys(),
+        target_extractor=TerraformBlockKeys(block_name="app_environment"),
+        target_globs=["infra/*/main.tf"],
+    )
+
+
+@pytest.mark.parametrize("raw", [
+    "FOO=1\nBAR=2\n",
+    "ONLY=1\n",
+    "A=1\nB=2\nC=3\n",
+])
+def test_keyset_sync_flags_violation(raw):
+    """Source keys absent from all targets are flagged."""
+    source = _ctx(".env", raw)
+    assert _mk_matcher().find(source, {})
+
+
+@pytest.mark.parametrize("env_raw,tf_keys", [
+    ("FOO=1\n", ["FOO"]),
+    ("A=1\nB=2\n", ["A", "B"]),
+    ("X=9\n", ["X"]),
+])
+def test_keyset_sync_passes_clean(env_raw, tf_keys):
+    """Source keys all present in a target file pass cleanly."""
+    source = _ctx(".env", env_raw)
+    body = "".join(f'  {k} = "v"\n' for k in tf_keys)
+    tf_raw = "app_environment = {\n" + body + "}\n"
+    shared = {"infra/dev/main.tf": _ctx("infra/dev/main.tf", tf_raw)}
+    assert not _mk_matcher().find(source, shared)

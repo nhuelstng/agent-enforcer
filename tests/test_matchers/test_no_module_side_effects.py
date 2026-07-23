@@ -83,3 +83,23 @@ class TestNoModuleSideEffectsClean:
     def test_no_ast_returns_empty(self):
         ctx = FileContext(path="x.py", raw="x = 1\n")
         assert NoModuleSideEffectsMatcher().find(ctx) == []
+
+
+@pytest.mark.parametrize("source", [
+    'import os\nprint("hi")\n',
+    "import os\nregister_plugin()\n",
+    "import os\nfor x in range(3):\n    pass\n",
+])
+def test_side_effects_flags_violation(source):
+    """Flags module-level side-effect statements (>=3 parametrized cases)."""
+    assert NoModuleSideEffectsMatcher().find(_make_ctx(source))
+
+
+@pytest.mark.parametrize("source", [
+    "import os\nCONSTANT = 42\n",
+    "def foo():\n    return 1\n",
+    "class Bar:\n    pass\n",
+])
+def test_side_effects_passes_clean(source):
+    """No match on modules with only imports/defs/assignments (>=3 cases)."""
+    assert not NoModuleSideEffectsMatcher().find(_make_ctx(source))

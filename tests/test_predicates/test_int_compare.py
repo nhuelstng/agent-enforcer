@@ -22,3 +22,16 @@ def test_int_non_numeric():
 def test_int_negative():
     m = Match(file="x", line=1, matched_value="-5")
     assert IntPredicate(op="<", value=0).test(m) is True
+
+
+import pytest
+
+
+@pytest.mark.parametrize("value", ["6", "7", "10"])
+def test_int_gt_passes(value):
+    assert IntPredicate(op=">", value=5).test(Match(file="x", line=1, matched_value=value)) is True
+
+
+@pytest.mark.parametrize("value", ["1", "2", "5"])
+def test_int_gt_fails(value):
+    assert not IntPredicate(op=">", value=5).test(Match(file="x", line=1, matched_value=value))

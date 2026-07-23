@@ -95,14 +95,20 @@ class MagicNumberMatcher:
     def _is_in_constant_assignment(self, node) -> bool:
         parent = node.parent
         while parent:
-            if parent.type == "assignment":
-                target = parent.children[0] if parent.children else None
-                if target and target.type == "identifier":
-                    name = node_text(target)
-                    if re.match(r'^[A-Z][A-Z0-9_]*$', name):
-                        return True
+            if self._is_constant_assignment(parent):
+                return True
             parent = parent.parent
         return False
+
+    @staticmethod
+    def _is_constant_assignment(parent) -> bool:
+        """True if `parent` is an assignment to an ALL_CAPS constant name."""
+        if parent.type != "assignment":
+            return False
+        target = parent.children[0] if parent.children else None
+        if not target or target.type != "identifier":
+            return False
+        return bool(re.match(r'^[A-Z][A-Z0-9_]*$', node_text(target)))
 
     def _is_in_parameter_default(self, node) -> bool:
         parent = node.parent

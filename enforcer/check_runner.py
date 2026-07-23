@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_JUNK_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
+_JUNK_DIRS = {".git", ".worktrees", "node_modules", "__pycache__", ".venv", "venv",
                ".pytest_cache", ".mypy_cache", ".tox", "dist", "build",
                "*.egg-info"}
 
@@ -51,14 +51,20 @@ def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = 
 
     changed: set[int] = set()
     for line in result.stdout.splitlines():
-        if line.startswith("@@"):
-            m = re.search(r'\+(\d+)(?:,(\d+))?', line)
-            if m:
-                start = int(m.group(1))
-                count = int(m.group(2)) if m.group(2) else 1
-                for i in range(start, start + count):
-                    changed.add(i)
+        changed.update(_hunk_added_lines(line))
     return changed
+
+
+def _hunk_added_lines(line: str) -> set[int]:
+    """Return the added line numbers a single `@@ ... @@` diff hunk header introduces."""
+    if not line.startswith("@@"):
+        return set()
+    m = re.search(r'\+(\d+)(?:,(\d+))?', line)
+    if not m:
+        return set()
+    start = int(m.group(1))
+    count = int(m.group(2)) if m.group(2) else 1
+    return set(range(start, start + count))
 
 
 def _parse_name_status(diff_output: str) -> tuple[list[str], dict[str, str]]:
@@ -87,24 +93,27 @@ def _parse_name_status(diff_output: str) -> tuple[list[str], dict[str, str]]:
     return files, status_map
 
 
+def _read_commit_msg(ws: str) -> str:
+    """Return the first non-Merge line of the pending commit message, or ''.
+
+    Reads ENFORCER_COMMIT_MSG_FILE if set, else the repo's .git/COMMIT_EDITMSG."""
+    msg_file = os.environ.get("ENFORCER_COMMIT_MSG_FILE")
+    msg_path = Path(msg_file) if msg_file else Path(ws, ".git", "COMMIT_EDITMSG")
+    if not msg_path.exists():
+        return ""
+    try:
+        lines = msg_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    first_line = lines[0] if lines else ""
+    return "" if first_line.startswith("Merge") else first_line
+
+
 def build_change_context(ws: str, status_map: dict[str, str]) -> "ChangeContext":
     """Build ChangeContext from git metadata + status_map. Reads commit msg + branch."""
     from enforcer.types import ChangeContext
 
-    commit_msg = ""
-    msg_file = os.environ.get("ENFORCER_COMMIT_MSG_FILE")
-    if msg_file:
-        msg_path = Path(msg_file)
-    else:
-        msg_path = Path(ws, ".git", "COMMIT_EDITMSG")
-    if msg_path.exists():
-        try:
-            content = msg_path.read_text(encoding="utf-8", errors="replace")
-            first_line = content.splitlines()[0] if content.splitlines() else ""
-            if not first_line.startswith("Merge"):
-                commit_msg = first_line
-        except OSError:
-            pass
+    commit_msg = _read_commit_msg(ws)
 
     branch = ""
     try:
@@ -147,14 +156,33 @@ def collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_ref
         )
         return _parse_name_status(result.decode())
     if all_files:
-        file_list = []
-        for root, dirs, files in os.walk(ws):
-            dirs[:] = [d for d in dirs if not _glob_any_match(d, _JUNK_DIRS)]
-            for f in files:
-                rel = os.path.relpath(os.path.join(root, f), ws)
-                file_list.append(rel)
-        return file_list, {}
+        return _walk_repo_files(ws), {}
     return list(paths), {}
+
+
+def _walk_repo_files(ws: str) -> list[str]:
+    """Return every repo-relative file under ws, skipping junk dirs (.git, build, .worktrees, ...)."""
+    file_list: list[str] = []
+    for root, dirs, files in os.walk(ws):
+        dirs[:] = [d for d in dirs if not _glob_any_match(d, _JUNK_DIRS)]
+        file_list.extend(os.path.relpath(os.path.join(root, f), ws) for f in files)
+    return file_list
+
+
+def _load_read_targets(rules: list, builder, ws: str, shared_ctx: dict) -> None:
+    """Cache a FileContext for every path matched by any rule's read_targets globs."""
+    root = Path(ws)
+    targets = {t for rule in rules for t in getattr(rule, "read_targets", [])}
+    for target in targets:
+        _cache_glob_matches(root, ws, target, builder, shared_ctx)
+
+
+def _cache_glob_matches(root: Path, ws: str, target: str, builder, shared_ctx: dict) -> None:
+    """Build and cache a FileContext for each path matching one read_target glob."""
+    for match in root.glob(target):
+        rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
+        if rel not in shared_ctx:
+            shared_ctx[rel] = builder.build(rel)
 
 
 def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = None,
@@ -164,13 +192,7 @@ def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = 
     shared_ctx["__rules__"] = config.rules
     shared_ctx["__workspace__"] = config.workspace or ws
     shared_ctx["__rendered_doc__"] = rendered_doc or ""
-    for rule in config.rules:
-        for target in getattr(rule, "read_targets", []):
-            root = Path(ws)
-            for match in root.glob(target):
-                rel = str(match.relative_to(ws)) if match.is_relative_to(ws) else str(match)
-                if rel not in shared_ctx:
-                    shared_ctx[rel] = builder.build(rel)
+    _load_read_targets(config.rules, builder, ws, shared_ctx)
     if staged_files and _needs_import_graph(config.rules):
         from enforcer.import_graph import ImportGraphBuilder
         graph_builder = ImportGraphBuilder(
@@ -220,9 +242,7 @@ def run_check_pass(runner, builder, config, file_list: list[str], options: "Chec
     # finalizer rules also run under --all.
     shared_ctx["__all_files__"] = options.all_files
 
-    all_matches = run_checks(runner, builder, file_list, shared_ctx, ws, options.staged,
-                             diff_ref=options.diff_ref, status_map=options.status_map,
-                             all_files=options.all_files)
+    all_matches = run_checks(runner, builder, file_list, shared_ctx, options)
     all_matches.extend(runner.run_metadata_rules(shared_ctx))
     all_matches.extend(runner.run_cross_file_finalizers(shared_ctx))
     return all_matches
@@ -238,30 +258,37 @@ def _all_line_numbers(ctx) -> set[int] | None:
     return set(range(1, ctx.raw.count("\n") + 2))
 
 
-def run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool,
-               diff_ref: str | None = None, status_map: dict[str, str] | None = None,
-               all_files: bool = False) -> list:
-    """Run rules against each file, return aggregated matches."""
+def _ctx_for_file(builder, path: str, ws: str, options: "CheckOptions"):
+    """Build a file's context with changed_lines set per the scan mode.
+
+    diff_ref → lines changed vs the ref; staged → lines changed in the index;
+    all_files → every line (full audit); otherwise the plain file (diff_only rules
+    are suppressed). Each branch is a guard clause so the modes stay flat and explicit."""
     import dataclasses
+    ctx = builder.build(path)
+    status = options.status_map.get(path, "modified")
+    if options.diff_ref is not None:
+        return dataclasses.replace(ctx, status=status,
+                                   changed_lines=_parse_diff_changed_lines(ws, path, ref=options.diff_ref))
+    if options.staged:
+        return dataclasses.replace(ctx, status=status,
+                                   changed_lines=_parse_diff_changed_lines(ws, path))
+    if options.all_files:
+        return dataclasses.replace(ctx, status=status, changed_lines=_all_line_numbers(ctx))
+    if status != "modified":
+        return dataclasses.replace(ctx, status=status)
+    return ctx
+
+
+def run_checks(runner, builder, file_list: list[str], shared_ctx: dict, options: "CheckOptions") -> list:
+    """Run per-file rules across file_list and return aggregated matches.
+
+    Scan mode (diff/staged/all) comes from options; the workspace from the runner."""
     from enforcer.types import Match
-    status_map = status_map or {}
+    ws = runner.workspace
     all_matches: list[Match] = []
     for f in file_list:
         if not f:
             continue
-        ctx = builder.build(f)
-        status = status_map.get(f, "modified")
-        if diff_ref is not None:
-            ctx = dataclasses.replace(ctx, status=status,
-                                      changed_lines=_parse_diff_changed_lines(ws, f, ref=diff_ref))
-        elif staged:
-            ctx = dataclasses.replace(ctx, status=status,
-                                      changed_lines=_parse_diff_changed_lines(ws, f))
-        elif all_files:
-            ctx = dataclasses.replace(ctx, status=status, changed_lines=_all_line_numbers(ctx))
-        else:
-            if status != "modified":
-                ctx = dataclasses.replace(ctx, status=status)
-        matches = runner.run_rules_for_file(ctx, shared_ctx)
-        all_matches.extend(matches)
+        all_matches.extend(runner.run_rules_for_file(_ctx_for_file(builder, f, ws, options), shared_ctx))
     return all_matches

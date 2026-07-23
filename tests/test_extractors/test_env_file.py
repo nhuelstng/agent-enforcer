@@ -28,3 +28,26 @@ def test_env_file_value_contains_equals():
 def test_env_file_strips_whitespace_around_key():
     raw = "  SPACED  =value\n\tTABBED\t=1"
     assert EnvFileKeys().extract(raw) == {"SPACED", "TABBED"}
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw,key", [
+    ("FOO=bar", "FOO"),
+    ("A=1\nB=2", "B"),
+    ("URL=http://example.com", "URL"),
+])
+def test_env_extracts_key(raw, key):
+    """KEY names before '=' are present in the extracted set."""
+    assert key in EnvFileKeys().extract(raw)
+
+
+@pytest.mark.parametrize("raw,key", [
+    ("FOO=bar", "BAR"),
+    ("# just a comment", "comment"),
+    ("NOEQUALS", "NOEQUALS"),
+])
+def test_env_absent_key(raw, key):
+    """Comments, value tokens, and keyless lines produce no such key."""
+    assert not (key in EnvFileKeys().extract(raw))

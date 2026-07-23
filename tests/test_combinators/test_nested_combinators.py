@@ -31,3 +31,20 @@ def test_deeply_nested():
     ])
     matches = m.find(ctx)
     assert len(matches) >= 2
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", ["a\n", "a b\n", "aaa\n"])
+def test_nested_flags_violation(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = AllOf([AnyOf([RegexMatcher(r"a")])]).find(ctx)
+    assert result
+
+
+@pytest.mark.parametrize("raw", ["\n", "z\n", "qqq\n"])
+def test_nested_passes_clean(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = AllOf([AnyOf([RegexMatcher(r"a")])]).find(ctx)
+    assert not result

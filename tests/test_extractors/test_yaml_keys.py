@@ -51,3 +51,23 @@ def test_yaml_missing_pyyaml_raises_import_error(monkeypatch):
 
     with pytest.raises(ImportError, match="PyYAML"):
         YamlKeys().extract("key: value\n")
+
+
+@pytest.mark.parametrize("raw,key", [
+    ("name: app\n", "name"),
+    ("a: 1\nb: 2\n", "b"),
+    ("version: 1.0\nprivate: true\n", "private"),
+])
+def test_yaml_extracts_key(raw, key):
+    """Top-level mapping keys are present in the extracted set."""
+    assert key in YamlKeys().extract(raw)
+
+
+@pytest.mark.parametrize("raw,key", [
+    ("name: app\n", "surname"),
+    ("- a\n- b\n", "a"),
+    ("{}", "anything"),
+])
+def test_yaml_absent_key(raw, key):
+    """Missing keys, lists, and empty mappings yield no such key."""
+    assert not (key in YamlKeys().extract(raw))

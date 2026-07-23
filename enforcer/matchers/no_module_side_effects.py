@@ -36,24 +36,25 @@ class NoModuleSideEffectsMatcher:
         if not file_ctx.ast:
             return []
         matches: list[Match] = []
-        root = file_ctx.ast.root_node
-        for child in root.children:
-            if child.type == "comment":
-                continue
-            if child.type in _ALLOWED_TOP_LEVEL:
-                if self._is_side_effect_expression(child):
-                    matches.append(Match(
-                        file=file_ctx.path,
-                        line=child.start_point[0] + 1,
-                        matched_value="expression_statement",
-                    ))
-                continue
-            matches.append(Match(
-                file=file_ctx.path,
-                line=child.start_point[0] + 1,
-                matched_value=child.type,
-            ))
+        for child in file_ctx.ast.root_node.children:
+            m = self._match_for_child(child, file_ctx.path)
+            if m is not None:
+                matches.append(m)
         return matches
+
+    def _match_for_child(self, child, path: str) -> Match | None:
+        """Return a violation Match for a top-level node, or None if it's allowed.
+
+        Comments are ignored; an allowed statement type only offends when it is a
+        side-effecting expression (a call); any other top-level type offends outright."""
+        if child.type == "comment":
+            return None
+        line = child.start_point[0] + 1
+        if child.type in _ALLOWED_TOP_LEVEL:
+            if self._is_side_effect_expression(child):
+                return Match(file=path, line=line, matched_value="expression_statement")
+            return None
+        return Match(file=path, line=line, matched_value=child.type)
 
     def _is_side_effect_expression(self, node) -> bool:
         if node.type != "expression_statement":

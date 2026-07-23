@@ -22,17 +22,16 @@ class AllSortedMatcher:
             return []
         matches: list[Match] = []
         for m in re.finditer(r'__all__\s*=\s*\[([^\]]*)\]', file_ctx.raw, re.DOTALL):
-            list_body = m.group(1)
-            entries = re.findall(r'["\']([^"\']+)["\']', list_body)
-            if len(entries) < 2:
-                continue
-            for i in range(1, len(entries)):
-                if entries[i] < entries[i - 1]:
-                    line = file_ctx.raw[:m.start()].count("\n") + 1
-                    matches.append(Match(
-                        file=file_ctx.path,
-                        line=line,
-                        matched_value=entries[i],
-                    ))
-                    break
+            offender = self._first_unsorted(re.findall(r'["\']([^"\']+)["\']', m.group(1)))
+            if offender is not None:
+                line = file_ctx.raw[:m.start()].count("\n") + 1
+                matches.append(Match(file=file_ctx.path, line=line, matched_value=offender))
         return matches
+
+    @staticmethod
+    def _first_unsorted(entries: list[str]) -> str | None:
+        """Return the first entry that breaks alphabetical (case-sensitive) order, or None."""
+        for i in range(1, len(entries)):
+            if entries[i] < entries[i - 1]:
+                return entries[i]
+        return None

@@ -25,3 +25,18 @@ def test_file_exists_via_shared_ctx():
     matcher = FileExistsMatcher(read_target="colors.scss")
     matches = matcher.find(ctx, shared)
     assert len(matches) == 1
+
+
+@pytest.mark.parametrize("target", ["colors.scss", "vars.css", "theme.less"])
+def test_file_exists_flags_violation(target):
+    """Emits a match when the target is present in shared_ctx."""
+    ctx = FileContext(path="src/app.ts", raw="const x = 1;")
+    shared = {target: FileContext(path=target, raw="--x: 1;")}
+    assert FileExistsMatcher(read_target=target).find(ctx, shared)
+
+
+@pytest.mark.parametrize("target", ["nope.scss", "absent.css", "missing.less"])
+def test_file_exists_passes_clean(target):
+    """Emits no match when the target does not exist."""
+    ctx = FileContext(path="src/app.ts", raw="const x = 1;")
+    assert not FileExistsMatcher(read_target=target, workspace=".").find(ctx, {})

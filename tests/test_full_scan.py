@@ -2,7 +2,7 @@
 
 Regression guard: previously --all left changed_lines unset, so diff_only rules were
 silently skipped and a full scan reported far fewer issues than it should."""
-from enforcer.check_runner import run_checks, _all_line_numbers
+from enforcer.check_runner import run_checks, _all_line_numbers, CheckOptions
 from enforcer.context import FileContextBuilder
 from enforcer.runner import RuleRunner
 from enforcer.rule import Rule
@@ -31,15 +31,14 @@ def _setup(tmp_path):
 def test_all_files_fires_diff_only_rule(tmp_path):
     """With all_files=True a diff_only rule fires across the whole file."""
     runner, builder = _setup(tmp_path)
-    matches = run_checks(runner, builder, ["a.py"], {}, str(tmp_path),
-                         staged=False, all_files=True)
+    matches = run_checks(runner, builder, ["a.py"], {}, CheckOptions(staged=False, all_files=True))
     assert [m.rule_id for m in matches] == ["no-todo"]
 
 
 def test_default_mode_suppresses_diff_only_rule(tmp_path):
     """Without staged/diff/all context a diff_only rule stays suppressed (unchanged behaviour)."""
     runner, builder = _setup(tmp_path)
-    matches = run_checks(runner, builder, ["a.py"], {}, str(tmp_path), staged=False)
+    matches = run_checks(runner, builder, ["a.py"], {}, CheckOptions(staged=False))
     assert matches == []
 
 

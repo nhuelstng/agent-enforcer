@@ -98,3 +98,26 @@ def test_shared_ctx_none_default():
     matcher = DocstringMatcher()
     matches = matcher.find(ctx, shared_ctx=None)
     assert len(matches) == 1
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", [
+    "def alpha():\n    pass\n",
+    "def beta():\n    x = 1\n    return x\n",
+    "class C:\n    def method(self):\n        return 2\n",
+])
+def test_docstring_flags_violation(raw):
+    """Public callables without a docstring are flagged."""
+    assert _make_ctx(raw) and DocstringMatcher().find(_make_ctx(raw))
+
+
+@pytest.mark.parametrize("raw", [
+    'def alpha():\n    """Doc."""\n    pass\n',
+    "def _private():\n    pass\n",
+    'class C:\n    def method(self):\n        """Doc."""\n        return 2\n',
+])
+def test_docstring_passes_clean(raw):
+    """Documented publics and private callables pass cleanly."""
+    assert not DocstringMatcher().find(_make_ctx(raw))
