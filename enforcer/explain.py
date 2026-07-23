@@ -9,24 +9,11 @@ from typing import Any
 
 from enforcer.rule import Rule
 from enforcer.matcher_tree import walk_with_depth
+from enforcer.rule_view import parse_docstring_sections as _parse_docstring_sections, paired_test as _find_paired_test
 
 _INDENT_PAD = 13
 _SNIPPET_PAD = 17
 from enforcer.types import RuleType
-
-_SECTION_RE = re.compile(r'^\s*(What|Ignores|Basis|shared_ctx)\s*:\s*(.+)$', re.MULTILINE)
-
-
-def _parse_docstring_sections(doc: str | None) -> dict[str, str]:
-    """Parse a matcher class docstring into labeled sections (What/Ignores/Basis/shared_ctx).
-
-    Returns dict mapping section label -> text. Missing sections omitted.
-    Each section is single-line: 'Label: value' on one line. Multi-line section bodies
-    are truncated to the first line (by design — the docstring convention is one-line sections).
-    """
-    if not doc:
-        return {}
-    return {m.group(1): m.group(2).strip() for m in _SECTION_RE.finditer(doc)}
 
 
 @dataclass
@@ -54,30 +41,6 @@ def render_matcher_explainer(matcher) -> MatcherExplainer:
         docstring_sections=sections,
         configured_params=configured,
     )
-
-
-def _snake_case_class(class_name: str) -> str:
-    """Convert CamelCase class name to snake_case: RegexMatcher -> regex_matcher."""
-    s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', class_name)
-    return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
-
-
-def _find_paired_test(class_name: str, workspace: str) -> Path | None:
-    """Locate the paired test file for a matcher class.
-
-    Tries (in order): tests/test_matchers/test_{snake}.py, tests/test_matchers/test_{snake_without_matcher}.py.
-    Returns Path of first existing match, or None.
-    """
-    snake = _snake_case_class(class_name)
-    candidates = [
-        f"tests/test_matchers/test_{snake}.py",
-        f"tests/test_matchers/test_{snake.replace('_matcher', '')}.py",
-    ]
-    for rel in candidates:
-        p = Path(workspace) / rel
-        if p.exists():
-            return p
-    return None
 
 
 @dataclass

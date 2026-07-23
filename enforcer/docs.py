@@ -1,9 +1,9 @@
 """Rule documentation generator: renders configured rules as markdown."""
 from __future__ import annotations
-import inspect
 import re
 from enforcer.rule import Rule
 from enforcer.types import RuleType, Severity
+from enforcer.rule_view import matcher_sections, paired_test
 
 def render_rules_markdown(rules: list[Rule]) -> str:
     """Render configured rules as a markdown document."""
@@ -97,27 +97,16 @@ def _render_rule_doc(rule: Rule) -> list[str]:
     return out
 
 
-def _extract_what_line(matcher) -> str:
-    """Extract the 'What:' line from a matcher's docstring, or empty string."""
-    doc = inspect.getdoc(matcher) or ""
-    for line in doc.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("What:"):
-            return stripped[len("What:"):].strip()
-    return ""
-
-
 def _render_matcher_doc_line(matcher) -> str:
     """Render a single matcher as a markdown bullet with class name + What + test link."""
     cls_name = type(matcher).__name__
-    what_line = _extract_what_line(matcher)
+    what_line = matcher_sections(matcher).get("What", "")
     if what_line:
         out = [f"- `{cls_name}` — {what_line}"]
     else:
         out = [f"- `{cls_name}`"]
     try:
-        from enforcer.explain import _find_paired_test
-        test_path = _find_paired_test(cls_name, ".")
+        test_path = paired_test(cls_name, ".")
         if test_path:
             out.append(f"  - Tests: `{test_path}`")
     except Exception:
