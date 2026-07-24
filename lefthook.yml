@@ -1,0 +1,20 @@
+# lefthook configuration for pre-commit-agent-enforcer.
+#
+# Use `--staged` (not lefthook's {staged_files} template): the enforcer
+# discovers staged files itself and computes changed lines via
+# `git diff --cached`. Passing files positionally suppresses diff_only rules.
+#
+# Acknowledge WARN findings by setting ENFORCER_CONFIRM_WARNINGS=1 (ERROR
+# rules always block). Do not run `enforcer install` when lefthook owns the
+# commit-msg hook — they would both write .git/hooks/commit-msg.
+pre-commit:
+  commands:
+    enforcer:
+      run: python -m enforcer.cli check --staged --config enforcer_config
+
+commit-msg:
+  commands:
+    enforcer:
+      env:
+        ENFORCER_COMMIT_MSG_FILE: "{1}"
+      run: python -m enforcer.cli check --staged --config enforcer_config
