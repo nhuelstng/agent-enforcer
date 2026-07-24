@@ -81,6 +81,10 @@ enforcer install
 enforcer install --force
 ```
 
+## Hook managers
+
+Any hook manager can drive the enforcer (it exits non-zero on violations). A ready [`lefthook.yml`](lefthook.yml) ships at the repo root — run `lefthook install` to enable it. Its comments cover the essentials: keep `--staged` (not a `{staged_files}` template) so [`diff_only`](#diff-awareness) rules keep firing, let only one tool own `commit-msg`, and acknowledge WARN findings with `ENFORCER_CONFIRM_WARNINGS=1`.
+
 ## Configuration
 
 All configuration lives in `enforcer_config.py`. The module exposes top-level
