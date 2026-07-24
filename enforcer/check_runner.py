@@ -196,6 +196,9 @@ class CheckOptions:
     diff_ref: str | None = None
     rendered_doc: str = ""
     no_llm: bool = False
+    # ponytail: full-repo scan. Every line counts as in-scope, so diff_only rules
+    # fire on the whole file (a full audit has no diff to gate against).
+    all_files: bool = False
 
 
 def run_check_pass(runner, builder, config, file_list: list[str], options: "CheckOptions") -> list:
@@ -213,16 +216,31 @@ def run_check_pass(runner, builder, config, file_list: list[str], options: "Chec
     shared_ctx["__change__"] = build_change_context(ws, options.status_map)
     shared_ctx["__llm_enabled__"] = not options.no_llm
     shared_ctx["__llm_config__"] = config.llm_config
+    # ponytail: full-scan flag read by run_cross_file_finalizers so diff_only
+    # finalizer rules also run under --all.
+    shared_ctx["__all_files__"] = options.all_files
 
     all_matches = run_checks(runner, builder, file_list, shared_ctx, ws, options.staged,
-                             diff_ref=options.diff_ref, status_map=options.status_map)
+                             diff_ref=options.diff_ref, status_map=options.status_map,
+                             all_files=options.all_files)
     all_matches.extend(runner.run_metadata_rules(shared_ctx))
     all_matches.extend(runner.run_cross_file_finalizers(shared_ctx))
     return all_matches
 
 
+def _all_line_numbers(ctx) -> set[int] | None:
+    """Return every 1-based line number of a file, or None when its text is unavailable.
+
+    A full scan marks the whole file as in-scope so diff_only rules fire on every line
+    (there is no diff to gate against); an unreadable file stays None and is skipped."""
+    if ctx.raw is None:
+        return None
+    return set(range(1, ctx.raw.count("\n") + 2))
+
+
 def run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str, staged: bool,
-               diff_ref: str | None = None, status_map: dict[str, str] | None = None) -> list:
+               diff_ref: str | None = None, status_map: dict[str, str] | None = None,
+               all_files: bool = False) -> list:
     """Run rules against each file, return aggregated matches."""
     import dataclasses
     from enforcer.types import Match
@@ -239,6 +257,8 @@ def run_checks(runner, builder, file_list: list[str], shared_ctx: dict, ws: str,
         elif staged:
             ctx = dataclasses.replace(ctx, status=status,
                                       changed_lines=_parse_diff_changed_lines(ws, f))
+        elif all_files:
+            ctx = dataclasses.replace(ctx, status=status, changed_lines=_all_line_numbers(ctx))
         else:
             if status != "modified":
                 ctx = dataclasses.replace(ctx, status=status)

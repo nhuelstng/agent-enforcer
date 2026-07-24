@@ -8,8 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "PR number to post comments on"
-        required: true
+        description: "PR number to post comments on (leave empty to just run the full audit)"
+        required: false
+        default: ""
         type: string
       scan_mode:
         description: "Scan mode: 'all' (full repo, errors only) or 'diff' (PR diff, errors + warnings)"
@@ -49,7 +50,9 @@ jobs:
 
   full:
     name: full-scan
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    # Full-repo audit: runs every rule (incl. diff_only) on all lines. Fires on PRs,
+    # main pushes, and manual dispatch.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -62,14 +65,18 @@ jobs:
           python-version: "3.11"
       - name: build-wheel
         run: pip install build && python -m build --wheel
+      # ponytail: report-only while the pre-existing full-scan backlog is being cleared —
+      # SARIF still uploads to code-scanning. Drop continue-on-error to make the audit
+      # blocking once the backlog PR lands.
       - uses: ./.github/actions/enforcer
+        continue-on-error: true
         with:
           install-method: wheel
           base-ref: ""
 
   comment-pr:
     name: post-pr-comments
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read

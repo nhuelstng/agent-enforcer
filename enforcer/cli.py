@@ -32,7 +32,7 @@ def _assert_output_contained(output: str, ws: str) -> None:
 @cli.command()
 @click.argument("files", nargs=-1)
 @click.option("--staged", is_flag=True, help="Check staged files only")
-@click.option("--all", "all_files", is_flag=True, help="Check entire repo")
+@click.option("--all", "all_files", is_flag=True, help="Check entire repo (runs every rule, incl. diff_only, on all lines)")
 @click.option("--paths", multiple=True, help="Check specific files")
 @click.option("--format", "fmt", default="text", type=click.Choice(["json", "text", "sarif"]), help="Output format: text, json, or sarif")
 @click.option("--config", "config_path", default="enforcer_config", help="Path to enforcer config (file or package)")
@@ -97,7 +97,7 @@ def check(files, staged, all_files, paths, fmt, config_path, workspace, severity
 
     all_matches = _run_check_pass(runner, builder, config, file_list, CheckOptions(
         status_map=status_map, staged=staged, diff_ref=base_ref,
-        rendered_doc=rendered_doc, no_llm=no_llm,
+        rendered_doc=rendered_doc, no_llm=no_llm, all_files=all_files,
     ))
 
     if fix:
