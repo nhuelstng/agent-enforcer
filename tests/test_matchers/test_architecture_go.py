@@ -28,11 +28,11 @@ def _run(tmp_path: Path, importer_src: str, matcher: ArchitectureMatcher):
     """Write the importer, build the graph, run the matcher on it."""
     _write(tmp_path, "internal/api/handler.go", importer_src)
     builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
-    graph = ImportGraphBuilder(builder=builder, workspace=str(tmp_path)).build(
-        staged_files=["internal/api/handler.go"])
+    gb = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = gb.build(staged_files=["internal/api/handler.go"])
     ctx = FileContext(path="internal/api/handler.go", raw=importer_src)
     ctx.ast = parse(importer_src, Needs.AST_GO)
-    return matcher.find(ctx, {"__import_graph__": graph})
+    return matcher.find(ctx, {"__import_graph__": graph, "__import_lines__": gb.import_lines})
 
 
 @pytest.mark.parametrize("sibling", ["db", "cache", "auth"])

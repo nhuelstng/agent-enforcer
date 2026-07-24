@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs, ChangeContext
+from enforcer.check_context import CheckContext
 from enforcer.llm import call_llm, escape_content
 
 _JSON_PREAMBLE = (
@@ -26,13 +27,13 @@ class LLMMatcher:
     JSON output preferred; falls back to PASS/FAIL text scan.
     Fail-open on LLM errors (returns no matches).
 
-    provider/model default to None — resolved from shared_ctx['__llm_config__'] defaults.
+    provider/model default to None — resolved from the CheckContext llm_config defaults.
     Override per-matcher when a specific model is needed.
 
     What:       flags violations reported by the LLM (parsed from JSON `violations` array, or FAIL text fallback)
-    Ignores:    LLM-disabled runs (`__llm_enabled__ is False`); metadata mode with no change_ctx; merge commits (commit_msg starts with "Merge"); empty/error responses (fail-open); PASS verdicts
-    Basis:      RAW (sends file_ctx.raw or change context to LLM; cross-file via shared_ctx change metadata)
-    shared_ctx: reads `__llm_enabled__`, `__change__` (ChangeContext), `__llm_config__`
+    Ignores:    LLM-disabled runs (llm_enabled is False); metadata mode with no change_ctx; merge commits (commit_msg starts with "Merge"); empty/error responses (fail-open); PASS verdicts
+    Basis:      RAW (sends file_ctx.raw or change context to LLM; cross-file via change metadata)
+    shared_ctx: reads llm_enabled, change (ChangeContext), llm_config (via CheckContext)
     """
     prompt: str
     provider: str | None = None
@@ -42,21 +43,20 @@ class LLMMatcher:
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Call LLM, parse verdict, return Match list. Fail-open on errors. Returns list of Match."""
-        shared_ctx = shared_ctx if shared_ctx is not None else {}
-        if shared_ctx.get("__llm_enabled__") is False:
+        ctx = CheckContext.of(shared_ctx)
+        if ctx.llm_enabled is False:
             return []
 
         is_metadata = file_ctx.raw == "__enforcer_sentinel__"
-        change_ctx: ChangeContext | None = shared_ctx.get("__change__")
+        change_ctx: ChangeContext | None = ctx.change
         if is_metadata and not change_ctx:
             return []
         # ponytail: skip merge commits — LLM commit-message checks fire false positives on "Merge ..." messages
         if change_ctx and change_ctx.commit_msg.startswith("Merge"):
             return []
 
-        prompt = self._build_prompt(file_ctx, shared_ctx, is_metadata, change_ctx)
-        llm_config = shared_ctx.get("__llm_config__")
-        response = call_llm(self.provider, self.model, prompt, self.timeout, llm_config)
+        prompt = self._build_prompt(file_ctx, ctx, is_metadata, change_ctx)
+        response = call_llm(self.provider, self.model, prompt, self.timeout, ctx.llm_config)
         if not response:
             return []
 

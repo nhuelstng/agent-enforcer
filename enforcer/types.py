@@ -117,8 +117,8 @@ class ImportResult:
     """The outcome of resolving one file's imports: target paths + per-target import line.
 
     targets: repo-relative paths this file imports, resolved to on-disk files.
-    lines: {target: 1-based line of the import that produced the edge}; may be empty
-    when a language attributes lines lazily elsewhere (Go, via ast_utils.import_line_for)."""
+    lines: {target: 1-based line of the import that produced the edge}. Every resolver
+    records a line for every target it returns, so consumers never re-derive it."""
     targets: set[str] = field(default_factory=set)
     lines: dict[str, int] = field(default_factory=dict)
 

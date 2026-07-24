@@ -111,9 +111,9 @@ def test_check_conventions_empty_paths_not_staged():
         call_log.append({"staged": staged, "paths": paths})
         return [], {}
 
-    with patch("enforcer.mcp_server._collect_files", side_effect=fake_collect_files), \
-         patch("enforcer.mcp_server._run_check_pass", return_value=[]), \
-         patch("enforcer.mcp_server.RuleRunner"):
+    with patch("enforcer.check_service.collect_files", side_effect=fake_collect_files), \
+         patch("enforcer.check_service.run_check_pass", return_value=[]), \
+         patch("enforcer.check_service.RuleRunner"):
         check_conventions(paths=[])
     assert call_log, "collect_files must be called"
     assert call_log[0]["staged"] is False, "paths=[] must not imply staged=True"

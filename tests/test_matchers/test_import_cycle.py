@@ -40,6 +40,29 @@ def test_line_attribution():
     assert CycleMatcher().find(_ctx("a.py"), ctx)[0].line == 7
 
 
+def test_go_cycle_line_attribution_regression(tmp_path):
+    """Regression: a Go edge on a cycle reports its real import line, not 0.
+
+    Before uniform ImportResult.lines, the Go resolver recorded no lines and
+    CycleMatcher (which has no AST fallback) attributed every Go cycle edge to line 0."""
+    from enforcer.import_graph import ImportGraphBuilder
+    from enforcer.context import FileContextBuilder
+    (tmp_path / "go.mod").write_text("module example.com/proj\n\ngo 1.22\n")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a" / "a.go").write_text('package a\n\nimport "example.com/proj/b"\n\nvar _ = b.X\n')
+    (tmp_path / "b" / "b.go").write_text('package b\n\nimport "example.com/proj/a"\n\nvar _ = a.Y\n')
+    builder = FileContextBuilder(rules=[], workspace=str(tmp_path))
+    gb = ImportGraphBuilder(builder=builder, workspace=str(tmp_path))
+    graph = gb.build(staged_files=["a/a.go", "b/b.go"])
+    if "b/b.go" not in graph.get("a/a.go", set()):
+        pytest.skip("tree-sitter Go grammar not available")
+    ctx = {"__import_graph__": graph, "__import_lines__": gb.import_lines}
+    matches = CycleMatcher().find(_ctx("a/a.go"), ctx)
+    assert len(matches) == 1
+    assert matches[0].line == 3  # the `import "example.com/proj/b"` line, not 0
+
+
 def test_reachability_memoized_across_files():
     """Memoized reachability stays correct when reused across files in one shared_ctx."""
     graph = {"a.py": {"b.py"}, "b.py": {"a.py"}, "c.py": {"a.py"}}

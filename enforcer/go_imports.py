@@ -2,8 +2,8 @@
 
 A Go package is a directory; an import path resolves (against the go.mod module
 prefix) to every non-test .go file in that directory. Stdlib/third-party imports
-(outside the module prefix) resolve to nothing. Line attribution for a Go edge is
-resolved lazily by consumers via ast_utils.import_line_for.
+(outside the module prefix) resolve to nothing. Line attribution is recorded at
+resolution time into the returned ImportResult, like the other resolvers.
 """
 from __future__ import annotations
 import os
@@ -29,41 +29,44 @@ class GoImportResolver(ImportResolver):
         self.workspace = workspace
         # False = go.mod not yet read; None = no go.mod/module line; str = module path.
         self._module: str | None | bool = False
-        self._imports_cache: dict[str, set[str]] = {}
+        self._imports_cache: dict[str, dict[str, int]] = {}
 
     def resolve(self, path: str) -> ImportResult:
-        """Return the .go files a Go file's local imports resolve to.
+        """Return the .go files a Go file's local imports resolve to, with each edge's line.
 
-        lines stays empty: Go edge lines are attributed lazily by consumers via
-        ast_utils.import_line_for, not recorded here."""
+        Every resolved target is attributed to the line of the import_spec that produced
+        it; all files of one imported package share that package's import line."""
         module = self._module_path()
         if not module:
             return ImportResult()
         targets: set[str] = set()
-        for imp in self._extract_imports(path):
-            targets.update(self._resolve_import(imp, module))
-        return ImportResult(targets=targets)
+        lines: dict[str, int] = {}
+        for imp, line in self._extract_imports(path).items():
+            for target in self._resolve_import(imp, module):
+                targets.add(target)
+                lines.setdefault(target, line)
+        return ImportResult(targets=targets, lines=lines)
 
-    def _extract_imports(self, path: str) -> set[str]:
-        """Return the set of import-path strings declared in a Go file. Cached."""
+    def _extract_imports(self, path: str) -> dict[str, int]:
+        """Return {import-path string: 1-based import line} for a Go file. Cached."""
         if path not in self._imports_cache:
             from enforcer.types import Needs
             ctx = self.builder.build(path, force_needs={Needs.AST_GO})
-            self._imports_cache[path] = self._import_strings(ctx.ast.root_node) if ctx.ast else set()
+            self._imports_cache[path] = self._import_strings(ctx.ast.root_node) if ctx.ast else {}
         return self._imports_cache[path]
 
     @staticmethod
-    def _import_strings(root) -> set[str]:
-        """Collect the quoted path from every Go import_spec node under root."""
+    def _import_strings(root) -> dict[str, int]:
+        """Collect {quoted path: 1-based line} from every Go import_spec node under root."""
         from enforcer.parsers.ast_utils import walk_ast, node_text
-        imports: set[str] = set()
+        imports: dict[str, int] = {}
         for node in walk_ast(root):
             if node.type != "import_spec":
                 continue
             literal = next((c for c in node.children
                             if c.type in ("interpreted_string_literal", "raw_string_literal")), None)
             if literal is not None:
-                imports.add(node_text(literal).strip('"`'))
+                imports.setdefault(node_text(literal).strip('"`'), node.start_point[0] + 1)
         return imports
 
     def _resolve_import(self, import_path: str, module: str) -> list[str]:

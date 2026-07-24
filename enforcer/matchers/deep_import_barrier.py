@@ -3,8 +3,8 @@ from __future__ import annotations
 import fnmatch
 from dataclasses import dataclass, field
 from enforcer.types import Match, FileContext, Needs
+from enforcer.check_context import CheckContext
 from enforcer.glob_util import glob_match
-from enforcer.parsers.ast_utils import import_line_for
 
 
 @dataclass
@@ -25,8 +25,8 @@ class DeepImportBarrierMatcher:
                 pkg/b/__init__.py is exported)
     Ignores:    intra-module imports; edges whose target is in no governed module;
                 edges that land on an entry point; unresolvable targets
-    Basis:      AST_PY/AST_TS/AST_GO/AST_CSHARP (reads pre-built __import_graph__; line attribution walks AST)
-    shared_ctx: reads __import_graph__ (dict[str, set[str]]) built by ImportGraphBuilder
+    Basis:      AST_PY/AST_TS/AST_GO/AST_CSHARP (reads pre-built __import_graph__; line via __import_lines__)
+    shared_ctx: reads __import_graph__ (dict[str, set[str]]) and __import_lines__, built by ImportGraphBuilder
     """
     module_glob: str = ""
     entry_points: list[str] = field(default_factory=lambda: ["__init__.py"])
@@ -35,9 +35,9 @@ class DeepImportBarrierMatcher:
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Flag cross-module imports that bypass the target module's facade. Returns list of Match."""
-        shared_ctx = shared_ctx or {}
-        graph = shared_ctx.get("__import_graph__", {})
-        import_lines = shared_ctx.get("__import_lines__", {}).get(file_ctx.path, {})
+        ctx = CheckContext.of(shared_ctx)
+        graph = ctx.import_graph
+        import_lines = ctx.import_lines.get(file_ctx.path, {})
         src_module = self._module_of(file_ctx.path)
 
         matches: list[Match] = []
@@ -47,11 +47,9 @@ class DeepImportBarrierMatcher:
                 continue
             if self._is_entry_point(tgt, tgt_module):
                 continue
-            line = import_lines.get(tgt) or import_line_for(
-                file_ctx.ast.root_node if file_ctx.ast else None, tgt)
             matches.append(Match(
                 file=file_ctx.path,
-                line=line,
+                line=import_lines.get(tgt, 0),
                 matched_value=f"{tgt} (deep import into {tgt_module}; import its entry point)",
             ))
         return matches

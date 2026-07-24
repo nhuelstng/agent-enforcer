@@ -122,11 +122,15 @@ Guidelines:
 
 ```
 enforcer/
-  types.py        — core types (Severity, Needs, RuleType, Match, FileContext, LLMConsequence)
+  types.py        — core types (Severity, Needs, RuleType, Match, FileContext, LLMConsequence, ImportResult)
+  check_context.py— CheckContext: typed, dict-backed per-run context passed to every matcher's find()
+  git.py          — Git: the single seam for all git access (subprocess + output parsing) behind GitPort
   rule.py         — Rule dataclass + glob matching (_glob_match)
-  runner.py       — RuleRunner: applies rules to files, severity filtering, finalizers
+  runner.py       — RuleRunner: applies rules to files, severity filtering, finalizers; check_rule single-rule primitive
   context.py      — FileContextBuilder: parse-once cache, lazy AST population
   config.py       — loads enforcer_config.py via importlib
+  check_runner.py — shared check pipeline (build_shared_ctx, run_check_pass) + git-backed file collection
+  check_service.py— the one orchestration ring (run_check, verify_fix_matches) shared by CLI and MCP
   cli.py          — check, docs, install commands (Click)
   reporter.py     — text, JSON, SARIF output + exit code computation
   fix.py          — auto-fix infrastructure

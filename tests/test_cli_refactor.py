@@ -5,16 +5,21 @@ from unittest.mock import patch
 from enforcer.check_runner import collect_files as _collect_files, run_checks as _run_checks, CheckOptions
 
 
+def _fake_git(stdout):
+    """A fake subprocess.run result: successful git call emitting `stdout`."""
+    return type("R", (), {"returncode": 0, "stdout": stdout})()
+
+
 def test_collect_files_staged_empty():
     """Should return empty list when no files staged."""
-    with patch("subprocess.check_output", return_value=b""):
+    with patch("subprocess.run", return_value=_fake_git("")):
         result = _collect_files(staged=True, all_files=False, paths=(), ws=".")
         assert result == ([], {})
 
 
 def test_collect_files_staged_with_files():
     """Should return file list from git diff --cached."""
-    with patch("subprocess.check_output", return_value=b"M\tfile1.py\nM\tfile2.py\n"):
+    with patch("subprocess.run", return_value=_fake_git("M\tfile1.py\nM\tfile2.py\n")):
         result = _collect_files(staged=True, all_files=False, paths=(), ws=".")
         assert result == (["file1.py", "file2.py"], {"file1.py": "modified", "file2.py": "modified"})
 
@@ -94,21 +99,21 @@ def test_parse_diff_changed_lines_staged_no_ref():
 
 def test_collect_files_staged_filters_blank_lines():
     """Should drop empty entries when git output has blank lines mid-stream."""
-    with patch("subprocess.check_output", return_value=b"M\ta.py\n\nM\tb.py\n"):
+    with patch("subprocess.run", return_value=_fake_git("M\ta.py\n\nM\tb.py\n")):
         result = _collect_files(staged=True, all_files=False, paths=(), ws=".")
     assert result == (["a.py", "b.py"], {"a.py": "modified", "b.py": "modified"})
 
 
 def test_collect_files_base_ref_filters_blank_lines():
     """Should drop empty entries when git diff base_ref output has blank lines."""
-    with patch("subprocess.check_output", return_value=b"M\ta.py\n\nM\tb.py\n"):
+    with patch("subprocess.run", return_value=_fake_git("M\ta.py\n\nM\tb.py\n")):
         result = _collect_files(staged=False, all_files=False, paths=(), ws=".", base_ref="origin/master")
     assert result == (["a.py", "b.py"], {"a.py": "modified", "b.py": "modified"})
 
 
 def test_collect_files_base_ref():
     """Should return file list from git diff <ref>...HEAD when base_ref provided."""
-    with patch("subprocess.check_output", return_value=b"M\tchanged.py\nM\tother.py\n"):
+    with patch("subprocess.run", return_value=_fake_git("M\tchanged.py\nM\tother.py\n")):
         result = _collect_files(staged=False, all_files=False, paths=(), ws=".", base_ref="origin/master")
     assert result == (["changed.py", "other.py"], {"changed.py": "modified", "other.py": "modified"})
 

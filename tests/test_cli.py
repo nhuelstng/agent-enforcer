@@ -231,7 +231,7 @@ WORKSPACE = "."
         assert (tmp_path / "CONVENTIONS.md").exists()
 
         # Narrowing to just the doc rule must still see the full doc as current.
-        with patch("enforcer.cli._collect_files", return_value=([], {})):
+        with patch("enforcer.check_service.collect_files", return_value=([], {})):
             result = runner.invoke(cli, [
                 "check", "--all", "--no-llm", "--config", str(config_file),
                 "--rule-id", "conventions-md-stale",

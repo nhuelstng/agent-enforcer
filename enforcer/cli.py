@@ -1,20 +1,12 @@
 """Command-line interface: check, docs, install commands."""
 from __future__ import annotations
 import os
-import subprocess
 import sys
 from pathlib import Path
 import click
 from enforcer.config import load_config
-from enforcer.context import FileContextBuilder
-from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
-from enforcer.ignore import load_enforcerignore, is_ignored
-from enforcer.check_runner import (
-    collect_files as _collect_files,
-    run_check_pass as _run_check_pass,
-    CheckOptions,
-)
+from enforcer.check_service import run_check, CheckRequest
 
 @click.group()
 def cli():
@@ -64,41 +56,16 @@ def check(files, staged, all_files, paths, fmt, config_path, workspace, severity
         sys.exit(2)
 
     config = load_config(config_path)
-    # The full rule set is what the on-disk conventions doc reflects. Capture it
-    # before --rule-id narrows the run set, so the doc-staleness check (rendered
-    # below) compares against the complete doc, not a single-rule subset —
-    # otherwise `--rule-id` spuriously trips `conventions-md-stale`.
-    all_rules = list(config.rules)
-    if rule_id:
-        config.rules = [r for r in config.rules if r.id == rule_id]
-    ws = workspace or config.workspace
-
-    file_list, status_map = _collect_files(staged, all_files, paths, ws, base_ref=base_ref)
-
-    ignore_patterns = load_enforcerignore(ws) if not staged else []
-    if ignore_patterns:
-        file_list = [f for f in file_list if not is_ignored(f, ignore_patterns)]
-
     sev_map = {"error": Severity.ERROR, "warn": Severity.WARN, "info": Severity.INFO}
 
-    runner = RuleRunner(
-        config.rules,
-        workspace=ws,
-        no_llm=no_llm,
-        min_severity=sev_map[severity],
-        llm_config=config.llm_config,
-    )
-
-    builder = FileContextBuilder(config.rules, workspace=ws)
-    from enforcer.docs import render_rules_doc
-    # Render the doc from the full rule set (before --rule-id narrowing), so the
-    # doc-staleness check compares against the complete doc, not a single-rule subset.
-    rendered_doc = render_rules_doc(all_rules, workspace=config.workspace or ws)
-
-    all_matches = _run_check_pass(runner, builder, config, file_list, CheckOptions(
-        status_map=status_map, staged=staged, diff_ref=base_ref,
-        rendered_doc=rendered_doc, no_llm=no_llm, all_files=all_files,
+    # The whole check ring (narrow rules, collect, ignore, render doc, run) lives in
+    # check_service so the CLI and MCP paths cannot drift. run_check narrows config.rules
+    # in place, so the --fix providers below see the same rule set that ran.
+    all_matches = run_check(config, CheckRequest(
+        staged=staged, all_files=all_files, paths=paths, base_ref=base_ref,
+        no_llm=no_llm, min_severity=sev_map[severity], rule_id=rule_id, workspace=workspace,
     ))
+    ws = workspace or config.workspace
 
     if fix:
         from enforcer.fix import apply_fixes

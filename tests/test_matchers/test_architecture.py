@@ -174,24 +174,26 @@ class TestArchitectureMatcherSiblingIsolation:
         assert not matcher.find(_ctx("app/features/a/x.py"), {"__import_graph__": graph})
 
 
-class TestImportLineFor:
-    """_import_line_for walks AST and returns the line of the importing statement."""
+class TestImportLineAttribution:
+    """The matcher attributes each violation to the edge line recorded in __import_lines__."""
 
-    @pytest.mark.parametrize("source,target,expected_line", [
-        ("from enforcer.types import Match\n", "enforcer/types.py", 1),
-        ("x = 1\nimport enforcer.types\n", "enforcer/types.py", 2),
-        ("from enforcer.types_utils import X\n", "enforcer/types.py", 0),
-    ])
-    def test_import_line_for_ast(self, source, target, expected_line):
-        try:
-            import tree_sitter
-            import tree_sitter_python
-        except ImportError:
-            pytest.skip("tree-sitter not installed")
-        from enforcer.parsers.tree_sitter import parse
-        tree = parse(source, Needs.AST_PY)
-        if tree is None:
-            pytest.skip("tree-sitter PY grammar not available")
-        ctx = FileContext(path="src.py", raw=source, ast=tree)
+    def test_line_read_from_import_lines(self):
+        graph = {"enforcer/matchers/foo.py": {"enforcer/cli.py"}}
+        import_lines = {"enforcer/matchers/foo.py": {"enforcer/cli.py": 7}}
         matcher = ArchitectureMatcher(layers=_LAYERS, allowed_edges=_ALLOWED)
-        assert matcher._import_line_for(ctx, target) == expected_line
+        matches = matcher.find(
+            _ctx("enforcer/matchers/foo.py"),
+            {"__import_graph__": graph, "__import_lines__": import_lines},
+        )
+        assert len(matches) == 1
+        assert matches[0].line == 7
+
+    def test_line_defaults_to_zero_when_unrecorded(self):
+        graph = {"enforcer/matchers/foo.py": {"enforcer/cli.py"}}
+        matcher = ArchitectureMatcher(layers=_LAYERS, allowed_edges=_ALLOWED)
+        matches = matcher.find(
+            _ctx("enforcer/matchers/foo.py"),
+            {"__import_graph__": graph},
+        )
+        assert len(matches) == 1
+        assert matches[0].line == 0

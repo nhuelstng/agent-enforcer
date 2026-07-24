@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from enforcer.types import Match, FileContext, Needs
+from enforcer.check_context import CheckContext
 
 
 @dataclass
@@ -27,10 +28,11 @@ class CycleMatcher:
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Flag each import of file_ctx.path that participates in a cycle. Returns list of Match."""
-        shared_ctx = shared_ctx or {}
-        graph = shared_ctx.get("__import_graph__", {})
+        shared_ctx = shared_ctx if shared_ctx is not None else {}
+        ctx = CheckContext.of(shared_ctx)
+        graph = ctx.import_graph
         path = file_ctx.path
-        import_lines = shared_ctx.get("__import_lines__", {}).get(path, {})
+        import_lines = ctx.import_lines.get(path, {})
         matches: list[Match] = []
         for tgt in sorted(graph.get(path, set())):
             if tgt == path or not self._reaches(graph, tgt, path, shared_ctx):
