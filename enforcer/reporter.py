@@ -10,8 +10,12 @@ _SEVERITY_ORDER = {Severity.ERROR: 0, Severity.WARN: 1, Severity.INFO: 2}
 @runtime_checkable
 class ReporterProtocol(Protocol):
     """Public contract for output formatters: render matches + compute exit code."""
-    def render(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> str: ...
-    def exit_code(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> int: ...
+    def render(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> str:
+        """Render matches to the output format (text/json/sarif)."""
+        ...
+    def exit_code(self, matches: list[Match], severity_actions: dict | None = None, confirm_warnings: bool = False) -> int:
+        """Compute the process exit code for the given matches."""
+        ...
 
 
 class Reporter(ReporterProtocol):

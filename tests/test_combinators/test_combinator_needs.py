@@ -96,3 +96,21 @@ def test_needs_for_file_combinator_and_plain_matcher():
     needs = builder.needs_for_file("x.py", rules)
     assert Needs.AST_PY in needs
     assert Needs.AST_TS in needs
+
+
+import pytest
+from enforcer.matchers import RegexMatcher
+
+
+@pytest.mark.parametrize("raw", ["a\n", "a b\n", "aaa\n"])
+def test_needs_combinator_flags_violation(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = AllOf([RegexMatcher(r"a")]).find(ctx)
+    assert result
+
+
+@pytest.mark.parametrize("raw", ["\n", "z\n", "qqq\n"])
+def test_needs_combinator_passes_clean(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = AllOf([RegexMatcher(r"a")]).find(ctx)
+    assert not result

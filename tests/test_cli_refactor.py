@@ -2,7 +2,7 @@
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
-from enforcer.check_runner import collect_files as _collect_files, run_checks as _run_checks
+from enforcer.check_runner import collect_files as _collect_files, run_checks as _run_checks, CheckOptions
 
 
 def test_collect_files_staged_empty():
@@ -51,7 +51,7 @@ def test_run_checks_returns_matches():
     )
     runner = RuleRunner([rule], workspace=".")
     builder = FileContextBuilder([rule], workspace=".")
-    matches = _run_checks(runner, builder, ["test.py"], {}, ".", staged=False)
+    matches = _run_checks(runner, builder, ["test.py"], {}, CheckOptions(staged=False))
     assert isinstance(matches, list)
 
 
@@ -129,7 +129,7 @@ def test_run_checks_with_diff_ref():
     runner = RuleRunner([rule], workspace=".")
     builder = FileContextBuilder([rule], workspace=".")
     with patch("enforcer.check_runner._parse_diff_changed_lines", return_value={5, 6}) as mock_parse:
-        matches = _run_checks(runner, builder, ["test.py"], {}, ".", staged=False, diff_ref="origin/master")
+        matches = _run_checks(runner, builder, ["test.py"], {}, CheckOptions(staged=False, diff_ref="origin/master"))
     assert isinstance(matches, list)
     mock_parse.assert_called_once_with(".", "test.py", ref="origin/master")
 

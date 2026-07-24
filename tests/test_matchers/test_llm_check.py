@@ -231,3 +231,32 @@ def test_llm_matcher_pure_prose_fail_open():
         ctx = FileContext(path="foo.py", raw="x = 1\n")
         matches = m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
     assert matches == []
+
+
+import pytest
+
+
+@pytest.mark.parametrize("content", [
+    json.dumps({"violations": [{"file": "foo.py", "line": 1, "reason": "bad"}]}),
+    json.dumps({"violations": [{"line": 2, "reason": "x"}]}),
+    "FAIL: something is wrong",
+])
+def test_llm_flags_violation(content):
+    """LLM verdicts reporting violations produce matches (>=3 parametrized cases, no network)."""
+    with patch("httpx.post", return_value=_mock_httpx_response(content)):
+        m = LLMMatcher(prompt="check")
+        ctx = FileContext(path="foo.py", raw="x = 1\n")
+        assert m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})
+
+
+@pytest.mark.parametrize("content", [
+    json.dumps({"pass": True}),
+    "PASS looks good",
+    "I analyzed the code and it looks fine.",
+])
+def test_llm_passes_clean(content):
+    """PASS verdicts and pure-prose fail-open produce no matches (>=3 cases, no network)."""
+    with patch("httpx.post", return_value=_mock_httpx_response(content)):
+        m = LLMMatcher(prompt="check")
+        ctx = FileContext(path="foo.py", raw="x = 1\n")
+        assert not m.find(ctx, {"__llm_enabled__": True, "__llm_config__": _LLM_CFG})

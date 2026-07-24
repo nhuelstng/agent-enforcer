@@ -42,3 +42,18 @@ def test_regex_matches_file_field():
     ctx = FileContext(path="x.ts", raw="#fff")
     matches = RegexMatcher(r"#fff").find(ctx)
     assert matches[0].file == "x.ts"
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", ["TODO\n", "x TODO y\n", "TODO TODO\n"])
+def test_regex_flags_violation(raw):
+    """RegexMatcher flags text containing the pattern."""
+    assert RegexMatcher(r"TODO").find(FileContext(path="x.py", raw=raw))
+
+
+@pytest.mark.parametrize("raw", ["ok\n", "clean\n", "fine\n"])
+def test_regex_passes_clean(raw):
+    """RegexMatcher yields no matches on text without the pattern."""
+    assert not RegexMatcher(r"TODO").find(FileContext(path="x.py", raw=raw))

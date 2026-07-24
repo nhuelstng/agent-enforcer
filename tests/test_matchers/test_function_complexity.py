@@ -135,3 +135,26 @@ def test_nested_function_cyclomatic_isolated():
     # outer: 1 + 1 if = 2 (not > 2, no match)
     # inner: 1 + 2 ifs = 3 (> 2, match)
     assert len(matches) == 1
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", [
+    "def f():\n" + "    x = 1\n" * 8,
+    "def g():\n" + "    y = 2\n" * 12,
+    "def h():\n" + "    z = 3\n" * 20,
+])
+def test_complexity_flags_violation(raw):
+    """Functions exceeding max_lines are flagged."""
+    assert FunctionComplexityMatcher(metric="lines", max_value=3).find(_make_ctx(raw))
+
+
+@pytest.mark.parametrize("raw", [
+    "def f():\n    x = 1\n",
+    "def g():\n    y = 2\n",
+    "def h():\n    return 3\n",
+])
+def test_complexity_passes_clean(raw):
+    """Short functions within max_lines pass cleanly."""
+    assert not FunctionComplexityMatcher(metric="lines", max_value=3).find(_make_ctx(raw))

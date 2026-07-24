@@ -41,3 +41,29 @@ def test_ast_finds_by_line():
     matcher = AstNodeMatcher(node_type="number")
     matches = matcher.find(ctx)
     assert matches[0].line == 1
+
+
+def _ts_tree(code):
+    try:
+        import tree_sitter  # noqa: F401
+        import tree_sitter_typescript  # noqa: F401
+    except ImportError:
+        pytest.skip("tree-sitter not installed")
+    from enforcer.parsers.tree_sitter import parse
+    from enforcer.types import Needs
+    tree = parse(code, Needs.AST_TS)
+    if tree is None:
+        pytest.skip("tree-sitter TS grammar not available")
+    return tree
+
+
+@pytest.mark.parametrize("code", ["const x = 42;\n", "let a = 1; let b = 2;\n", "const y = 99;\n"])
+def test_ast_node_flags_violation(code):
+    ctx = FileContext(path="x.ts", raw=code, ast=_ts_tree(code))
+    assert AstNodeMatcher(node_type="number").find(ctx)
+
+
+@pytest.mark.parametrize("code", ["const s = 'a';\n", "let f = true;\n", "const g = 'hello';\n"])
+def test_ast_node_passes_clean(code):
+    ctx = FileContext(path="x.ts", raw=code, ast=_ts_tree(code))
+    assert not AstNodeMatcher(node_type="number").find(ctx)

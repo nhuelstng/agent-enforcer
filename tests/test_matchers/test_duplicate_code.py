@@ -92,3 +92,34 @@ def test_whitespace_and_comments_ignored():
     matcher.find(FileContext(path="b.py", raw=code_b), shared)
     matches = matcher.finalize_duplicates(shared)
     assert len(matches) == 2
+
+
+import pytest
+
+
+@pytest.mark.parametrize("code", [
+    "def process(data):\n    result = []\n    for item in data:\n        result.append(item * 2)\n    return result\n",
+    "def handler(req):\n    ctx = build(req)\n    ctx.validate()\n    ctx.persist()\n    return ctx.render()\n",
+    "def compute(a, b, c):\n    total = a + b + c\n    scaled = total * factor\n    saved = store(scaled)\n    return saved\n",
+])
+def test_duplicate_code_flags_violation(code):
+    """Two files with identical content are flagged as duplicates."""
+    matcher = DuplicateCodeMatcher(min_tokens=5, min_overlap=0.8)
+    shared = {}
+    matcher.find(FileContext(path="a.py", raw=code), shared)
+    matcher.find(FileContext(path="b.py", raw=code), shared)
+    assert matcher.finalize_duplicates(shared)
+
+
+@pytest.mark.parametrize("code_a,code_b", [
+    ("def foo():\n    return 1\n", "def bar():\n    return 2\n"),
+    ("x = compute(alpha)\n", "y = derive(omega)\n"),
+    ("class A:\n    pass\n", "def totally_different():\n    yield 99\n"),
+])
+def test_duplicate_code_passes_clean(code_a, code_b):
+    """Files with distinct content are not flagged."""
+    matcher = DuplicateCodeMatcher(min_tokens=5, min_overlap=0.8)
+    shared = {}
+    matcher.find(FileContext(path="a.py", raw=code_a), shared)
+    matcher.find(FileContext(path="b.py", raw=code_b), shared)
+    assert not matcher.finalize_duplicates(shared)

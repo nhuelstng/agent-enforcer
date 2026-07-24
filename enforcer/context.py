@@ -9,12 +9,30 @@ from enforcer.parsers.tree_sitter import parse as ts_parse
 from enforcer.glob_util import glob_match as _glob_match
 
 
+def _rule_matches_path(path: str, rule) -> bool:
+    """True if a rule's file_globs include the path and its exclude_globs don't."""
+    if not any(_glob_match(path, glob) for glob in rule.file_globs):
+        return False
+    return not any(_glob_match(path, pat) for pat in rule.exclude_globs)
+
+
+def _rule_needs(rule) -> set[Needs]:
+    """Collect the declared Needs of every matcher in a rule's tree."""
+    return {n for m in iter_matchers(rule.matchers) if (n := getattr(m, "needs", None))}
+
+
 @runtime_checkable
 class ContextBuilderProtocol(Protocol):
     """Public contract for context builders: build FileContext, aggregate needs, clear cache."""
-    def build(self, path: str, force_needs: set[Needs] | None = None) -> FileContext: ...
-    def needs_for_file(self, path: str, rules: list) -> set[Needs]: ...
-    def clear_cache(self) -> None: ...
+    def build(self, path: str, force_needs: set[Needs] | None = None) -> FileContext:
+        """Return the FileContext for a path, populating AST if needed."""
+        ...
+    def needs_for_file(self, path: str, rules: list) -> set[Needs]:
+        """Aggregate the Needs of all rules whose globs match the path."""
+        ...
+    def clear_cache(self) -> None:
+        """Drop all cached FileContexts."""
+        ...
 
 
 class FileContextBuilder(ContextBuilderProtocol):
@@ -70,14 +88,8 @@ class FileContextBuilder(ContextBuilderProtocol):
         """Aggregate all Needs from rules whose file_globs match this path."""
         needs: set[Needs] = set()
         for rule in rules:
-            if not any(_glob_match(path, glob) for glob in rule.file_globs):
-                continue
-            if any(_glob_match(path, pat) for pat in rule.exclude_globs):
-                continue
-            for m in iter_matchers(rule.matchers):
-                declared = getattr(m, "needs", None)
-                if declared:
-                    needs.add(declared)
+            if _rule_matches_path(path, rule):
+                needs |= _rule_needs(rule)
         return needs
 
     def clear_cache(self) -> None:

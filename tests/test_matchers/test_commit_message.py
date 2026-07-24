@@ -90,3 +90,24 @@ def test_commit_message_env_var_takes_priority(monkeypatch):
         matcher = CommitMessageMatcher(pattern=r"^(feat|fix):\s+.+", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
+
+
+_CM_PATTERN = r"^(feat|fix|docs|refactor|test|chore):\s+.+"
+
+
+@pytest.mark.parametrize("msg", ["updated stuff", "wip changes", "random text here"])
+def test_commit_message_flags_violation(msg, monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _init_git_with_commit_msg(tmpdir, msg, monkeypatch)
+        matcher = CommitMessageMatcher(pattern=_CM_PATTERN, workspace=tmpdir)
+        ctx = FileContext(path=tmpdir, raw=None)
+        assert matcher.find(ctx, {})
+
+
+@pytest.mark.parametrize("msg", ["feat: add x", "fix: bug y", "Merge branch 'z'"])
+def test_commit_message_passes_clean(msg, monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _init_git_with_commit_msg(tmpdir, msg, monkeypatch)
+        matcher = CommitMessageMatcher(pattern=_CM_PATTERN, workspace=tmpdir)
+        ctx = FileContext(path=tmpdir, raw=None)
+        assert not matcher.find(ctx, {})

@@ -2,6 +2,7 @@
 import subprocess
 import tempfile
 from pathlib import Path
+import pytest
 from enforcer.matchers.branch_name import BranchNameMatcher
 from enforcer.types import FileContext
 
@@ -58,3 +59,21 @@ def test_branch_name_not_a_git_repo():
         matcher = BranchNameMatcher(pattern=r"^feature/", workspace=tmpdir)
         ctx = FileContext(path=tmpdir, raw=None)
         assert matcher.find(ctx, {}) == []
+
+
+@pytest.mark.parametrize("branch", ["bad-branch", "wip", "feature_no_dash"])
+def test_branch_name_flags_violation(branch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _init_git_repo(tmpdir, branch)
+        matcher = BranchNameMatcher(pattern=r"^feature/\w+-\d+-", workspace=tmpdir)
+        ctx = FileContext(path=tmpdir, raw=None)
+        assert matcher.find(ctx, {})
+
+
+@pytest.mark.parametrize("branch", ["feature/ABC-123-x", "feature/XY-9-z", "main"])
+def test_branch_name_passes_clean(branch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _init_git_repo(tmpdir, branch)
+        matcher = BranchNameMatcher(pattern=r"^feature/\w+-\d+-", workspace=tmpdir)
+        ctx = FileContext(path=tmpdir, raw=None)
+        assert not matcher.find(ctx, {})

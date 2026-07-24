@@ -24,3 +24,16 @@ def test_char_count_empty_file():
 
 def test_char_count_needs_raw():
     assert CharCountMatcher(max_chars=10).needs == Needs.RAW
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", ["x" * 6, "x" * 20, "hello world"])
+def test_char_count_flags_violation(raw):
+    assert CharCountMatcher(max_chars=5).find(FileContext(path="x.py", raw=raw))
+
+
+@pytest.mark.parametrize("raw", ["", "ab", "hello"])
+def test_char_count_passes_clean(raw):
+    assert not CharCountMatcher(max_chars=5).find(FileContext(path="x.py", raw=raw))

@@ -108,3 +108,26 @@ app_environment = {
 '''
     keys = TerraformBlockKeys(block_name="app_environment").extract(raw)
     assert keys == {"VALID_KEY"}
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw,key", [
+    ('app_environment = {\n  FOO = "1"\n}', "FOO"),
+    ('app_environment = {\n  A = "1"\n  B = "2"\n}', "B"),
+    ('app_environment = {\n  "QUOTED" = "1"\n}', "QUOTED"),
+])
+def test_tf_extracts_key(raw, key):
+    """Uppercase assignment keys inside the named block are extracted."""
+    assert key in TerraformBlockKeys(block_name="app_environment").extract(raw)
+
+
+@pytest.mark.parametrize("raw,key", [
+    ('app_environment = {\n  FOO = "1"\n}', "BAR"),
+    ('other_block = {\n  FOO = "1"\n}', "FOO"),
+    ('app_environment = {\n  lowercase = "1"\n}', "lowercase"),
+])
+def test_tf_absent_key(raw, key):
+    """Missing keys, keys in other blocks, and non-uppercase keys are absent."""
+    assert not (key in TerraformBlockKeys(block_name="app_environment").extract(raw))

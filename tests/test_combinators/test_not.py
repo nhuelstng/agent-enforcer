@@ -19,3 +19,20 @@ def test_not_default_message():
     m = Not(RegexMatcher(r"#fff"))
     matches = m.find(ctx)
     assert len(matches) == 1
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", ["\n", "z\n", "qqq\n"])
+def test_not_flags_violation(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = Not(RegexMatcher(r"a")).find(ctx)
+    assert result
+
+
+@pytest.mark.parametrize("raw", ["a\n", "a b\n", "aaa\n"])
+def test_not_passes_clean(raw):
+    ctx = FileContext(path="x.py", raw=raw)
+    result = Not(RegexMatcher(r"a")).find(ctx)
+    assert not result

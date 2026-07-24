@@ -42,11 +42,9 @@ class ConstantNamingMatcher:
     def _unwrap_assignment(self, node):
         if node.type == "assignment":
             return node
-        if node.type == "expression_statement":
-            for child in node.children:
-                if child.type == "assignment":
-                    return child
-        return None
+        if node.type != "expression_statement":
+            return None
+        return next((c for c in node.children if c.type == "assignment"), None)
 
     def _extract_target_name(self, node) -> str:
         for child in node.children:

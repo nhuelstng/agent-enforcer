@@ -79,3 +79,23 @@ class TestTypeHintClean:
     def test_no_ast_returns_empty(self):
         ctx = FileContext(path="x.py", raw="def f(): pass\n")
         assert TypeHintMatcher().find(ctx) == []
+
+
+@pytest.mark.parametrize("source", [
+    "def a(x):\n    return x\n",
+    "def b(x):\n    return x\ndef c(y):\n    return y\n",
+    "def public(x):\n    return x\ndef _priv(x) -> int:\n    return x\n",
+])
+def test_type_hint_flags_violation(source):
+    """Flags public functions lacking a return annotation (>=3 parametrized cases)."""
+    assert TypeHintMatcher().find(_make_ctx(source))
+
+
+@pytest.mark.parametrize("source", [
+    "def a(x) -> int:\n    return x\n",
+    "def _priv(x):\n    return x\n",
+    "def b(x) -> str:\n    return x\ndef c(y) -> int:\n    return y\n",
+])
+def test_type_hint_passes_clean(source):
+    """No match when public functions carry return hints or are private (>=3 cases)."""
+    assert not TypeHintMatcher().find(_make_ctx(source))

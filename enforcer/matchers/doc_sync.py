@@ -23,6 +23,7 @@ class DocSyncMatcher:
     needs: Needs = Needs.RAW
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
+        """Flag when the on-disk conventions doc differs from the freshly rendered one."""
         shared_ctx = shared_ctx or {}
         fresh = shared_ctx.get("__rendered_doc__", "")
         try:
