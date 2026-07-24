@@ -4,16 +4,8 @@ import json
 import os
 import sys
 from enforcer.config import load_config
-from enforcer.context import FileContextBuilder
-from enforcer.runner import RuleRunner
 from enforcer.reporter import Reporter
-from enforcer.check_runner import (
-    collect_files as _collect_files,
-    build_shared_ctx as _build_shared_ctx,
-    run_check_pass as _run_check_pass,
-    CheckOptions,
-)
-from enforcer.ignore import load_enforcerignore, is_ignored
+from enforcer.check_service import run_check, verify_fix_matches, CheckRequest
 
 
 def _config_path() -> str:
@@ -22,28 +14,9 @@ def _config_path() -> str:
 def check_conventions(paths: list[str] | None = None, format: str = "json", no_llm: bool = False) -> str:
     """Run convention checks. Returns formatted output."""
     config = load_config(_config_path())
-    ws = config.workspace
-
-    file_list, status_map = _collect_files(
-        staged=paths is None,
-        all_files=False,
-        paths=tuple(paths) if paths else (),
-        ws=ws,
-    )
-
-    ignore_patterns = load_enforcerignore(ws) if paths is not None else []
-    if ignore_patterns:
-        file_list = [f for f in file_list if not is_ignored(f, ignore_patterns)]
-
-    runner = RuleRunner(config.rules, workspace=ws, no_llm=no_llm, llm_config=config.llm_config)
-    builder = FileContextBuilder(config.rules, workspace=ws)
-    from enforcer.docs import render_rules_doc
-    rendered_doc = render_rules_doc(config.rules, workspace=config.workspace or ws)
-
-    all_matches = _run_check_pass(runner, builder, config, file_list, CheckOptions(
-        status_map=status_map, staged=paths is None, rendered_doc=rendered_doc, no_llm=no_llm,
+    all_matches = run_check(config, CheckRequest(
+        staged=paths is None, paths=tuple(paths) if paths else (), no_llm=no_llm,
     ))
-
     reporter = Reporter(format=format)
     return reporter.render(all_matches, severity_actions=config.severity_actions)
 
@@ -56,33 +29,10 @@ def list_conventions() -> str:
 def verify_fix(path: str, rule_id: str, format: str = "json", no_llm: bool = False) -> str:
     """Re-check a single rule on a single file. Returns formatted output."""
     config = load_config(_config_path())
-    ws = config.workspace
-
-    rule = next((r for r in config.rules if r.id == rule_id), None)
-    if not rule:
-        return json.dumps({"summary": {"total": 0, "errors": 0, "warnings": 0, "info": 0}, "issues": []})
-
-    runner = RuleRunner(config.rules, workspace=ws, no_llm=no_llm, llm_config=config.llm_config)
-    builder = FileContextBuilder(config.rules, workspace=ws)
-    from enforcer.docs import render_rules_doc
-    rendered_doc = render_rules_doc(config.rules, workspace=config.workspace or ws)
-    shared_ctx = _build_shared_ctx(config, builder, ws, staged_files=[path] if path else None, rendered_doc=rendered_doc)
-
-    # ponytail: honor file_globs/exclude_globs before check() — mirrors RuleRunner._file_matches
-    if not runner._file_matches(path, rule):
-        reporter = Reporter(format=format)
-        return reporter.render([], severity_actions=config.severity_actions)
-
-    ctx = builder.build(path)
-    # ponytail: verify_fix re-checks full file post-fix; set all lines as changed so diff_only rules fire
-    if ctx.raw is not None:
-        ctx.changed_lines = set(range(1, ctx.raw.count("\n") + 2))
-    matches = rule.check(ctx, shared_ctx)
-    if matches and rule.llm_consequence:
-        matches = runner.llm_executor.execute(matches, rule.llm_consequence, ctx, shared_ctx)
-
+    matches = verify_fix_matches(config, path, rule_id, no_llm=no_llm)
     reporter = Reporter(format=format)
-    return reporter.render(matches, severity_actions=config.severity_actions)
+    # An unknown rule id (None) formats identically to a clean file: an empty result.
+    return reporter.render(matches or [], severity_actions=config.severity_actions)
 
 def explain_rule(rule_id: str) -> str:
     """Explain a rule: what it matches, what it ignores, worked example. Returns JSON."""

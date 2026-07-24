@@ -1,10 +1,10 @@
 """Shared check pipeline: file collection, context building, rule execution. Used by cli.py and mcp_server.py."""
 from __future__ import annotations
 import os
-import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from enforcer.check_context import CheckContext
+from enforcer.git import Git, parse_name_status as _parse_name_status
 
 _JUNK_DIRS = {".git", ".worktrees", "node_modules", "__pycache__", ".venv", "venv",
                ".pytest_cache", ".mypy_cache", ".tox", "dist", "build",
@@ -33,98 +33,21 @@ def _needs_import_graph(rules: list) -> bool:
 
 
 def _parse_diff_changed_lines(repo_root: str, file_path: str, ref: str | None = None) -> set[int] | None:
-    """Parse git diff -U0 for a file, return set of changed (added) line numbers.
-    ref=None uses --cached (staged). ref set uses <ref>...HEAD.
-    Returns None if diff can't be parsed (no diff info). Returns empty set if diff parsed but no added lines."""
-    try:
-        diff_cmd = ["git", "diff", "-U0"]
-        diff_cmd += ["--cached"] if ref is None else [f"{ref}...HEAD"]
-        diff_cmd += ["--", file_path]
-        result = subprocess.run(
-            diff_cmd,
-            capture_output=True, text=True, cwd=repo_root,
-        )
-        if result.returncode != 0 or not result.stdout:
-            return None
-    except Exception:
-        return None
+    """Return the changed (added) line numbers for a file, or None when no diff is available.
 
-    changed: set[int] = set()
-    for line in result.stdout.splitlines():
-        changed.update(_hunk_added_lines(line))
-    return changed
-
-
-def _hunk_added_lines(line: str) -> set[int]:
-    """Return the added line numbers a single `@@ ... @@` diff hunk header introduces."""
-    if not line.startswith("@@"):
-        return set()
-    m = re.search(r'\+(\d+)(?:,(\d+))?', line)
-    if not m:
-        return set()
-    start = int(m.group(1))
-    count = int(m.group(2)) if m.group(2) else 1
-    return set(range(start, start + count))
-
-
-def _parse_name_status(diff_output: str) -> tuple[list[str], dict[str, str]]:
-    """Parse `git diff --name-status` output. Returns (file_list, status_map).
-    Status letters: A=added, M=modified, D=deleted, R=renamed (new path), C=copy (treat as added)."""
-    files: list[str] = []
-    status_map: dict[str, str] = {}
-    for line in diff_output.splitlines():
-        if not line.strip():
-            continue
-        parts = line.split("\t")
-        if len(parts) < 2:
-            continue
-        letter = parts[0][0].upper()
-        if letter == "R" and len(parts) >= 3:
-            path = parts[2]
-            status = "renamed"
-        elif letter == "C" and len(parts) >= 3:
-            path = parts[2]
-            status = "added"
-        else:
-            path = parts[1]
-            status = {"A": "added", "M": "modified", "D": "deleted"}.get(letter, "modified")
-        files.append(path)
-        status_map[path] = status
-    return files, status_map
-
-
-def _read_commit_msg(ws: str) -> str:
-    """Return the first non-Merge line of the pending commit message, or ''.
-
-    Reads ENFORCER_COMMIT_MSG_FILE if set, else the repo's .git/COMMIT_EDITMSG."""
-    msg_file = os.environ.get("ENFORCER_COMMIT_MSG_FILE")
-    msg_path = Path(msg_file) if msg_file else Path(ws, ".git", "COMMIT_EDITMSG")
-    if not msg_path.exists():
-        return ""
-    try:
-        lines = msg_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return ""
-    first_line = lines[0] if lines else ""
-    return "" if first_line.startswith("Merge") else first_line
+    ref=None uses --cached (staged); ref set uses <ref>...HEAD. Thin caller over the git
+    seam, kept so the scan-mode dispatch in _ctx_for_file has one patchable indirection."""
+    return Git(repo_root).changed_lines(file_path, ref=ref)
 
 
 def build_change_context(ws: str, status_map: dict[str, str]) -> "ChangeContext":
-    """Build ChangeContext from git metadata + status_map. Reads commit msg + branch."""
+    """Build ChangeContext from git metadata + status_map. Reads commit subject + branch."""
     from enforcer.types import ChangeContext
 
-    commit_msg = _read_commit_msg(ws)
-
-    branch = ""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, cwd=ws,
-        )
-        if result.returncode == 0:
-            branch = result.stdout.strip()
-    except Exception:
-        pass
+    git = Git(ws)
+    subject = git.commit_subject()
+    commit_msg = "" if (subject is None or subject.startswith("Merge")) else subject
+    branch = git.current_branch()
 
     created = [f for f, s in status_map.items() if s == "added"]
     modified = [f for f, s in status_map.items() if s == "modified"]
@@ -144,17 +67,9 @@ def build_change_context(ws: str, status_map: dict[str, str]) -> "ChangeContext"
 def collect_files(staged: bool, all_files: bool, paths: tuple, ws: str, base_ref: str | None = None) -> tuple[list[str], dict[str, str]]:
     """Collect the list of files to check based on CLI mode. Returns (file_list, status_map)."""
     if staged:
-        result = subprocess.check_output(
-            ["git", "diff", "--cached", "--name-status"],
-            stderr=subprocess.DEVNULL, cwd=ws,
-        )
-        return _parse_name_status(result.decode())
+        return Git(ws).changed_files(staged=True)
     if base_ref:
-        result = subprocess.check_output(
-            ["git", "diff", "--name-status", f"{base_ref}...HEAD"],
-            stderr=subprocess.DEVNULL, cwd=ws,
-        )
-        return _parse_name_status(result.decode())
+        return Git(ws).changed_files(ref=base_ref)
     if all_files:
         return _walk_repo_files(ws), {}
     return list(paths), {}
@@ -186,12 +101,13 @@ def _cache_glob_matches(root: Path, ws: str, target: str, builder, shared_ctx: d
 
 
 def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = None,
-                     rendered_doc: str | None = None) -> dict:
-    """Build shared context dict from rule read_targets. Caches FileContext per matched path (not per glob string)."""
-    shared_ctx: dict = {}
-    shared_ctx["__rules__"] = config.rules
-    shared_ctx["__workspace__"] = config.workspace or ws
-    shared_ctx["__rendered_doc__"] = rendered_doc or ""
+                     rendered_doc: str | None = None) -> CheckContext:
+    """Build the CheckContext from rule read_targets. Caches FileContext per matched path (not per glob string)."""
+    shared_ctx = CheckContext(
+        rules=config.rules,
+        workspace=config.workspace or ws,
+        rendered_doc=rendered_doc or "",
+    )
     _load_read_targets(config.rules, builder, ws, shared_ctx)
     if staged_files and _needs_import_graph(config.rules):
         from enforcer.import_graph import ImportGraphBuilder
@@ -199,10 +115,9 @@ def build_shared_ctx(config, builder, ws: str, staged_files: list[str] | None = 
             builder=builder, workspace=ws,
             source_roots=getattr(config, "source_roots", None),
         )
-        shared_ctx["__import_graph__"] = graph_builder.build(staged_files)
         # {source: {target: import_line}} recorded at resolution time, so a
         # matcher attributes an edge to the exact import that produced it.
-        shared_ctx["__import_lines__"] = graph_builder.import_lines
+        shared_ctx.set_import_graph(graph_builder.build(staged_files), graph_builder.import_lines)
     return shared_ctx
 
 
@@ -235,12 +150,14 @@ def run_check_pass(runner, builder, config, file_list: list[str], options: "Chec
     """
     ws = runner.workspace
     shared_ctx = build_shared_ctx(config, builder, ws, staged_files=file_list, rendered_doc=options.rendered_doc)
-    shared_ctx["__change__"] = build_change_context(ws, options.status_map)
-    shared_ctx["__llm_enabled__"] = not options.no_llm
-    shared_ctx["__llm_config__"] = config.llm_config
+    shared_ctx.change = build_change_context(ws, options.status_map)
+    # LLM state has one source of truth — the runner's executor — so the CLI and MCP
+    # paths cannot compute "enabled" one way here and another way in the runner.
+    shared_ctx.llm_enabled = runner.llm_executor.enabled
+    shared_ctx.llm_config = runner.llm_config
     # ponytail: full-scan flag read by run_cross_file_finalizers so diff_only
     # finalizer rules also run under --all.
-    shared_ctx["__all_files__"] = options.all_files
+    shared_ctx.all_files = options.all_files
 
     all_matches = run_checks(runner, builder, file_list, shared_ctx, options)
     all_matches.extend(runner.run_metadata_rules(shared_ctx))

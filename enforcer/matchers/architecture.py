@@ -2,8 +2,8 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enforcer.types import Match, FileContext, Needs
+from enforcer.check_context import CheckContext
 from enforcer.glob_util import glob_match
-from enforcer.parsers.ast_utils import import_line_for
 
 
 @dataclass
@@ -29,8 +29,8 @@ class ArchitectureMatcher:
     Ignores:    intra-layer imports; imports between files in the same slice;
                 files/targets matching no layer glob and no isolate root;
                 unresolvable targets
-    Basis:      AST_PY/AST_TS/AST_GO/AST_CSHARP (reads pre-built __import_graph__; line attribution walks AST)
-    shared_ctx: reads __import_graph__ (dict[str, set[str]]) built by ImportGraphBuilder
+    Basis:      AST_PY/AST_TS/AST_GO/AST_CSHARP (reads pre-built __import_graph__; line via __import_lines__)
+    shared_ctx: reads __import_graph__ (dict[str, set[str]]) and __import_lines__, built by ImportGraphBuilder
     """
     layers: dict[str, list[str]] = field(default_factory=dict)
     allowed_edges: list[tuple[str, str]] = field(default_factory=list)
@@ -42,19 +42,19 @@ class ArchitectureMatcher:
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Flag imports crossing forbidden layer or sibling boundaries. Returns list of Match."""
-        shared_ctx = shared_ctx or {}
-        graph = shared_ctx.get("__import_graph__", {})
+        ctx = CheckContext.of(shared_ctx)
+        graph = ctx.import_graph
         targets = graph.get(file_ctx.path, set())
         src_layer = self._layer_for_path(file_ctx.path)
 
-        import_lines = shared_ctx.get("__import_lines__", {}).get(file_ctx.path, {})
+        import_lines = ctx.import_lines.get(file_ctx.path, {})
         matches: list[Match] = []
         for tgt in targets:
             violation = self._layer_violation(src_layer, tgt) or self._sibling_violation(file_ctx.path, tgt)
             if violation is not None:
                 matches.append(Match(
                     file=file_ctx.path,
-                    line=import_lines.get(tgt) or self._import_line_for(file_ctx, tgt),
+                    line=import_lines.get(tgt, 0),
                     matched_value=violation,
                 ))
         return matches
@@ -99,7 +99,3 @@ class ArchitectureMatcher:
             if any(glob_match(path, g) for g in globs):
                 return layer_name
         return None
-
-    def _import_line_for(self, file_ctx: FileContext, target: str) -> int:
-        """Walk file_ctx.ast for the import node resolving to target. Returns line or 0."""
-        return import_line_for(file_ctx.ast.root_node if file_ctx.ast else None, target)

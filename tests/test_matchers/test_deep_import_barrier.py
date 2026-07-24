@@ -88,22 +88,21 @@ def test_reads_import_graph_marker():
 
 
 class TestDeepImportBarrierLineAttribution:
-    """line attribution walks the AST to the offending import statement."""
+    """line attribution comes from __import_lines__ recorded by the resolver."""
 
-    def test_import_line_from_ast(self):
-        try:
-            import tree_sitter
-            import tree_sitter_python
-        except ImportError:
-            pytest.skip("tree-sitter not installed")
-        from enforcer.parsers.tree_sitter import parse
-        source = "import os\nfrom pkg.b.internal import thing\n"
-        tree = parse(source, Needs.AST_PY)
-        if tree is None:
-            pytest.skip("tree-sitter PY grammar not available")
-        ctx = FileContext(path="pkg/a/foo.py", raw=source, ast=tree)
+    def test_line_from_import_lines(self):
+        ctx = FileContext(path="pkg/a/foo.py", raw="# stub")
+        matcher = DeepImportBarrierMatcher(module_glob="pkg/*")
+        graph = {"pkg/a/foo.py": {"pkg/b/internal.py"}}
+        import_lines = {"pkg/a/foo.py": {"pkg/b/internal.py": 2}}
+        matches = matcher.find(ctx, {"__import_graph__": graph, "__import_lines__": import_lines})
+        assert len(matches) == 1
+        assert matches[0].line == 2
+
+    def test_line_defaults_to_zero_when_unrecorded(self):
+        ctx = FileContext(path="pkg/a/foo.py", raw="# stub")
         matcher = DeepImportBarrierMatcher(module_glob="pkg/*")
         graph = {"pkg/a/foo.py": {"pkg/b/internal.py"}}
         matches = matcher.find(ctx, {"__import_graph__": graph})
         assert len(matches) == 1
-        assert matches[0].line == 2
+        assert matches[0].line == 0

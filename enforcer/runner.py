@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 from enforcer.types import Severity, Match, FileContext, RuleType, SEVERITY_RANK, LLMConfig
 from enforcer.rule import Rule
+from enforcer.check_context import CheckContext
 from enforcer.glob_util import glob_match as _glob_match
 from enforcer.llm import LLMExecutor
 
@@ -12,6 +13,9 @@ class RunnerProtocol(Protocol):
     """Public contract for rule runners: run per-file rules, metadata rules, and cross-file finalizers."""
     def run_rules_for_file(self, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
         """Run all applicable per-file rules against one file."""
+        ...
+    def check_rule(self, rule: Rule, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
+        """Run a single rule against one file (glob gate + check + LLM consequence)."""
         ...
     def run_metadata_rules(self, shared_ctx: dict) -> list[Match]:
         """Run all metadata rules once (branch/commit checks)."""
@@ -48,15 +52,23 @@ class RuleRunner(RunnerProtocol):
         """Run all applicable CONTENT rules against one file. Returns list of Match objects."""
         all_matches: list[Match] = []
         for rule in self.content_rules:
-            if not self._file_matches(file_ctx.path, rule):
-                continue
             if SEVERITY_RANK.get(rule.severity, 0) < SEVERITY_RANK.get(self.min_severity, 0):
                 continue
-            matches = rule.check(file_ctx, shared_ctx)
-            if matches and rule.llm_consequence:
-                matches = self.llm_executor.execute(matches, rule.llm_consequence, file_ctx, shared_ctx)
-            all_matches.extend(matches)
+            all_matches.extend(self.check_rule(rule, file_ctx, shared_ctx))
         return all_matches
+
+    def check_rule(self, rule: Rule, file_ctx: FileContext, shared_ctx: dict) -> list[Match]:
+        """Run one rule against one file: file-glob gate, then check + LLM consequence.
+
+        The single-rule primitive both the per-file loop and verify-fix go through, so a
+        one-off re-check applies the same glob gate and consequence handling as a full pass.
+        No min_severity gate — callers that filter by severity do so before calling."""
+        if not self._file_matches(file_ctx.path, rule):
+            return []
+        matches = rule.check(file_ctx, shared_ctx)
+        if matches and rule.llm_consequence:
+            matches = self.llm_executor.execute(matches, rule.llm_consequence, file_ctx, shared_ctx)
+        return matches
 
     def run_metadata_rules(self, shared_ctx: dict) -> list[Match]:
         """Run all METADATA rules once. Returns list of Match objects.
@@ -104,11 +116,8 @@ class RuleRunner(RunnerProtocol):
 
     @staticmethod
     def _find_file_ctx(path: str, shared_ctx: dict) -> object | None:
-        """Find a FileContext in shared_ctx by path."""
-        return next(
-            (v for v in shared_ctx.values() if hasattr(v, "path") and v.path == path),
-            None,
-        )
+        """Return the cached FileContext for a path, or None (O(1) via CheckContext)."""
+        return CheckContext.of(shared_ctx).file_ctx(path)
 
     @staticmethod
     def _stamp_file_ctx(matches: list[Match], shared_ctx: dict) -> None:
@@ -144,7 +153,7 @@ class RuleRunner(RunnerProtocol):
     def run_cross_file_finalizers(self, shared_ctx: dict) -> list[Match]:
         """Call finalize_duplicates on any matcher with that method, after all files processed."""
         all_matches: list[Match] = []
-        all_files = shared_ctx.get("__all_files__", False)
+        all_files = CheckContext.of(shared_ctx).all_files
         for rule in self.content_rules:
             if SEVERITY_RANK.get(rule.severity, 0) < SEVERITY_RANK.get(self.min_severity, 0):
                 continue

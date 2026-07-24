@@ -1,9 +1,9 @@
 """BranchNameMatcher: checks current git branch against a required pattern."""
 from __future__ import annotations
 import re
-import subprocess
 from dataclasses import dataclass, field
 from enforcer.types import Match, FileContext, Needs
+from enforcer.git import Git
 
 @dataclass
 class BranchNameMatcher:
@@ -12,7 +12,7 @@ class BranchNameMatcher:
 
     What:       flags the current git branch when it doesn't match `pattern`
     Ignores:    allow_branches (default main/master/develop); detached HEAD; git failures (returns empty)
-    Basis:      RAW (subprocess `git rev-parse --abbrev-ref HEAD`)
+    Basis:      RAW (current branch via the git seam)
     shared_ctx: none (defensive default only)
     """
     pattern: str
@@ -20,24 +20,13 @@ class BranchNameMatcher:
     workspace: str = "."
     needs: Needs = Needs.RAW
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._compiled = re.compile(self.pattern)
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Flag current git branch if it doesn't match the required pattern. Returns list of Match."""
-        cwd = self.workspace
-        try:
-            result = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                capture_output=True, text=True, cwd=cwd,
-            )
-            if result.returncode != 0:
-                return []
-            branch = result.stdout.strip()
-        except Exception:
-            return []
-
-        if branch in self.allow_branches or branch == "HEAD":
+        branch = Git(self.workspace).current_branch()
+        if not branch or branch in self.allow_branches or branch == "HEAD":
             return []
 
         if self._compiled.search(branch):

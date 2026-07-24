@@ -1,9 +1,9 @@
 """AllowlistMatcher: checks file content against an allowlist from another file (read_target)."""
 from __future__ import annotations
-import fnmatch
 from dataclasses import dataclass
 from typing import Callable
 from enforcer.types import Match, FileContext, Needs
+from enforcer.check_context import CheckContext
 from enforcer.glob_util import glob_match
 
 @dataclass
@@ -22,8 +22,7 @@ class AllowlistMatcher:
 
     def find(self, file_ctx: FileContext, shared_ctx: dict | None = None) -> list[Match]:
         """Flag file content entries not present in the allowlist. Returns list of Match."""
-        shared_ctx = shared_ctx or {}
-        target_ctxs = self._resolve_targets(shared_ctx)
+        target_ctxs = self._resolve_targets(CheckContext.of(shared_ctx))
         if not target_ctxs or file_ctx.raw is None:
             return []
         allowed: set[str] = set()
@@ -36,11 +35,12 @@ class AllowlistMatcher:
             for item in used - allowed
         ]
 
-    def _resolve_targets(self, shared_ctx: dict) -> list[FileContext]:
-        """Resolve target FileContexts by exact key or glob match."""
-        if self.read_target in shared_ctx:
-            return [shared_ctx[self.read_target]]
+    def _resolve_targets(self, ctx: CheckContext) -> list[FileContext]:
+        """Resolve read-target FileContexts by exact path or glob match."""
+        files = ctx.files
+        if self.read_target in files:
+            return [files[self.read_target]]
         return [
-            ctx for key, ctx in shared_ctx.items()
+            file_ctx for key, file_ctx in files.items()
             if glob_match(key, self.read_target)
         ]
